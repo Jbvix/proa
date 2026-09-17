@@ -32,9 +32,12 @@ export type MeteoHour = {
   swellHs: number | null;
 };
 
+export type MeteoPlano = "comercial" | "gratuito";
+
 export type MeteoBundle = {
   now: MeteoNow;
   hourly: MeteoHour[];
+  plano: MeteoPlano;
 };
 
 function num(v: unknown): number | null {
@@ -66,6 +69,33 @@ function nearestHourIndex(times: string[] | undefined, now: number) {
     }
   }
   return best;
+}
+
+const UA = "Proa/1.0 (TugLife Systems; https://github.com/Jbvix/proa)";
+
+/** Host + query suffix. Key stays on the server; never returned to the browser. */
+export function openMeteoEndpoints(apiKey = "") {
+  const key = apiKey.trim();
+  const comercial = key.length > 0;
+  const host = (sub: "api" | "marine-api") =>
+    comercial
+      ? `https://customer-${sub}.open-meteo.com`
+      : `https://${sub}.open-meteo.com`;
+  const q = comercial ? `&apikey=${encodeURIComponent(key)}` : "";
+  return { comercial, host, q };
+}
+
+async function pullJson(url: string): Promise<Response> {
+  const ctl = new AbortController();
+  const t = setTimeout(() => ctl.abort(), 12_000);
+  try {
+    return await fetch(url, {
+      signal: ctl.signal,
+      headers: { "User-Agent": UA, Accept: "application/json" },
+    });
+  } finally {
+    clearTimeout(t);
+  }
 }
 
 export const WMO: Record<number, string> = {
@@ -138,6 +168,7 @@ export function syntheticMeteo(lat: number, lon: number, nowMs = Date.now()): Me
       currentDir: 310,
     },
     hourly: hours,
+    plano: "gratuito",
   };
 }
 
@@ -147,30 +178,38 @@ export async function fetchMeteo(lat: number, lon: number): Promise<MeteoBundle>
   return (await r.json()) as MeteoBundle;
 }
 
-export async function fetchMeteoUpstream(lat: number, lon: number): Promise<MeteoBundle> {
+export async function fetchMeteoUpstream(
+  lat: number,
+  lon: number,
+  apiKey = "",
+): Promise<MeteoBundle> {
+  const { comercial, host, q } = openMeteoEndpoints(apiKey);
   const latS = lat.toFixed(4);
   const lonS = lon.toFixed(4);
 
   const weatherUrl =
-    `https://api.open-meteo.com/v1/forecast?latitude=${latS}&longitude=${lonS}` +
+    `${host("api")}/v1/forecast?latitude=${latS}&longitude=${lonS}` +
     `&current=temperature_2m,weather_code,wind_speed_10m,wind_direction_10m,wind_gusts_10m,pressure_msl,visibility` +
     `&hourly=wind_speed_10m,wind_direction_10m,wind_gusts_10m` +
-    `&forecast_days=2&wind_speed_unit=kn&timezone=auto`;
+    `&forecast_days=2&wind_speed_unit=kn&timezone=auto` +
+    q;
 
   const marineUrl =
-    `https://marine-api.open-meteo.com/v1/marine?latitude=${latS}&longitude=${lonS}` +
+    `${host("marine-api")}/v1/marine?latitude=${latS}&longitude=${lonS}` +
     `&current=wave_height,wave_direction,wave_period,wave_peak_period,swell_wave_height,swell_wave_period,wind_wave_height,sea_surface_temperature,ocean_current_velocity,ocean_current_direction` +
     `&hourly=wave_height,wave_direction,wave_period,swell_wave_height,sea_surface_temperature` +
-    `&forecast_days=2&timezone=auto`;
+    `&forecast_days=2&timezone=auto` +
+    q;
 
   const marineFallback =
-    `https://marine-api.open-meteo.com/v1/marine?latitude=${latS}&longitude=${lonS}` +
+    `${host("marine-api")}/v1/marine?latitude=${latS}&longitude=${lonS}` +
     `&hourly=wave_height,wave_direction,wave_period,swell_wave_height,sea_surface_temperature` +
-    `&forecast_days=2&timezone=auto`;
+    `&forecast_days=2&timezone=auto` +
+    q;
 
   const [weatherRes, marinePrimary] = await Promise.all([
-    fetch(weatherUrl),
-    fetch(marineUrl),
+    pullJson(weatherUrl),
+    pullJson(marineUrl),
   ]);
 
   if (!weatherRes.ok) throw new Error("Falha ao ler o Open-Meteo (vento).");
@@ -180,7 +219,7 @@ export async function fetchMeteoUpstream(lat: number, lon: number): Promise<Mete
   };
 
   let marineRes = marinePrimary;
-  if (!marineRes.ok) marineRes = await fetch(marineFallback);
+  if (!marineRes.ok) marineRes = await pullJson(marineFallback);
 
   let marine: {
     current?: Record<string, unknown>;
@@ -241,6 +280,5 @@ export async function fetchMeteoUpstream(lat: number, lon: number): Promise<Mete
     });
   }
 
-  return { now, hourly: hours };
+  return { now, hourly: hours, plano: comercial ? "comercial" : "gratuito" };
 }
-

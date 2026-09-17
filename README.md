@@ -23,10 +23,17 @@ Dados ficam só neste aparelho (sem conta, sem nuvem).
 
 ## Stack
 
-TanStack Start (React 19), Vite, Tailwind v4, PWA. API meteorológica via `/api/meteo` (Open-Meteo, com fallback sintético).
+TanStack Start (React 19), Vite, Tailwind v4, PWA.
+
+Meteorologia: function Netlify `/api/meteo` (Open-Meteo Forecast + Marine). Com `OPENMETEO_API_KEY` no painel do Netlify, usa o endpoint comercial (`customer-api` / `customer-marine-api`). Sem a chave, cai no endpoint público (desenvolvimento). A chave nunca vai ao navegador; o JSON só traz `plano: "comercial" | "gratuito"`.
 
 ## Deploy (Netlify)
 
+Site: [tuglife-proa.netlify.app](https://tuglife-proa.netlify.app)
+
 Build: `npm run build` · publicação: `dist` · Node 22.
 
-`VITE_AUTH_ENABLED=false` — o app não usa login nem banco.
+Variáveis:
+
+- `VITE_AUTH_ENABLED=false` — o app não usa login nem banco
+- `OPENMETEO_API_KEY` — assinatura comercial Open-Meteo (a mesma do Atalaia). Escopos: Functions + Runtime. Secret.

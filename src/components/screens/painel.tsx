@@ -65,6 +65,11 @@ export function PainelScreen() {
           {sea.label}
         </Badge>
         <Badge tone="mute">{weatherLabel(meteo?.now.weatherCode ?? null)}</Badge>
+        {meteo ? (
+          <Badge tone={meteo.plano === "comercial" ? "ok" : "mute"}>
+            {meteo.plano === "comercial" ? "Open-Meteo" : "Open-Meteo livre"}
+          </Badge>
+        ) : null}
       </div>
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">

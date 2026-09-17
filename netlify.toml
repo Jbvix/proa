@@ -5,3 +5,7 @@
 [build.environment]
   NODE_VERSION = "22"
   VITE_AUTH_ENABLED = "false"
+
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
