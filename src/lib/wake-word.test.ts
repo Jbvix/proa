@@ -41,3 +41,23 @@ test("echo of greet and last line is ignored", () => {
   assert.equal(isAlanaEcho("Sou a Alana, rádio do passadiço.", "Sou a Alana, rádio do passadiço."), true);
   assert.equal(isAlanaEcho("qual o hs agora"), false);
 });
+
+const LAST =
+  "Beleza. A gente tá em 3.7182° S, 38.4725° W, bem em Mucuripe — costa a zero milha.";
+
+test("garbled speaker echo of a briefing is ignored", () => {
+  assert.equal(
+    isAlanaEcho("Beleza a gente ta em 3.7182 S 38.4725 W bem em Mucuripe costa a zero", LAST),
+    true,
+  );
+  assert.equal(
+    isAlanaEcho("Alana a gente ta em 37182 Mucuripe costa zero milha", LAST),
+    true,
+  );
+});
+
+test("a real follow-up is not treated as echo", () => {
+  assert.equal(isAlanaEcho("qual o hs agora", LAST), false);
+  assert.equal(isAlanaEcho("e o combustível", LAST), false);
+  assert.equal(isAlanaEcho("Alana, qual o vento", LAST), false);
+});

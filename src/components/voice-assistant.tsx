@@ -26,7 +26,9 @@ type Recog = {
 type Mode = "off" | "wake" | "session";
 
 const SESSION_MS = 90_000;
-const COOL_MS = 1_200;
+const COOL_MS = 2_200;
+const ARM_FLUSH_MS = 650;
+const ROOM_TAIL_MS = 450;
 const TTS_CACHE = {
   greet: "proa-alana-tts-greet-v2",
   bye: "proa-alana-tts-bye-v2",
@@ -92,6 +94,11 @@ export function AlanaRadio() {
   const held = useRef(false);
   const holdTimer = useRef(0);
   const coolTimer = useRef(0);
+  const armDelay = useRef(0);
+  const genRef = useRef(0);
+  const deafUntil = useRef(0);
+  const liveAt = useRef(0);
+  const prevLineRef = useRef<string | null>(null);
   const modeRef = useRef<Mode>("off");
   const sessionTimer = useRef<number>(0);
   const lastLineRef = useRef<string | null>(null);
@@ -113,7 +120,22 @@ export function AlanaRadio() {
   lastLineRef.current = lastLine;
 
   function blocked() {
-    return speaking.current || asking.current || cooling.current;
+    return (
+      speaking.current ||
+      asking.current ||
+      cooling.current ||
+      performance.now() < deafUntil.current
+    );
+  }
+
+  function rememberLine(text: string) {
+    prevLineRef.current = lastLineRef.current;
+    lastLineRef.current = text;
+    setLastLine(text);
+  }
+
+  function heardEcho(raw: string) {
+    return isAlanaEcho(raw, lastLineRef.current) || isAlanaEcho(raw, prevLineRef.current);
   }
 
   function bumpSession() {
@@ -125,25 +147,52 @@ export function AlanaRadio() {
   }
 
   function stopRec() {
-    recRef.current?.abort();
+    genRef.current += 1;
+    const rec = recRef.current;
     recRef.current = null;
+    if (!rec) return;
+    rec.onresult = null;
+    rec.onend = null;
+    rec.onerror = null;
+    try {
+      rec.stop();
+    } catch {
+      /* ios */
+    }
+    try {
+      rec.abort();
+    } catch {
+      /* already dead */
+    }
   }
 
   function arm() {
-    if (muted || blocked()) return;
+    if (muted || speaking.current || asking.current) return;
     if (typeof window === "undefined") return;
+    if (performance.now() < deafUntil.current) {
+      window.clearTimeout(armDelay.current);
+      armDelay.current = window.setTimeout(
+        () => arm(),
+        Math.max(80, deafUntil.current - performance.now()),
+      );
+      return;
+    }
     const Ctor = getCtor();
     if (!Ctor) {
       setError("Este aparelho não captura voz. Escreve no rádio.");
       return;
     }
     stopRec();
+    const my = genRef.current;
+    liveAt.current = performance.now() + ARM_FLUSH_MS;
     const rec = new Ctor();
     rec.lang = "pt-BR";
     rec.interimResults = true;
     rec.continuous = true;
     rec.onresult = (ev) => {
+      if (my !== genRef.current) return;
       if (blocked()) return;
+      if (performance.now() < liveAt.current) return;
       let final = "";
       let mid = "";
       for (let i = ev.resultIndex; i < ev.results.length; i++) {
@@ -154,10 +203,11 @@ export function AlanaRadio() {
       setInterim(mid);
       const heard = (final || mid).trim();
       if (!heard) return;
-      if (isAlanaEcho(heard, lastLineRef.current)) return;
+      if (heardEcho(heard)) return;
       const parse = hearWake(heard);
       if (modeRef.current !== "session") {
         if (!parse.woke || !final) return;
+        if (parse.rest && heardEcho(parse.rest)) return;
         void wake(parse.rest, parse.sleep);
         return;
       }
@@ -167,9 +217,10 @@ export function AlanaRadio() {
         return;
       }
       const q = parse.rest;
-      if (q && !isAlanaEcho(q, lastLineRef.current)) void ask(q);
+      if (q && !heardEcho(q)) void ask(q);
     };
     rec.onerror = (ev) => {
+      if (my !== genRef.current) return;
       const err = ev.error ?? "";
       if (err === "not-allowed") {
         wanted.current = false;
@@ -180,9 +231,12 @@ export function AlanaRadio() {
       if (err === "aborted") return;
     };
     rec.onend = () => {
-      recRef.current = null;
+      if (my !== genRef.current) return;
+      if (recRef.current === rec) recRef.current = null;
       if (wanted.current && !muted && !blocked()) {
-        window.setTimeout(() => arm(), 280);
+        window.setTimeout(() => {
+          if (my === genRef.current && wanted.current && !muted && !blocked()) arm();
+        }, 400);
       }
     };
     recRef.current = rec;
@@ -196,18 +250,20 @@ export function AlanaRadio() {
       setError(null);
     } catch {
       window.setTimeout(() => {
-        if (wanted.current) arm();
+        if (wanted.current && my === genRef.current) arm();
       }, 600);
     }
   }
 
-  function coolThenArm() {
+  function coolThenArm(extra = 0) {
     cooling.current = true;
+    const wait = COOL_MS + Math.max(0, extra);
+    deafUntil.current = performance.now() + wait + ARM_FLUSH_MS;
     window.clearTimeout(coolTimer.current);
     coolTimer.current = window.setTimeout(() => {
       cooling.current = false;
       if (wanted.current && !muted && !speaking.current && !asking.current) arm();
-    }, COOL_MS);
+    }, wait);
   }
 
   async function playReply(text: string, audio: string | null) {
@@ -215,11 +271,16 @@ export function AlanaRadio() {
     cooling.current = true;
     stopRec();
     stopVoice();
+    let extra = 0;
     try {
-      if (audio) await playVoiceMp3(audio);
+      if (audio) {
+        const dur = await playVoiceMp3(audio);
+        extra = Math.min(1_400, Math.max(0, dur * 0.12));
+      }
+      await new Promise((r) => window.setTimeout(r, ROOM_TAIL_MS));
     } finally {
       speaking.current = false;
-      coolThenArm();
+      coolThenArm(extra);
     }
     void text;
   }
@@ -254,7 +315,7 @@ export function AlanaRadio() {
         return;
       }
       if (!rest) {
-        setLastLine(ALANA_GREET);
+        rememberLine(ALANA_GREET);
         setTurns((t) => [...t, { role: "assistant", content: ALANA_GREET }]);
         setBusy(true);
         try {
@@ -275,7 +336,7 @@ export function AlanaRadio() {
     window.clearTimeout(sessionTimer.current);
     modeRef.current = "wake";
     setMode("wake");
-    setLastLine(ALANA_BYE);
+    rememberLine(ALANA_BYE);
     setTurns((t) => [...t, { role: "assistant", content: ALANA_BYE }]);
     setBusy(true);
     try {
@@ -324,7 +385,7 @@ export function AlanaRadio() {
         setError(data.error ?? "Não rolou agora.");
         return;
       }
-      setLastLine(data.text);
+      rememberLine(data.text);
       setTurns((t) => [...t, { role: "assistant", content: data.text! }]);
       await playReply(data.text, data.audio ?? null);
       bumpSession();
@@ -333,7 +394,9 @@ export function AlanaRadio() {
     } finally {
       setBusy(false);
       asking.current = false;
-      if (!speaking.current && !cooling.current && wanted.current && !muted) arm();
+      if (!speaking.current && !cooling.current && wanted.current && !muted) {
+        coolThenArm();
+      }
     }
   }
 
@@ -379,6 +442,7 @@ export function AlanaRadio() {
       window.clearTimeout(sessionTimer.current);
       window.clearTimeout(holdTimer.current);
       window.clearTimeout(coolTimer.current);
+      window.clearTimeout(armDelay.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [muted]);

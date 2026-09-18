@@ -51,13 +51,16 @@ function b64buf(b64: string): ArrayBuffer {
   return raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength);
 }
 
-async function playWebAudio(b64: string): Promise<void> {
+async function playWebAudio(b64: string): Promise<number> {
   const c = audioCtx();
   if (c.state === "suspended") await c.resume();
   const buf = await c.decodeAudioData(b64buf(b64));
   const src = c.createBufferSource();
   src.buffer = buf;
-  src.connect(c.destination);
+  const gain = c.createGain();
+  gain.gain.value = 0.86;
+  src.connect(gain);
+  gain.connect(c.destination);
   node = src;
   await new Promise<void>((resolve) => {
     const t = window.setTimeout(resolve, Math.min(20_000, buf.duration * 1000 + 120));
@@ -68,9 +71,10 @@ async function playWebAudio(b64: string): Promise<void> {
     };
     src.start();
   });
+  return buf.duration * 1000;
 }
 
-async function playHtmlAudio(b64: string): Promise<void> {
+async function playHtmlAudio(b64: string): Promise<number> {
   const url = URL.createObjectURL(new Blob([b64buf(b64)], { type: "audio/mpeg" }));
   const a = new Audio();
   a.preload = "auto";
@@ -88,8 +92,8 @@ async function playHtmlAudio(b64: string): Promise<void> {
     throw new Error("play");
   }
   await new Promise<void>((resolve) => {
-    const ms = Number.isFinite(a.duration) ? a.duration * 1000 + 200 : 8_000;
-    const t = window.setTimeout(resolve, Math.min(20_000, ms));
+    const wait = Number.isFinite(a.duration) ? a.duration * 1000 + 200 : 8_000;
+    const t = window.setTimeout(resolve, Math.min(20_000, wait));
     a.onended = () => {
       window.clearTimeout(t);
       resolve();
@@ -99,18 +103,20 @@ async function playHtmlAudio(b64: string): Promise<void> {
       resolve();
     };
   });
+  const ms = Number.isFinite(a.duration) && a.duration > 0 ? a.duration * 1000 : 0;
   a.pause();
   a.removeAttribute("src");
   a.load();
   URL.revokeObjectURL(url);
   if (html === a) html = null;
+  return ms;
 }
 
-export async function playVoiceMp3(b64: string): Promise<void> {
+export async function playVoiceMp3(b64: string): Promise<number> {
   stopVoice();
   try {
-    await playWebAudio(b64);
+    return await playWebAudio(b64);
   } catch {
-    await playHtmlAudio(b64);
+    return await playHtmlAudio(b64);
   }
 }
