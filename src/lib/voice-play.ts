@@ -16,18 +16,22 @@ export function voiceCool() {
   return { cool: 2_200, tail: 450, flush: 650 };
 }
 
-function audioCtx(): AudioContext {
+export function voicePlaybackCtx(): AudioContext {
   if (!ctx) {
     const Ctor = window.AudioContext ||
       (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
     if (!Ctor) throw new Error("sem audio");
     try {
-      ctx = new Ctor({ latencyHint: "interactive", sampleRate: 24_000 });
+      ctx = new Ctor({ latencyHint: "playback" });
     } catch {
       ctx = new Ctor();
     }
   }
   return ctx;
+}
+
+function audioCtx(): AudioContext {
+  return voicePlaybackCtx();
 }
 
 function hushMediaSession() {
@@ -56,8 +60,9 @@ function hushMediaSession() {
   }
 }
 
-/** Opens a silent capture so the tablet HAL can cancel the loud speakers. Released before STT. */
+/** iOS only: HAL echo cancel while she talks. On Android this path is call-mode sidetone. */
 export async function holdEchoCanceller() {
+  if (isAndroidVoice()) return;
   const my = ++aecGen;
   if (aecStream) return;
   if (!navigator.mediaDevices?.getUserMedia) return;
@@ -107,10 +112,9 @@ export function releaseEchoCanceller() {
 
 export async function unlockVoice() {
   try {
-    const c = audioCtx();
-    if (c.state === "suspended") await c.resume();
+    if (ctx && ctx.state === "suspended") await ctx.resume();
   } catch {
-    /* primeiro toque no tablet */
+    /* primeiro toque */
   }
   try {
     speechSynthesis.cancel();

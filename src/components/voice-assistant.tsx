@@ -12,6 +12,12 @@ import {
   unlockVoice,
   voiceCool,
 } from "@/lib/voice-play";
+import {
+  pauseBridgeListen,
+  resumeBridgeListen,
+  startBridgeListen,
+  stopBridgeListen,
+} from "@/lib/voice-listen";
 import { buildVoiceContext, type VoiceTurn } from "@/lib/voice-context";
 import { hearWake, isAlanaEcho } from "@/lib/wake-word";
 import { cn } from "@/lib/utils";
@@ -154,6 +160,7 @@ export function AlanaRadio() {
 
   function stopRec() {
     genRef.current += 1;
+    pauseBridgeListen();
     const rec = recRef.current;
     recRef.current = null;
     if (!rec) return;
@@ -172,6 +179,28 @@ export function AlanaRadio() {
     }
   }
 
+  function handleHeard(heard: string, isFinal: boolean) {
+    if (blocked()) return;
+    if (performance.now() < liveAt.current) return;
+    const text = heard.trim();
+    if (!text) return;
+    if (heardEcho(text)) return;
+    const parse = hearWake(text);
+    if (modeRef.current !== "session") {
+      if (!parse.woke || !isFinal) return;
+      if (parse.rest && heardEcho(parse.rest)) return;
+      void wake(parse.rest, parse.sleep);
+      return;
+    }
+    if (!isFinal) return;
+    if (parse.sleep) {
+      void sleep();
+      return;
+    }
+    const q = parse.rest;
+    if (q && !heardEcho(q)) void ask(q);
+  }
+
   function arm() {
     if (muted || speaking.current || asking.current) return;
     if (typeof window === "undefined") return;
@@ -183,16 +212,37 @@ export function AlanaRadio() {
       );
       return;
     }
-    const Ctor = getCtor();
-    if (!Ctor) {
-      setError("Este aparelho não captura voz. Escreve no rádio.");
-      return;
-    }
     stopRec();
     releaseEchoCanceller();
     const my = genRef.current;
     const { flush } = voiceCool();
     liveAt.current = performance.now() + flush;
+    wanted.current = true;
+    if (isAndroidVoice()) {
+      resumeBridgeListen();
+      void startBridgeListen((heard) => {
+        if (my !== genRef.current) return;
+        handleHeard(heard, true);
+      }).then(() => {
+        if (my !== genRef.current) return;
+        if (modeRef.current === "off") {
+          modeRef.current = "wake";
+          setMode("wake");
+        }
+        setError(null);
+      }).catch(() => {
+        if (my !== genRef.current) return;
+        wanted.current = false;
+        setMode("off");
+        setError("Microfone bloqueado — toca no ícone da Alana pra liberar.");
+      });
+      return;
+    }
+    const Ctor = getCtor();
+    if (!Ctor) {
+      setError("Este aparelho não captura voz. Escreve no rádio.");
+      return;
+    }
     const rec = new Ctor();
     rec.lang = "pt-BR";
     rec.interimResults = true;
@@ -212,21 +262,7 @@ export function AlanaRadio() {
       setInterim(mid);
       const heard = (final || mid).trim();
       if (!heard) return;
-      if (heardEcho(heard)) return;
-      const parse = hearWake(heard);
-      if (modeRef.current !== "session") {
-        if (!parse.woke || !final) return;
-        if (parse.rest && heardEcho(parse.rest)) return;
-        void wake(parse.rest, parse.sleep);
-        return;
-      }
-      if (!final) return;
-      if (parse.sleep) {
-        void sleep();
-        return;
-      }
-      const q = parse.rest;
-      if (q && !heardEcho(q)) void ask(q);
+      handleHeard(heard, Boolean(final));
     };
     rec.onerror = (ev) => {
       if (my !== genRef.current) return;
@@ -251,13 +287,12 @@ export function AlanaRadio() {
       if (wanted.current && !muted && !blocked()) {
         window.setTimeout(() => {
           if (my === genRef.current && wanted.current && !muted && !blocked()) arm();
-        }, isAndroidVoice() ? 800 : 400);
+        }, 400);
       }
     };
     recRef.current = rec;
     try {
       rec.start();
-      wanted.current = true;
       if (modeRef.current === "off") {
         modeRef.current = "wake";
         setMode("wake");
@@ -431,6 +466,7 @@ export function AlanaRadio() {
       wanted.current = false;
       stopRec();
       stopVoice();
+      stopBridgeListen();
       releaseEchoCanceller();
       setMode("off");
       return;
@@ -441,6 +477,7 @@ export function AlanaRadio() {
       if (document.hidden) {
         stopRec();
         stopVoice();
+        stopBridgeListen();
         releaseEchoCanceller();
       } else if (wanted.current && !muted) arm();
     };
@@ -457,6 +494,7 @@ export function AlanaRadio() {
       wanted.current = false;
       stopRec();
       stopVoice();
+      stopBridgeListen();
       releaseEchoCanceller();
       document.removeEventListener("visibilitychange", onVis);
       window.removeEventListener("pointerdown", onPtr);
@@ -476,6 +514,7 @@ export function AlanaRadio() {
     holdTimer.current = window.setTimeout(() => {
       held.current = true;
       stopVoice();
+      stopBridgeListen();
       releaseEchoCanceller();
       setMuted(true);
       setOpen(false);
@@ -498,6 +537,7 @@ export function AlanaRadio() {
         onContextMenu={(e) => {
           e.preventDefault();
           stopVoice();
+          stopBridgeListen();
           releaseEchoCanceller();
           setMuted(true);
           setOpen(false);

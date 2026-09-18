@@ -129,3 +129,44 @@ async function speakGrok(apiKey: string, text: string): Promise<string | null> {
     return null;
   }
 }
+
+export async function hearGrok(
+  apiKey: string,
+  audioB64: string,
+  mime = "audio/webm",
+): Promise<string> {
+  const raw = Buffer.from(String(audioB64).replace(/^data:.*?;base64,/, ""), "base64");
+  if (raw.byteLength < 400 || raw.byteLength > 350_000) return "";
+  const kind = mime.includes("ogg")
+    ? "ogg"
+    : mime.includes("mp4") || mime.includes("m4a")
+      ? "m4a"
+      : mime.includes("wav")
+        ? "wav"
+        : mime.includes("mpeg") || mime.includes("mp3")
+          ? "mp3"
+          : "webm";
+  const type =
+    kind === "ogg"
+      ? "audio/ogg"
+      : kind === "m4a"
+        ? "audio/mp4"
+        : kind === "wav"
+          ? "audio/wav"
+          : kind === "mp3"
+            ? "audio/mpeg"
+            : "audio/webm";
+  const form = new FormData();
+  form.append("file", new Blob([new Uint8Array(raw)], { type }), `clip.${kind}`);
+  form.append("model", "grok-voice-transcribe-2.0");
+  form.append("language", "pt");
+  const res = await fetch("https://api.x.ai/v1/stt", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${apiKey}` },
+    body: form,
+    ignoreResponseError: true,
+  } as FetchOpts);
+  if (!res.ok) return "";
+  const body = (await res.json()) as { text?: string };
+  return clip(String(body.text ?? "").trim(), 480);
+}

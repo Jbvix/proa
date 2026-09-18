@@ -1,5 +1,5 @@
 import type { Config } from "@netlify/functions";
-import { askGrokVoice, speakCanned } from "../../src/lib/voice-api";
+import { askGrokVoice, hearGrok, speakCanned } from "../../src/lib/voice-api";
 import { isCannedKind } from "../../src/lib/voice-copy";
 import type { VoiceContext, VoiceTurn } from "../../src/lib/voice-context";
 
@@ -18,6 +18,8 @@ export default async (req: Request) => {
     }
     let body: {
       canned?: unknown;
+      hear?: string;
+      mime?: string;
       message?: string;
       context?: VoiceContext;
       history?: VoiceTurn[];
@@ -30,6 +32,11 @@ export default async (req: Request) => {
     if (isCannedKind(body.canned)) {
       const out = await speakCanned(key, body.canned);
       return Response.json({ ok: true, text: out.text, audio: out.audio });
+    }
+    const hear = String(body.hear ?? "");
+    if (hear.length > 80) {
+      const text = await hearGrok(key, hear, String(body.mime ?? "audio/webm"));
+      return Response.json({ ok: true, text });
     }
     const message = String(body.message ?? "").trim();
     if (!message) {

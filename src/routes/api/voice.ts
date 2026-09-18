@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { env } from "@/lib/env.server";
 import { isCannedKind } from "@/lib/voice-copy";
-import { askGrokVoice, speakCanned } from "@/lib/voice-api";
+import { askGrokVoice, hearGrok, speakCanned } from "@/lib/voice-api";
 import type { VoiceContext, VoiceTurn } from "@/lib/voice-context";
 
 function fail(status: number, error: string, detail?: string) {
@@ -25,6 +25,8 @@ export const Route = createFileRoute("/api/voice")({
           }
           let body: {
             canned?: unknown;
+            hear?: string;
+            mime?: string;
             message?: string;
             context?: VoiceContext;
             history?: VoiceTurn[];
@@ -37,6 +39,11 @@ export const Route = createFileRoute("/api/voice")({
           if (isCannedKind(body.canned)) {
             const out = await speakCanned(key, body.canned);
             return Response.json({ ok: true, text: out.text, audio: out.audio });
+          }
+          const hear = String(body.hear ?? "");
+          if (hear.length > 80) {
+            const text = await hearGrok(key, hear, String(body.mime ?? "audio/webm"));
+            return Response.json({ ok: true, text });
           }
           const message = String(body.message ?? "").trim();
           if (!message) return fail(400, "Fala vazia.");

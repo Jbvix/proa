@@ -19,7 +19,7 @@ Captura movimento e posição do rebocador, atualiza características de onda a 
 2. Importe o arquivo GPX da derrota na aba **Rota**
 3. Informe o RPM atual
 4. Acompanhe o **Painel**, **Ondas**, **Rota** e **RPM**
-5. Chama **Alana** pelo nome. Ela cumprimenta e escuta ~90 s. “Tchau” pra ela voltar a esperar o nome. Segura o ícone do microfone pra desligar. No tablet Samsung, o primeiro toque na tela libera o microfone. Se a Alana ainda se escutar, atualize o PWA.
+5. Chama **Alana** pelo nome. Ela cumprimenta e escuta ~90 s. “Tchau” pra ela voltar a esperar o nome. Segura o ícone do microfone pra desligar. No tablet Samsung, o primeiro toque na tela libera o microfone; em espera o rádio fica mudo até alguém falar. Se a Alana ainda se escutar, atualize o PWA.
 
 Dados ficam só neste aparelho (sem conta, sem nuvem).
 
