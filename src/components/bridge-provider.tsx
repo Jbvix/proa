@@ -9,6 +9,7 @@ import {
 } from "react";
 import { fetchMeteo, syntheticMeteo, type MeteoBundle } from "@/lib/meteo";
 import { sampleRouteStations } from "@/lib/geo";
+import { withCity } from "@/lib/places";
 import { sensorEngine, type EngineSnapshot } from "@/lib/sensor-engine";
 import {
   preferredLatLon,
@@ -65,7 +66,12 @@ export function BridgeProvider({ children }: { children: ReactNode }) {
     if (!onboarded) return;
     let cancelled = false;
     const { lat, lon } = preferredLatLon();
-    const stations = route ? sampleRouteStations(route.points) : [];
+    const stations = route
+      ? sampleRouteStations(route.points).map((s) => ({
+          ...s,
+          label: withCity(s.lat, s.lon, s.label),
+        }))
+      : [];
     setMeteoLoading(true);
     setMeteoError(null);
     fetchMeteo(lat, lon, stations)

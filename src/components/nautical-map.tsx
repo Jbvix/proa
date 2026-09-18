@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { CircleMarker, Map as LeafletMap, Marker, Polyline } from "leaflet";
 import type { ParsedRoute } from "@/lib/gpx";
 import type { RouteStation } from "@/lib/meteo";
+import { routeMapMarks } from "@/lib/places";
 import { formatLatLon, pad3 } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 
@@ -18,6 +19,12 @@ type Props = {
   stations?: RouteStation[];
   className?: string;
 };
+
+function cssColor(name: string, fallback: string) {
+  if (typeof document === "undefined") return fallback;
+  const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  return v || fallback;
+}
 
 export function NauticalMap({
   route,
@@ -37,9 +44,10 @@ export function NauticalMap({
   const trackRef = useRef<Polyline | null>(null);
   const tugRef = useRef<Marker | null>(null);
   const destRef = useRef<CircleMarker | null>(null);
-  const wpRef = useRef<CircleMarker[]>([]);
+  const markRef = useRef<CircleMarker[]>([]);
   const fitted = useRef("");
   const [ready, setReady] = useState(false);
+  const marks = useMemo(() => routeMapMarks(route, stations), [route, stations]);
 
   useEffect(() => {
     let dead = false;
@@ -79,7 +87,7 @@ export function NauticalMap({
       trackRef.current = null;
       tugRef.current = null;
       destRef.current = null;
-      wpRef.current = [];
+      markRef.current = [];
       fitted.current = "";
     };
   }, []);
@@ -99,25 +107,24 @@ export function NauticalMap({
       }
       if (pts.length >= 2) {
         const latlngs = pts.map((p) => [p.lat, p.lon] as [number, number]);
+        const accent = cssColor("--color-accent", "#7aa3b0");
         trackRef.current = L.polyline(latlngs, {
-          color: "#d7e4ea",
+          color: accent,
           weight: 5,
-          opacity: 1,
+          opacity: 0.95,
         }).addTo(map);
         const dest = pts[pts.length - 1]!;
         destRef.current = L.circleMarker([dest.lat, dest.lon], {
           radius: 8,
-          color: "#e8eef2",
+          color: cssColor("--color-fg", "#e8eef2"),
           weight: 2,
-          fillColor: "#7aa3b0",
+          fillColor: accent,
           fillOpacity: 1,
-        })
-          .bindTooltip("Destino", { direction: "top", permanent: false })
-          .addTo(map);
+        }).addTo(map);
         const key = route?.source ?? `${pts.length}`;
         if (fitted.current !== key) {
           map.fitBounds(trackRef.current.getBounds(), {
-            padding: [28, 28],
+            padding: [36, 36],
             maxZoom: 13,
           });
           fitted.current = key;
@@ -131,24 +138,37 @@ export function NauticalMap({
     const map = mapRef.current;
     if (!map || !ready) return;
     void import("leaflet").then(({ default: L }) => {
-      for (const m of wpRef.current) m.remove();
-      wpRef.current = [];
-      for (const s of stations ?? []) {
+      for (const m of markRef.current) m.remove();
+      markRef.current = [];
+      const fg = cssColor("--color-fg", "#e8eef2");
+      const accent = cssColor("--color-accent", "#7aa3b0");
+      const warn = cssColor("--color-warn", "#c4a36a");
+      for (const s of marks) {
+        const fill =
+          s.kind === "origin" || s.kind === "dest"
+            ? accent
+            : s.kind === "wpt"
+              ? fg
+              : warn;
+        const named = s.kind !== "station";
         const mark = L.circleMarker([s.lat, s.lon], {
-          radius: 5,
-          color: "#c4a36a",
-          weight: 2,
-          fillColor: "#c4a36a",
-          fillOpacity: 0.85,
+          radius: named ? 7 : 5,
+          color: fg,
+          weight: 1.5,
+          fillColor: fill,
+          fillOpacity: 0.95,
         }).addTo(map);
-        mark.bindTooltip(
-          `${s.label}${s.waveHs != null ? ` · Hs ${s.waveHs.toFixed(1)} m` : ""}`,
-          { direction: "top" },
-        );
-        wpRef.current.push(mark);
+        mark.bindTooltip(s.title, {
+          permanent: named,
+          direction: named ? "right" : "top",
+          offset: named ? [12, 0] : [0, -8],
+          opacity: 1,
+          className: "wp-label",
+        });
+        markRef.current.push(mark);
       }
     });
-  }, [stations, ready]);
+  }, [marks, ready]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -182,7 +202,7 @@ export function NauticalMap({
   return (
     <div className={cn("relative overflow-hidden rounded-lg bg-bg", className)}>
       <div ref={hostRef} className="absolute inset-0 z-0" />
-      <div className="pointer-events-none absolute left-3 top-3 z-10 max-w-[min(100%-1.5rem,20rem)] rounded-md bg-bg/80 px-3 py-2 text-fg shadow-[var(--shadow-border)] backdrop-blur-sm">
+      <div className="pointer-events-none absolute left-3 top-3 z-20 max-w-[min(100%-1.5rem,20rem)] rounded-md bg-bg/80 px-3 py-2 text-fg shadow-[var(--shadow-border)] backdrop-blur-sm">
         <p className="font-mono text-lg tabular leading-none">
           {sogKn != null ? sogKn.toFixed(1) : "—"}
           <span className="ml-1 text-xs text-muted">kn</span>
@@ -206,6 +226,15 @@ export function NauticalMap({
             : "ondas/min —"}
         </p>
       </div>
+      {marks.length ? (
+        <ul className="pointer-events-none absolute bottom-3 left-3 z-20 max-w-[min(100%-1.5rem,18rem)] space-y-1 rounded-md bg-bg/80 px-3 py-2 text-fg shadow-[var(--shadow-border)] backdrop-blur-sm">
+          {marks.slice(0, 8).map((m) => (
+            <li key={`${m.kind}-${m.lat.toFixed(3)}-${m.lon.toFixed(3)}`} className="text-xs leading-tight text-fg">
+              {m.title}
+            </li>
+          ))}
+        </ul>
+      ) : null}
     </div>
   );
 }

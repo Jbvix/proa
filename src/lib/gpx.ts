@@ -1,10 +1,13 @@
 import { pathLengthNm, type LatLon } from "./geo";
 
-export type RoutePoint = LatLon & { ele?: number; time?: string };
+export type RoutePoint = LatLon & { ele?: number; time?: string; name?: string };
+
+export type NamedWaypoint = { lat: number; lon: number; name: string };
 
 export type ParsedRoute = {
   name: string;
   points: RoutePoint[];
+  waypoints: NamedWaypoint[];
   distanceNm: number;
   source: string;
 };
@@ -36,12 +39,14 @@ function collectPts(doc: Document, tag: string): RoutePoint[] {
     if (Math.abs(lat) > 90 || Math.abs(lon) > 180) continue;
     const eleRaw = childText(el, "ele");
     const time = childText(el, "time");
+    const name = childText(el, "name");
     const ele = eleRaw ? Number(eleRaw) : undefined;
     out.push({
       lat,
       lon,
       ele: ele != null && Number.isFinite(ele) ? ele : undefined,
       time: time || undefined,
+      name: name || undefined,
     });
   }
   return out;
@@ -56,6 +61,18 @@ function firstText(doc: Document, tag: string) {
     if (t) return t;
   }
   return "";
+}
+
+function namedFrom(pts: RoutePoint[]): NamedWaypoint[] {
+  const out: NamedWaypoint[] = [];
+  for (const p of pts) {
+    if (!p.name) continue;
+    if (out.some((w) => Math.abs(w.lat - p.lat) < 0.0008 && Math.abs(w.lon - p.lon) < 0.0008)) {
+      continue;
+    }
+    out.push({ lat: p.lat, lon: p.lon, name: p.name });
+  }
+  return out;
 }
 
 export function parseGpx(xml: string, filename = "rota.gpx"): ParsedRoute {
@@ -84,6 +101,7 @@ export function parseGpx(xml: string, filename = "rota.gpx"): ParsedRoute {
   return {
     name,
     points,
+    waypoints: namedFrom([...wpt, ...rte, ...trk]),
     distanceNm: pathLengthNm(points),
     source: filename,
   };

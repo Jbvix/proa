@@ -94,9 +94,11 @@ export function PainelScreen() {
             value={hs.toFixed(2)}
             unit="m"
             hint={
-              nextWp?.waveHs != null
-                ? `prev. ${nextWp.label} ${nextWp.waveHs.toFixed(2)} m`
-                : "sensores do aparelho"
+              !engine?.wave.trusted
+                ? "casco filtrado — aparelho mexido"
+                : nextWp?.waveHs != null
+                  ? `prev. ${nextWp.label} ${nextWp.waveHs.toFixed(2)} m`
+                  : "sensores do aparelho"
             }
           />
         </Card>
@@ -180,9 +182,8 @@ export function PainelScreen() {
         <HeaveScope />
         <p className="mt-2 text-xs text-subtle">
           Mar ao vivo pelos sensores · janela{" "}
-          {(engine?.wave.windowS ?? 0) >= 60
-            ? `${Math.round((engine?.wave.windowS ?? 0) / 60)} min`
-            : `${Math.round(engine?.wave.windowS ?? 0)} s`}
+          {Math.round(engine?.wave.windowS ?? 0)} s
+          {engine?.wave.trusted === false ? " · filtro anti-deriva" : ""}
         </p>
       </Card>
 

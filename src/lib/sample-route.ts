@@ -49,6 +49,9 @@ export function sampleGpxXml() {
     <name>Mucuripe → Pecém</name>
     <desc>Derrota de exemplo: Porto do Mucuripe (Fortaleza) à aproximação de Pecém.</desc>
   </metadata>
+  <wpt lat="-3.718400" lon="-38.473200"><name>Mucuripe</name></wpt>
+  <wpt lat="-3.608000" lon="-38.628000"><name>Caucaia ao largo</name></wpt>
+  <wpt lat="-3.533200" lon="-38.808400"><name>Pecém</name></wpt>
   <trk>
     <name>Mucuripe → Pecém</name>
     <trkseg>

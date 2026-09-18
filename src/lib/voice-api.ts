@@ -1,7 +1,7 @@
 import { Buffer } from "node:buffer";
 import type { VoiceContext, VoiceTurn } from "./voice-context";
 
-const SYSTEM = `Você é o assistente de passadiço do app Proa, da TugLife. Fala português do Brasil, bem informal, como um mestre de rebocador no rádio: direto, curto, sem firula, sem emoji.
+const SYSTEM = `Você é a rádio do passadiço do app Proa, da TugLife. Fala português do Brasil, bem informal, voz de bordo: direto, curto, sem firula, sem emoji.
 
 Explique o app quando pedirem:
 - Derrota entra por arquivo GPX.
@@ -75,7 +75,7 @@ async function speakGrok(apiKey: string, text: string): Promise<string | null> {
   try {
     const res = await grokFetch("https://api.x.ai/v1/tts", apiKey, {
       text: clip(text, 700),
-      voice_id: "leo",
+      voice_id: "ara",
       language: "pt-BR",
     });
     if (!res.ok) return null;

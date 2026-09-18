@@ -9,6 +9,7 @@ import { sensorEngine } from "@/lib/sensor-engine";
 import { useLiveBridge } from "@/components/bridge-provider";
 import { useSettings } from "@/lib/store";
 import { passageOf, speedHint } from "@/lib/passage";
+import { routeMapMarks } from "@/lib/places";
 import { phaseLabel, planFloodArrival } from "@/lib/tide";
 import { formatEtaClock, formatDurationMin, formatLatLon } from "@/lib/utils";
 
@@ -46,6 +47,7 @@ export function RotaScreen() {
   const tideLabel = plan.atEta
     ? `${phaseLabel(plan.atEta.phase)} ${plan.atEta.seaM.toFixed(2)} m`
     : null;
+  const marks = routeMapMarks(route, meteo?.alongRoute);
 
   return (
     <div className="space-y-4">
@@ -95,6 +97,25 @@ export function RotaScreen() {
           className="h-72 w-full md:h-[28rem]"
         />
       </Card>
+
+      {marks.length ? (
+        <Card className="rounded-2xl p-4">
+          <CardTitle>Waypoints e cidades</CardTitle>
+          <ul className="mt-3 space-y-2">
+            {marks.map((m) => (
+              <li
+                key={`${m.kind}-${m.lat.toFixed(4)}-${m.lon.toFixed(4)}`}
+                className="flex items-baseline justify-between gap-3 text-sm"
+              >
+                <span className="min-w-0 truncate text-fg">{m.title}</span>
+                <span className="shrink-0 font-mono text-xs tabular text-subtle">
+                  {m.lat.toFixed(3)}° {m.lon.toFixed(3)}°
+                </span>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      ) : null}
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <Card className="rounded-2xl">

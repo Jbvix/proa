@@ -31,10 +31,16 @@ export function HeaveScope() {
         ctx.lineTo(w, y);
         ctx.stroke();
       }
+      const accent =
+        getComputedStyle(document.documentElement).getPropertyValue("--color-accent").trim() ||
+        "#7aa3b0";
+      const border =
+        getComputedStyle(document.documentElement).getPropertyValue("--color-border").trim() ||
+        "rgba(122,163,176,0.28)";
       ctx.beginPath();
       ctx.moveTo(0, h / 2);
       ctx.lineTo(w, h / 2);
-      ctx.strokeStyle = "rgba(122,163,176,0.28)";
+      ctx.strokeStyle = border;
       ctx.stroke();
 
       sensorEngine.copyScope(buf.current);
@@ -42,6 +48,7 @@ export function HeaveScope() {
       if (data.length > 1) {
         let peak = 0.15;
         for (const v of data) peak = Math.max(peak, Math.abs(v));
+        peak = Math.min(4.5, Math.max(0.4, peak));
         ctx.beginPath();
         for (let i = 0; i < data.length; i++) {
           const x = (i / (data.length - 1)) * w;
@@ -49,7 +56,7 @@ export function HeaveScope() {
           if (i === 0) ctx.moveTo(x, y);
           else ctx.lineTo(x, y);
         }
-        ctx.strokeStyle = "#7aa3b0";
+        ctx.strokeStyle = accent;
         ctx.lineWidth = 1.6;
         ctx.stroke();
       }

@@ -15,6 +15,13 @@ export function seaStateFromHs(hs: number): SeaState {
   return { code: 7, label: "Muito grossa", hint: "Condições severas" };
 }
 
+/** Coastal tug sanity — Hs above this is IMU drift, not sea. */
+export const HS_HULL_MAX = 8;
+export const HEAVE_SAMPLE_MAX = 4.5;
+export const PERIOD_MIN_S = 2.8;
+export const PERIOD_MAX_S = 16;
+export const WAVE_STATS_S = 90;
+
 export function hsFromHeaveStd(stdM: number) {
   return Math.max(0, 4 * stdM);
 }
@@ -51,9 +58,69 @@ export function stdev(samples: ArrayLike<number>) {
   return Math.sqrt(varSum / (n - 1));
 }
 
+export type HpState = { x: number; y: number };
+
+export function highpass1(s: HpState, x: number, dt: number, fc: number) {
+  const rc = 1 / (2 * Math.PI * fc);
+  const a = rc / (rc + dt);
+  const y = a * (s.y + x - s.x);
+  s.x = x;
+  s.y = y;
+  return y;
+}
+
+/** Remove mean + linear ramp so IMU drift does not inflate Hs = 4σ. */
+export function detrend(samples: ArrayLike<number>): Float32Array {
+  const n = samples.length;
+  const out = new Float32Array(n);
+  if (n === 0) return out;
+  if (n < 3) {
+    let mean = 0;
+    for (let i = 0; i < n; i++) mean += samples[i]!;
+    mean /= n;
+    for (let i = 0; i < n; i++) out[i] = samples[i]! - mean;
+    return out;
+  }
+  let sumX = 0;
+  let sumY = 0;
+  let sumXY = 0;
+  let sumXX = 0;
+  for (let i = 0; i < n; i++) {
+    const y = samples[i]!;
+    sumX += i;
+    sumY += y;
+    sumXY += i * y;
+    sumXX += i * i;
+  }
+  const den = n * sumXX - sumX * sumX;
+  const slope = den !== 0 ? (n * sumXY - sumX * sumY) / den : 0;
+  const intercept = (sumY - slope * sumX) / n;
+  for (let i = 0; i < n; i++) out[i] = samples[i]! - (intercept + slope * i);
+  return out;
+}
+
+export function hullWaveFromHeave(samples: ArrayLike<number>, dt: number) {
+  const n = samples.length;
+  if (n < 20 || dt <= 0) {
+    return { hsM: 0, amplitudeM: 0, periodS: 0, perMin: 0, clamped: false };
+  }
+  const d = detrend(samples);
+  let hs = hsFromHeaveStd(stdev(d));
+  const clamped = hs > HS_HULL_MAX;
+  hs = Math.min(HS_HULL_MAX, Math.max(0, hs));
+  let period = zeroCrossingPeriod(d, dt);
+  if (period < PERIOD_MIN_S || period > PERIOD_MAX_S) period = 0;
+  return {
+    hsM: hs,
+    amplitudeM: amplitudeFromHs(hs),
+    periodS: period,
+    perMin: period > 0 ? 60 / period : 0,
+    clamped,
+  };
+}
+
 export function blendHs(observed: number | null, forecast: number | null) {
   if (observed != null && forecast != null) {
-    // Trust the hull more as the onboard window fills; still anchored to forecast.
     return observed * 0.65 + forecast * 0.35;
   }
   return observed ?? forecast ?? 0;

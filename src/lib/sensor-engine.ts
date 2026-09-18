@@ -1,10 +1,11 @@
 import { alongTrack, haversineNm, msToKn } from "./geo";
 import type { ParsedRoute } from "./gpx";
 import {
-  amplitudeFromHs,
-  hsFromHeaveStd,
-  stdev,
-  zeroCrossingPeriod,
+  HEAVE_SAMPLE_MAX,
+  WAVE_STATS_S,
+  highpass1,
+  hullWaveFromHeave,
+  type HpState,
 } from "./waves";
 
 export type SensorMode = "idle" | "sim" | "live";
@@ -35,6 +36,7 @@ export type WaveLive = {
   perMin: number;
   samples: number;
   windowS: number;
+  trusted: boolean;
 };
 
 export type EngineSnapshot = {
@@ -60,10 +62,12 @@ type MotionEvt = {
 };
 
 const HEAVE_HZ = 10;
-const HEAVE_WINDOW_S = 20 * 60;
-const HEAVE_CAP = HEAVE_HZ * HEAVE_WINDOW_S;
+const HEAVE_CAP = HEAVE_HZ * WAVE_STATS_S;
 const SCOPE_S = 24;
 const SCOPE_CAP = HEAVE_HZ * SCOPE_S;
+const HP_FC = 0.055;
+const ACC_SPIKE = 2.8;
+const VEL_LEAK = 0.988;
 
 type Listener = (snap: EngineSnapshot) => void;
 
@@ -76,7 +80,12 @@ function emptyWave(): WaveLive {
     perMin: 0,
     samples: 0,
     windowS: 0,
+    trusted: true,
   };
+}
+
+function hpState(): HpState {
+  return { x: 0, y: 0 };
 }
 
 export class SensorEngine {
@@ -93,14 +102,12 @@ export class SensorEngine {
   private orientOn = false;
   private timer: number | null = null;
   private lastTick = 0;
-  private accUpPrev = 0;
-  private hpA = 0;
+  private hpA1 = hpState();
+  private hpA2 = hpState();
+  private hpV = hpState();
+  private hpD = hpState();
   private vel = 0;
-  private hpV = 0;
   private disp = 0;
-  private hpD = 0;
-  private prevA = 0;
-  private prevV = 0;
   private heaveBuf = new Float32Array(HEAVE_CAP);
   private heaveN = 0;
   private heaveI = 0;
@@ -114,6 +121,7 @@ export class SensorEngine {
   private attitude: Attitude | null = null;
   private listeners = new Set<Listener>();
   private lastLiveMotion = 0;
+  private handlingUntil = 0;
   private trail: Array<{ lat: number; lon: number; t: number }> = [];
 
   on(fn: Listener) {
@@ -182,17 +190,16 @@ export class SensorEngine {
   }
 
   private resetFilters() {
-    this.accUpPrev = 0;
-    this.hpA = 0;
+    this.hpA1 = hpState();
+    this.hpA2 = hpState();
+    this.hpV = hpState();
+    this.hpD = hpState();
     this.vel = 0;
-    this.hpV = 0;
     this.disp = 0;
-    this.hpD = 0;
-    this.prevA = 0;
-    this.prevV = 0;
     this.heaveN = 0;
     this.heaveI = 0;
     this.scopeI = 0;
+    this.handlingUntil = 0;
   }
 
   private async startLive() {
@@ -341,21 +348,25 @@ export class SensorEngine {
     const accUp = hasLin
       ? m.ax * ux + m.ay * uy + m.az * uz
       : m.gx * ux + m.gy * uy + m.gz * uz - gMag;
-    this.pushHeaveFromAcc(accUp, 1 / HEAVE_HZ);
+    this.pushHeaveFromAcc(accUp, 1 / HEAVE_HZ, m.t);
   }
 
-  private pushHeaveFromAcc(acc: number, dt: number) {
-    // High-pass accel (~0.04 Hz) then leaky double integration.
-    const rc = 1 / (2 * Math.PI * 0.045);
-    const aHp = rc / (rc + dt);
-    this.hpA = aHp * (this.hpA + acc - this.prevA);
-    this.prevA = acc;
-    this.vel = this.vel * 0.994 + this.hpA * dt;
-    this.hpV = aHp * (this.hpV + this.vel - this.prevV);
-    this.prevV = this.vel;
-    this.disp = this.disp * 0.994 + this.hpV * dt;
-    this.hpD = aHp * (this.hpD + this.disp);
-    this.pushSample(this.hpD);
+  private pushHeaveFromAcc(acc: number, dt: number, now = performance.now()) {
+    const a1 = highpass1(this.hpA1, acc, dt, HP_FC);
+    const a2 = highpass1(this.hpA2, a1, dt, HP_FC);
+    if (Math.abs(a2) > ACC_SPIKE) {
+      this.handlingUntil = now + 2500;
+      this.vel *= 0.55;
+      this.disp *= 0.55;
+    }
+    this.vel = this.vel * VEL_LEAK + a2 * dt;
+    const vHp = highpass1(this.hpV, this.vel, dt, HP_FC);
+    this.disp = this.disp * VEL_LEAK + vHp * dt;
+    let heave = highpass1(this.hpD, this.disp, dt, HP_FC);
+    if (heave > HEAVE_SAMPLE_MAX) heave = HEAVE_SAMPLE_MAX;
+    if (heave < -HEAVE_SAMPLE_MAX) heave = -HEAVE_SAMPLE_MAX;
+    this.disp = heave;
+    this.pushSample(heave);
   }
 
   private pushSample(heave: number) {
@@ -370,7 +381,6 @@ export class SensorEngine {
     const Hs = this.seaHs;
     const T = this.seaPeriod;
     const w = (2 * Math.PI) / T;
-    // Two-component sea so Hs ≈ 4σ.
     const a1 = Hs * 0.4;
     const a2 = Hs * 0.16;
     return (
@@ -427,9 +437,8 @@ export class SensorEngine {
         }
       }
     } else if (this.mode === "live") {
-      // If motion events are sparse, keep cadence with last residual (zeros).
       if (now - this.lastLiveMotion > 400) {
-        this.pushHeaveFromAcc(0, dt);
+        this.pushHeaveFromAcc(0, dt, now);
       }
     }
 
@@ -443,17 +452,17 @@ export class SensorEngine {
     const start = (this.heaveI - n + HEAVE_CAP) % HEAVE_CAP;
     for (let i = 0; i < n; i++) slice[i] = this.heaveBuf[(start + i) % HEAVE_CAP]!;
     const dt = 1 / HEAVE_HZ;
-    const std = stdev(slice);
-    const hs = hsFromHeaveStd(std);
-    const period = zeroCrossingPeriod(slice, dt);
+    const w = hullWaveFromHeave(slice, dt);
+    const handling = performance.now() < this.handlingUntil;
     return {
       heaveM: slice[n - 1]!,
-      hsM: hs,
-      amplitudeM: amplitudeFromHs(hs),
-      periodS: period,
-      perMin: period > 0 ? 60 / period : 0,
+      hsM: w.hsM,
+      amplitudeM: w.amplitudeM,
+      periodS: w.periodS,
+      perMin: w.perMin,
       samples: n,
       windowS: n * dt,
+      trusted: !w.clamped && !handling,
     };
   }
 

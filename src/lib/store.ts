@@ -81,6 +81,9 @@ export const useSettings = create<SettingsState>()(
         const t = state?.theme === "day" ? "day" : "night";
         if (state) state.theme = t;
         applyTheme(t);
+        if (state?.route && !Array.isArray(state.route.waypoints)) {
+          state.route.waypoints = [];
+        }
       },
     },
   ),
