@@ -1,4 +1,4 @@
-import { haversineNm } from "./geo";
+import { haversineNm } from "./geo.ts";
 import type { ParsedRoute } from "./gpx";
 import type { RouteStation } from "./meteo";
 
@@ -53,6 +53,15 @@ export function nearestPlace(
     if (!best || nm < best.nm) best = { name: p.name, nm };
   }
   return best;
+}
+
+export function nearestPlaceAny(lat: number, lon: number): NearestPlace {
+  let best: NearestPlace | null = null;
+  for (const p of COAST_PLACES) {
+    const nm = haversineNm(lat, lon, p.lat, p.lon);
+    if (!best || nm < best.nm) best = { name: p.name, nm };
+  }
+  return best ?? { name: "costa", nm: 0 };
 }
 
 export function withCity(lat: number, lon: number, label: string) {

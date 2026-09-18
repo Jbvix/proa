@@ -32,6 +32,15 @@ const TTS_CACHE = {
   bye: "proa-alana-tts-bye-v1",
 } as const;
 
+const ASK_CHIPS: { q: string; label: string }[] = [
+  { q: "Relatório da viagem agora.", label: "Relatório" },
+  { q: "Onde estamos? Lat, long e referência na costa.", label: "Posição" },
+  {
+    q: "Como economizar combustível na faixa de RPM aproveitando o tempo a favor?",
+    label: "Combustível",
+  },
+];
+
 function getCtor() {
   const w = window as unknown as {
     SpeechRecognition?: new () => Recog;
@@ -328,6 +337,14 @@ export function AlanaRadio() {
     }
   }
 
+  function sendChip(q: string) {
+    void unlockVoice();
+    modeRef.current = "session";
+    setMode("session");
+    bumpSession();
+    void ask(q);
+  }
+
   useEffect(() => {
     if (muted) {
       wanted.current = false;
@@ -464,8 +481,8 @@ export function AlanaRadio() {
               {turns.length === 0 ? (
                 <p className="text-sm text-muted">
                   Chama <span className="text-fg">Alana</span> pelo nome. Ela
-                  responde e fica no ar — não precisa apertar o microfone. Pra
-                  desligar, diz tchau ou segura o ícone.
+                  vê a viagem toda — posição, mar, rota, RPM — sem mudar de
+                  tela. Pede relatório, posição ou como economizar combustível.
                 </p>
               ) : (
                 turns.map((t, i) => (
@@ -483,6 +500,19 @@ export function AlanaRadio() {
               {interim ? <p className="text-sm text-subtle">{interim}</p> : null}
               {error ? <p className="text-sm text-danger">{error}</p> : null}
               {busy ? <p className="text-sm text-subtle">Espera um segundo…</p> : null}
+            </div>
+            <div className="flex gap-2 overflow-x-auto px-3 pb-1">
+              {ASK_CHIPS.map((c) => (
+                <button
+                  key={c.label}
+                  type="button"
+                  disabled={busy}
+                  onClick={() => sendChip(c.q)}
+                  className="h-11 shrink-0 rounded-md bg-surface-2 px-3 text-xs font-medium uppercase tracking-[0.12em] text-muted transition-[background-color,color] duration-150 hover:text-fg disabled:opacity-40"
+                >
+                  {c.label}
+                </button>
+              ))}
             </div>
             <form
               className="flex items-center gap-2 border-t border-border px-3 py-3"
