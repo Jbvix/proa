@@ -6,16 +6,16 @@ Captura movimento e posição do rebocador, atualiza características de onda a 
 
 ## O que o app faz
 
-- **GPX** — importe a rota ou use o exemplo Mucuripe → Pecém
+- **GPX** — a derrota entra por arquivo (track, rota ou waypoints)
 - **RPM atual** — informe o regime do motor
-- **Sensores** — heave do casco (DeviceMotion) e GPS; no desktop há simulação a 9,2 kn
+- **Sensores** — heave do casco (DeviceMotion) e GPS; no desktop há simulação sobre o track
 - **Ondas** — Hs (4σ do heave), amplitude e período por cruzamento de zero, fundidos com a série horária da API
 - **RPM ideal** — banda de viagem a partir de Hs, período, vento e mar de proa, no perfil do motor (450 / 980 / 1600)
 
 ## Uso a bordo
 
-1. Abra o app no telefone ou tablet (adicione à tela inicial)
-2. Importe o GPX da derrota e informe o RPM atual
+1. Importe o arquivo GPX da derrota
+2. Informe o RPM atual
 3. Permita sensores e localização para captura ao vivo
 4. Acompanhe o **Painel**, **Ondas**, **Rota** e **RPM**
 

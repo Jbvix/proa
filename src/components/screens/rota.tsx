@@ -1,10 +1,9 @@
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { RoutePlot } from "@/components/route-plot";
 import { Stat } from "@/components/stat";
 import { Button } from "@/components/ui/button";
 import { Card, CardTitle } from "@/components/ui/card";
 import { parseGpxFile } from "@/lib/gpx";
-import { loadSampleRoute } from "@/lib/sample-route";
 import { sensorEngine } from "@/lib/sensor-engine";
 import { useLiveBridge } from "@/components/bridge-provider";
 import { useSettings } from "@/lib/store";
@@ -16,6 +15,7 @@ export function RotaScreen() {
   const route = useSettings((s) => s.route);
   const setRoute = useSettings((s) => s.setRoute);
   const { engine } = useLiveBridge();
+  const [error, setError] = useState<string | null>(null);
 
   async function onFile(file: File | undefined) {
     if (!file) return;
@@ -23,8 +23,9 @@ export function RotaScreen() {
       const parsed = await parseGpxFile(file);
       setRoute(parsed);
       sensorEngine.setRoute(parsed);
+      setError(null);
     } catch (err) {
-      window.alert(err instanceof Error ? err.message : "GPX inválido");
+      setError(err instanceof Error ? err.message : "GPX inválido");
     }
   }
 
@@ -33,7 +34,7 @@ export function RotaScreen() {
       <div>
         <h1 className="font-display text-3xl tracking-[-0.03em]">Derrota</h1>
         <p className="mt-1 text-sm text-muted">
-          Importe o GPX da viagem. O painel segue o track com o GPS (ou simula).
+          A viagem entra por arquivo GPX. Troque o arquivo quando mudar a derrota.
         </p>
       </div>
 
@@ -50,9 +51,11 @@ export function RotaScreen() {
       <div className="grid gap-3 md:grid-cols-3">
         <Card className="rounded-2xl p-4">
           <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted">
-            Nome
+            Arquivo
           </p>
-          <p className="mt-2 truncate text-lg text-fg">{route?.name ?? "—"}</p>
+          <p className="mt-2 truncate text-lg text-fg">
+            {route?.source ?? route?.name ?? "—"}
+          </p>
         </Card>
         <Card className="rounded-2xl">
           <Stat
@@ -71,7 +74,7 @@ export function RotaScreen() {
 
       {route?.points[0] ? (
         <Card className="rounded-2xl p-4">
-          <CardTitle>Extremos</CardTitle>
+          <CardTitle>{route.name}</CardTitle>
           <p className="mt-3 font-mono text-sm tabular">
             Origem {formatLatLon(route.points[0].lat, route.points[0].lon)}
           </p>
@@ -85,6 +88,10 @@ export function RotaScreen() {
         </Card>
       ) : null}
 
+      {error ? (
+        <p className="rounded-md bg-danger/15 px-3 py-2 text-sm text-danger">{error}</p>
+      ) : null}
+
       <input
         ref={inputRef}
         type="file"
@@ -96,22 +103,9 @@ export function RotaScreen() {
         }}
       />
 
-      <div className="flex flex-col gap-3 sm:flex-row">
-        <Button className="flex-1" onClick={() => inputRef.current?.click()}>
-          Importar GPX
-        </Button>
-        <Button
-          className="flex-1"
-          variant="outline"
-          onClick={() => {
-            const sample = loadSampleRoute();
-            setRoute(sample);
-            sensorEngine.setRoute(sample);
-          }}
-        >
-          Exemplo Mucuripe → Pecém
-        </Button>
-      </div>
+      <Button className="w-full" size="lg" onClick={() => inputRef.current?.click()}>
+        {route ? "Trocar arquivo GPX" : "Importar arquivo GPX"}
+      </Button>
     </div>
   );
 }

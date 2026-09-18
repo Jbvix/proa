@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { Onboarding } from "@/components/onboarding";
 import { Shell } from "@/components/shell";
@@ -23,12 +23,13 @@ function Home() {
 }
 
 function App() {
-  const onboarded = useSettings((s) => s.onboarded);
+  const route = useSettings((s) => s.route);
   const setOnboarded = useSettings((s) => s.setOnboarded);
   const setRoute = useSettings((s) => s.setRoute);
   const tab = useBridge((s) => s.tab);
   const { engine } = useLiveBridge();
   const fileRef = useRef<HTMLInputElement>(null);
+  const [gpxError, setGpxError] = useState<string | null>(null);
 
   async function handleFile(file: File | undefined) {
     if (!file) return;
@@ -37,12 +38,13 @@ function App() {
       setRoute(parsed);
       sensorEngine.setRoute(parsed);
       setOnboarded(true);
+      setGpxError(null);
     } catch (err) {
-      window.alert(err instanceof Error ? err.message : "GPX inválido");
+      setGpxError(err instanceof Error ? err.message : "GPX inválido");
     }
   }
 
-  if (!onboarded) {
+  if (!route) {
     return (
       <>
         <input
@@ -56,14 +58,15 @@ function App() {
           }}
         />
         <Onboarding
-          onSample={() => {
+          error={gpxError}
+          onImport={() => fileRef.current?.click()}
+          onDemo={() => {
             const sample = loadSampleRoute();
             setRoute(sample);
             sensorEngine.setRoute(sample);
             setOnboarded(true);
+            setGpxError(null);
           }}
-          onImport={() => fileRef.current?.click()}
-          onSkip={() => setOnboarded(true)}
         />
       </>
     );
