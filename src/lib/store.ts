@@ -5,16 +5,19 @@ import type { ParsedRoute } from "./gpx";
 import { DEFAULT_PROFILE, type EngineProfile } from "./rpm";
 import type { HourlyWave } from "./waves";
 import { sensorEngine } from "./sensor-engine";
+import { applyTheme, type ThemeId } from "./theme";
 
 export type TabId = "painel" | "ondas" | "rota" | "rpm";
 
 type SettingsState = {
   onboarded: boolean;
+  theme: ThemeId;
   rpm: number;
   profile: EngineProfile;
   route: ParsedRoute | null;
   hourly: HourlyWave[];
   setOnboarded: (v: boolean) => void;
+  setTheme: (t: ThemeId) => void;
   setRpm: (n: number) => void;
   setProfile: (p: Partial<EngineProfile>) => void;
   setRoute: (r: ParsedRoute | null) => void;
@@ -26,11 +29,16 @@ export const useSettings = create<SettingsState>()(
   persist(
     (set, get) => ({
       onboarded: false,
+      theme: "night",
       rpm: 920,
       profile: DEFAULT_PROFILE,
       route: null,
       hourly: [],
       setOnboarded: (v) => set({ onboarded: v }),
+      setTheme: (t) => {
+        applyTheme(t);
+        set({ theme: t });
+      },
       setRpm: (n) => set({ rpm: n }),
       setProfile: (p) => set({ profile: { ...get().profile, ...p } }),
       setRoute: (r) => set({ route: r }),
@@ -64,10 +72,16 @@ export const useSettings = create<SettingsState>()(
       name: "proa-settings",
       partialize: (s) => ({
         onboarded: s.onboarded,
+        theme: s.theme,
         rpm: s.rpm,
         profile: s.profile,
         route: s.route,
       }),
+      onRehydrateStorage: () => (state) => {
+        const t = state?.theme === "day" ? "day" : "night";
+        if (state) state.theme = t;
+        applyTheme(t);
+      },
     },
   ),
 );

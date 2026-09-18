@@ -37,3 +37,4 @@ Variáveis:
 
 - `VITE_AUTH_ENABLED=false` — o app não usa login nem banco
 - `OPENMETEO_API_KEY` — assinatura comercial Open-Meteo (a mesma do Atalaia). Escopos: Functions + Runtime. Secret.
+- `XAI_API_KEY` — assistente de voz Grok (chat + fala). No preview já entra sozinha; no Netlify, a mesma chave no painel (Functions + Runtime). Secret. Nunca vai ao aparelho.

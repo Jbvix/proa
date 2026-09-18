@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Compass, Gauge, Map, Waves } from "lucide-react";
 import { ProaMark } from "@/components/mark";
+import { DeckTools } from "@/components/deck-tools";
 import { cn } from "@/lib/utils";
 import { useBridge, type TabId } from "@/lib/store";
 
@@ -29,19 +30,20 @@ export function Shell({
 
   return (
     <div className="mx-auto flex h-[100dvh] w-full max-w-5xl flex-col overflow-hidden">
-      <header className="z-20 flex shrink-0 items-center gap-3 border-b border-border bg-bg/85 px-4 py-3 backdrop-blur-md">
-        <ProaMark className="size-6 text-accent" />
+      <header className="z-20 flex shrink-0 items-center gap-1 border-b border-border bg-bg/85 px-2 py-2 backdrop-blur-md sm:gap-3 sm:px-4 sm:py-3">
+        <ProaMark className="size-6 shrink-0 text-accent" />
         <div className="min-w-0 flex-1">
           <p className="font-display text-xl italic leading-none text-fg">Proa</p>
-          <p className="mt-1 text-[11px] uppercase tracking-[0.14em] text-subtle">
+          <p className="mt-1 truncate text-[11px] uppercase tracking-[0.14em] text-subtle">
             {modeLabel}
           </p>
         </div>
+        <DeckTools />
         <button
           type="button"
           onClick={onToggleCapture}
           className={cn(
-            "h-11 rounded-md px-3 text-xs font-medium uppercase tracking-[0.12em] transition-[background-color,color] duration-150",
+            "h-11 shrink-0 rounded-md px-2.5 text-xs font-medium uppercase tracking-[0.12em] transition-[background-color,color] duration-150 sm:px-3",
             capturing ? "bg-ok/15 text-ok" : "bg-surface-2 text-muted",
           )}
         >
@@ -50,7 +52,7 @@ export function Shell({
         <button
           type="button"
           onClick={onLive}
-          className="h-11 rounded-md px-3 text-xs font-medium uppercase tracking-[0.12em] text-muted transition-[background-color,color] duration-150 hover:bg-surface-2 hover:text-fg"
+          className="h-11 shrink-0 rounded-md px-2.5 text-xs font-medium uppercase tracking-[0.12em] text-muted transition-[background-color,color] duration-150 hover:bg-surface-2 hover:text-fg sm:px-3"
         >
           Live
         </button>

@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { Gauge, MapPinned, Waves } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ProaMark } from "@/components/mark";
+import { DeckTools } from "@/components/deck-tools";
 
 export function Onboarding({
   onImport,
@@ -17,6 +18,9 @@ export function Onboarding({
       <div className="flex items-center gap-3 text-accent">
         <ProaMark className="size-9" />
         <span className="font-display text-3xl italic text-fg">Proa</span>
+        <div className="ml-auto flex items-center text-fg">
+          <DeckTools />
+        </div>
       </div>
       <h1 className="mt-8 font-display text-4xl leading-[1.1] tracking-[-0.03em] text-fg">
         A derrota entra por GPX.

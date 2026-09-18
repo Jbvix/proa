@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ApiMeteoRouteImport } from './routes/api/meteo'
+import { Route as ApiVoiceRouteImport } from './routes/api/voice'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -22,31 +23,40 @@ const ApiMeteoRoute = ApiMeteoRouteImport.update({
   path: '/api/meteo',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiVoiceRoute = ApiVoiceRouteImport.update({
+  id: '/api/voice',
+  path: '/api/voice',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/api/meteo': typeof ApiMeteoRoute
+  '/api/voice': typeof ApiVoiceRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/api/meteo': typeof ApiMeteoRoute
+  '/api/voice': typeof ApiVoiceRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/api/meteo': typeof ApiMeteoRoute
+  '/api/voice': typeof ApiVoiceRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/api/meteo'
+  fullPaths: '/' | '/api/meteo' | '/api/voice'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/api/meteo'
-  id: '__root__' | '/' | '/api/meteo'
+  to: '/' | '/api/meteo' | '/api/voice'
+  id: '__root__' | '/' | '/api/meteo' | '/api/voice'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ApiMeteoRoute: typeof ApiMeteoRoute
+  ApiVoiceRoute: typeof ApiVoiceRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -65,12 +75,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiMeteoRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/voice': {
+      id: '/api/voice'
+      path: '/api/voice'
+      fullPath: '/api/voice'
+      preLoaderRoute: typeof ApiVoiceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ApiMeteoRoute: ApiMeteoRoute,
+  ApiVoiceRoute: ApiVoiceRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

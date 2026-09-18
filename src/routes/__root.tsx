@@ -1,6 +1,7 @@
 import { HeadContent, Outlet, Scripts, createRootRoute } from "@tanstack/react-router";
 import { AuthProvider } from "@/lib/auth/provider";
 import { PreviewHostBridge } from "@/components/preview-host-bridge";
+import { ThemeBoot } from "@/components/theme-boot";
 import appCss from "../styles.css?url";
 
 const APP_NAME = "Proa";
@@ -34,12 +35,13 @@ export const Route = createRootRoute({
 
 function RootDocument() {
   return (
-    <html lang="pt-BR" className="antialiased" suppressHydrationWarning>
+    <html lang="pt-BR" className="antialiased" data-theme="night" suppressHydrationWarning>
       <head>
         <HeadContent />
       </head>
       <body>
         <PreviewHostBridge />
+        <ThemeBoot />
         <AuthProvider>
           <Outlet />
         </AuthProvider>

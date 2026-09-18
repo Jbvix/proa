@@ -36,6 +36,23 @@
   --shadow-border: 0 0 0 1px rgba(232, 238, 242, 0.08);
 }
 
+html[data-theme="day"] {
+  --color-bg: #dfe8ec;
+  --color-surface: #f3efe6;
+  --color-surface-2: #e6ddd0;
+  --color-fg: #1a2a32;
+  --color-muted: #4e616c;
+  --color-subtle: #6d7f88;
+  --color-border: #c5d0d6;
+  --color-accent: #2f6f7c;
+  --color-accent-fg: #f3efe6;
+  --color-ok: #2f6a48;
+  --color-warn: #8a6218;
+  --color-danger: #a33d3d;
+  --color-sea: #3d7a86;
+  --shadow-border: 0 0 0 1px rgba(26, 42, 50, 0.1);
+}
+
 @layer base {
   html {
     -webkit-font-smoothing: antialiased;
@@ -56,6 +73,10 @@
     background-image: linear-gradient(180deg, #0a1822 0%, #08141c 42%, #071018 100%);
     color: var(--color-fg);
     line-height: 1.5;
+  }
+
+  html[data-theme="day"] body {
+    background-image: linear-gradient(180deg, #e8eef2 0%, #dfe8ec 48%, #d4e0e4 100%);
   }
 
   h1,
@@ -87,7 +108,7 @@
 }
 
 .leaflet-control-attribution {
-  background: rgba(8, 20, 28, 0.7) !important;
+  background: color-mix(in srgb, var(--color-bg) 70%, transparent) !important;
   color: var(--color-subtle);
   font-size: 10px;
 }
@@ -132,6 +153,26 @@
   border-bottom: 18px solid var(--color-fg);
   filter: drop-shadow(0 0 2px var(--color-bg));
   transform-origin: 50% 70%;
+}
+
+.voice-pulse {
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-accent) 55%, transparent);
+  animation: voice-pulse 1.4s ease-out infinite;
+}
+
+@keyframes voice-pulse {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-accent) 50%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 14px transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .voice-pulse {
+    animation: none;
+  }
 }
 
 @utility tabular {
