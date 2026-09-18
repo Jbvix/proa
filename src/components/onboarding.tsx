@@ -40,7 +40,7 @@ export function Onboarding({
         <Step
           icon={<Waves className="size-4" />}
           title="Sensores e Open-Meteo"
-          body="O aparelho lê o casco. Vento e mar vêm da API comercial."
+          body="O aparelho lê o mar no casco. Vento e corrente vêm da Open-Meteo; a previsão de onda segue os waypoints do GPX."
         />
       </ol>
 

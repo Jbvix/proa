@@ -8,6 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import { fetchMeteo, syntheticMeteo, type MeteoBundle } from "@/lib/meteo";
+import { sampleRouteStations } from "@/lib/geo";
 import { sensorEngine, type EngineSnapshot } from "@/lib/sensor-engine";
 import {
   preferredLatLon,
@@ -64,12 +65,14 @@ export function BridgeProvider({ children }: { children: ReactNode }) {
     if (!onboarded) return;
     let cancelled = false;
     const { lat, lon } = preferredLatLon();
+    const stations = route ? sampleRouteStations(route.points) : [];
     setMeteoLoading(true);
     setMeteoError(null);
-    fetchMeteo(lat, lon)
+    fetchMeteo(lat, lon, stations)
       .then((bundle) => {
         if (cancelled) return;
         setMeteo(bundle);
+        // Simulação de heave só para o preview sem IMU — o mar ao vivo continua no casco.
         sensorEngine.setSea(bundle.now.waveHs ?? 1.1, bundle.now.wavePeriod ?? 7.5);
         useSettings.getState().seedForecastHours(
           bundle.hourly.map((h) => ({
@@ -87,10 +90,10 @@ export function BridgeProvider({ children }: { children: ReactNode }) {
       })
       .catch(() => {
         if (cancelled) return;
-        const bundle = syntheticMeteo(lat, lon);
+        const bundle = syntheticMeteo(lat, lon, Date.now(), stations);
         setMeteo(bundle);
         sensorEngine.setSea(bundle.now.waveHs ?? 1.1, bundle.now.wavePeriod ?? 7.5);
-        setMeteoError("Open-Meteo indisponível — usando série local.");
+        setMeteoError("Open-Meteo indisponível — vento e corrente locais.");
       })
       .finally(() => {
         if (!cancelled) setMeteoLoading(false);

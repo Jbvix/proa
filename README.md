@@ -8,9 +8,9 @@ Captura movimento e posição do rebocador, atualiza características de onda a 
 
 - **GPX** — a derrota entra por arquivo (track, rota ou waypoints)
 - **RPM atual** — informe o regime do motor
-- **Sensores** — heave do casco (DeviceMotion) e GPS; no desktop há simulação sobre o track
-- **Ondas** — Hs (4σ do heave), amplitude e período por cruzamento de zero, fundidos com a série horária da API
-- **RPM ideal** — banda de viagem a partir de Hs, período, vento e mar de proa, no perfil do motor (450 / 980 / 1600)
+- **Sensores** — mar ao vivo no casco (heave → Hs, amplitude, período)
+- **Open-Meteo** — vento e corrente na posição; previsão marinha em cada waypoint do GPX
+- **RPM ideal** — banda de viagem a partir do mar do casco, vento e encontro com a onda
 
 ## Uso a bordo
 

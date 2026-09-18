@@ -14,7 +14,7 @@ export function RotaScreen() {
   const inputRef = useRef<HTMLInputElement>(null);
   const route = useSettings((s) => s.route);
   const setRoute = useSettings((s) => s.setRoute);
-  const { engine } = useLiveBridge();
+  const { engine, meteo } = useLiveBridge();
   const [error, setError] = useState<string | null>(null);
 
   async function onFile(file: File | undefined) {
@@ -44,6 +44,7 @@ export function RotaScreen() {
           lat={engine?.fix?.lat}
           lon={engine?.fix?.lon}
           cog={engine?.fix?.cogDeg}
+          stations={meteo?.alongRoute}
           className="h-64 md:h-80"
         />
       </Card>

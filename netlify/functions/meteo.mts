@@ -1,5 +1,9 @@
 import type { Config } from "@netlify/functions";
-import { fetchMeteoUpstream, syntheticMeteo } from "../../src/lib/meteo";
+import {
+  fetchMeteoUpstream,
+  parseWaypointQuery,
+  syntheticMeteo,
+} from "../../src/lib/meteo";
 
 function coord(raw: string | null, fallback: number) {
   const n = Number(raw ?? fallback);
@@ -17,15 +21,16 @@ export default async (req: Request) => {
   const url = new URL(req.url);
   const lat = coord(url.searchParams.get("lat"), -3.718);
   const lon = coord(url.searchParams.get("lon"), -38.473);
+  const waypoints = parseWaypointQuery(url.searchParams.get("wps"));
   const key = (process.env.OPENMETEO_API_KEY ?? "").trim();
 
   try {
-    const data = await fetchMeteoUpstream(lat, lon, key);
+    const data = await fetchMeteoUpstream(lat, lon, key, waypoints);
     return Response.json(data, {
       headers: { "Cache-Control": "public, max-age=120" },
     });
   } catch {
-    return Response.json(syntheticMeteo(lat, lon));
+    return Response.json(syntheticMeteo(lat, lon, Date.now(), waypoints));
   }
 };
 

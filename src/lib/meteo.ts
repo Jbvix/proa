@@ -1,3 +1,5 @@
+export type MeteoPlano = "comercial" | "gratuito";
+
 export type MeteoNow = {
   fetchedAt: number;
   lat: number;
@@ -30,18 +32,43 @@ export type MeteoHour = {
   waveDir: number | null;
   wavePeriod: number | null;
   swellHs: number | null;
+  currentKn: number | null;
+  currentDir: number | null;
 };
 
-export type MeteoPlano = "comercial" | "gratuito";
+export type RouteStation = {
+  lat: number;
+  lon: number;
+  distNm: number;
+  label: string;
+  waveHs: number | null;
+  waveDir: number | null;
+  wavePeriod: number | null;
+  swellHs: number | null;
+  currentKn: number | null;
+  currentDir: number | null;
+};
 
 export type MeteoBundle = {
   now: MeteoNow;
   hourly: MeteoHour[];
+  alongRoute: RouteStation[];
   plano: MeteoPlano;
+};
+
+export type StationInput = {
+  lat: number;
+  lon: number;
+  distNm?: number;
+  label?: string;
 };
 
 function num(v: unknown): number | null {
   return typeof v === "number" && Number.isFinite(v) ? v : null;
+}
+
+function msToKn(v: number | null) {
+  return v == null ? null : v * 1.94384;
 }
 
 function pickCurrentOrHour(
@@ -125,7 +152,87 @@ export function weatherLabel(code: number | null) {
   return WMO[code] ?? `Código ${code}`;
 }
 
-export function syntheticMeteo(lat: number, lon: number, nowMs = Date.now()): MeteoBundle {
+export function parseWaypointQuery(raw: string | null): StationInput[] {
+  if (!raw) return [];
+  const out: StationInput[] = [];
+  for (const part of raw.split(";").slice(0, 6)) {
+    const bits = part.split(",");
+    const lat = Number(bits[0]);
+    const lon = Number(bits[1]);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
+    if (Math.abs(lat) > 90 || Math.abs(lon) > 180) continue;
+    out.push({ lat, lon });
+  }
+  return out;
+}
+
+export function encodeWaypointQuery(stations: StationInput[]) {
+  return stations
+    .slice(0, 6)
+    .map((s) => `${s.lat.toFixed(4)},${s.lon.toFixed(4)}`)
+    .join(";");
+}
+
+type OmBlock = {
+  current?: Record<string, unknown>;
+  hourly?: Record<string, unknown[]>;
+};
+
+function marineNow(marine: OmBlock, nowMs: number) {
+  const times = marine.hourly?.time as unknown as string[] | undefined;
+  const i = nearestHourIndex(times, nowMs);
+  return {
+    waveHs: pickCurrentOrHour(marine.current, marine.hourly, "wave_height", i),
+    waveDir: pickCurrentOrHour(marine.current, marine.hourly, "wave_direction", i),
+    wavePeriod: pickCurrentOrHour(marine.current, marine.hourly, "wave_period", i),
+    wavePeak: pickCurrentOrHour(marine.current, marine.hourly, "wave_peak_period", i),
+    swellHs: pickCurrentOrHour(marine.current, marine.hourly, "swell_wave_height", i),
+    swellPeriod: pickCurrentOrHour(marine.current, marine.hourly, "swell_wave_period", i),
+    windWaveHs: pickCurrentOrHour(marine.current, marine.hourly, "wind_wave_height", i),
+    sstC: pickCurrentOrHour(marine.current, marine.hourly, "sea_surface_temperature", i),
+    currentKn: msToKn(
+      pickCurrentOrHour(marine.current, marine.hourly, "ocean_current_velocity", i),
+    ),
+    currentDir: pickCurrentOrHour(
+      marine.current,
+      marine.hourly,
+      "ocean_current_direction",
+      i,
+    ),
+  };
+}
+
+async function fetchMarineJson(
+  lat: number,
+  lon: number,
+  host: (sub: "api" | "marine-api") => string,
+  q: string,
+): Promise<OmBlock> {
+  const latS = lat.toFixed(4);
+  const lonS = lon.toFixed(4);
+  const full =
+    `${host("marine-api")}/v1/marine?latitude=${latS}&longitude=${lonS}` +
+    `&current=wave_height,wave_direction,wave_period,wave_peak_period,swell_wave_height,swell_wave_period,wind_wave_height,sea_surface_temperature,ocean_current_velocity,ocean_current_direction` +
+    `&hourly=wave_height,wave_direction,wave_period,swell_wave_height,ocean_current_velocity,ocean_current_direction` +
+    `&forecast_days=2&timezone=auto` +
+    q;
+  const fallback =
+    `${host("marine-api")}/v1/marine?latitude=${latS}&longitude=${lonS}` +
+    `&hourly=wave_height,wave_direction,wave_period,swell_wave_height` +
+    `&forecast_days=2&timezone=auto` +
+    q;
+  let res = await pullJson(full);
+  if (!res.ok) res = await pullJson(fallback);
+  if (!res.ok) return {};
+  return (await res.json()) as OmBlock;
+}
+
+export function syntheticMeteo(
+  lat: number,
+  lon: number,
+  nowMs = Date.now(),
+  waypoints: StationInput[] = [],
+): MeteoBundle {
   const hours: MeteoHour[] = [];
   const start = Math.floor(nowMs / 3_600_000) * 3_600_000 - 6 * 3_600_000;
   for (let i = 0; i < 24; i++) {
@@ -141,6 +248,8 @@ export function syntheticMeteo(lat: number, lon: number, nowMs = Date.now()): Me
       waveDir: 90,
       wavePeriod: 7.6 + phase * 0.6,
       swellHs: 0.9 + phase * 0.15,
+      currentKn: 0.4,
+      currentDir: 310,
     });
   }
   const nowH = hours[6]!;
@@ -168,20 +277,53 @@ export function syntheticMeteo(lat: number, lon: number, nowMs = Date.now()): Me
       currentDir: 310,
     },
     hourly: hours,
+    alongRoute: waypoints.map((wp, i) => {
+      const phase = Math.sin(i / 2.2);
+      return {
+        lat: wp.lat,
+        lon: wp.lon,
+        distNm: wp.distNm ?? 0,
+        label: wp.label ?? (i === 0 ? "Origem" : i === waypoints.length - 1 ? "Destino" : `WP ${i + 1}`),
+        waveHs: 1.2 + phase * 0.25,
+        waveDir: 85 + i * 4,
+        wavePeriod: 7.4 + phase * 0.5,
+        swellHs: 0.85 + phase * 0.12,
+        currentKn: 0.35 + i * 0.04,
+        currentDir: 300 + i * 6,
+      };
+    }),
     plano: "gratuito",
   };
 }
 
-export async function fetchMeteo(lat: number, lon: number): Promise<MeteoBundle> {
-  const r = await fetch(`/api/meteo?lat=${lat.toFixed(4)}&lon=${lon.toFixed(4)}`);
+export async function fetchMeteo(
+  lat: number,
+  lon: number,
+  stations: StationInput[] = [],
+): Promise<MeteoBundle> {
+  const params = new URLSearchParams({
+    lat: lat.toFixed(4),
+    lon: lon.toFixed(4),
+  });
+  const wps = encodeWaypointQuery(stations);
+  if (wps) params.set("wps", wps);
+  const r = await fetch(`/api/meteo?${params.toString()}`);
   if (!r.ok) throw new Error("Falha ao ler meteorologia.");
-  return (await r.json()) as MeteoBundle;
+  const data = (await r.json()) as MeteoBundle;
+  if (!Array.isArray(data.alongRoute)) data.alongRoute = [];
+  data.alongRoute = data.alongRoute.map((s, i) => ({
+    ...s,
+    distNm: stations[i]?.distNm ?? s.distNm ?? 0,
+    label: stations[i]?.label ?? s.label ?? `WP ${i + 1}`,
+  }));
+  return data;
 }
 
 export async function fetchMeteoUpstream(
   lat: number,
   lon: number,
   apiKey = "",
+  waypoints: StationInput[] = [],
 ): Promise<MeteoBundle> {
   const { comercial, host, q } = openMeteoEndpoints(apiKey);
   const latS = lat.toFixed(4);
@@ -194,50 +336,29 @@ export async function fetchMeteoUpstream(
     `&forecast_days=2&wind_speed_unit=kn&timezone=auto` +
     q;
 
-  const marineUrl =
-    `${host("marine-api")}/v1/marine?latitude=${latS}&longitude=${lonS}` +
-    `&current=wave_height,wave_direction,wave_period,wave_peak_period,swell_wave_height,swell_wave_period,wind_wave_height,sea_surface_temperature,ocean_current_velocity,ocean_current_direction` +
-    `&hourly=wave_height,wave_direction,wave_period,swell_wave_height,sea_surface_temperature` +
-    `&forecast_days=2&timezone=auto` +
-    q;
+  const uniqueWps: StationInput[] = [];
+  for (const wp of waypoints.slice(0, 6)) {
+    const dup = uniqueWps.some(
+      (u) => Math.abs(u.lat - wp.lat) < 0.004 && Math.abs(u.lon - wp.lon) < 0.004,
+    );
+    if (!dup) uniqueWps.push(wp);
+  }
 
-  const marineFallback =
-    `${host("marine-api")}/v1/marine?latitude=${latS}&longitude=${lonS}` +
-    `&hourly=wave_height,wave_direction,wave_period,swell_wave_height,sea_surface_temperature` +
-    `&forecast_days=2&timezone=auto` +
-    q;
-
-  const [weatherRes, marinePrimary] = await Promise.all([
+  const [weatherRes, hereMarine, ...wpMarine] = await Promise.all([
     pullJson(weatherUrl),
-    pullJson(marineUrl),
+    fetchMarineJson(lat, lon, host, q),
+    ...uniqueWps.map((wp) => fetchMarineJson(wp.lat, wp.lon, host, q)),
   ]);
 
   if (!weatherRes.ok) throw new Error("Falha ao ler o Open-Meteo (vento).");
-  const weather = (await weatherRes.json()) as {
-    current?: Record<string, unknown>;
-    hourly?: Record<string, unknown[]>;
-  };
-
-  let marineRes = marinePrimary;
-  if (!marineRes.ok) marineRes = await pullJson(marineFallback);
-
-  let marine: {
-    current?: Record<string, unknown>;
-    hourly?: Record<string, unknown[]>;
-  } = {};
-  if (marineRes.ok) {
-    marine = (await marineRes.json()) as typeof marine;
-  }
+  const weather = (await weatherRes.json()) as OmBlock;
+  const marine = hereMarine;
 
   const nowMs = Date.now();
   const wTimes = weather.hourly?.time as unknown as string[] | undefined;
   const mTimes = marine.hourly?.time as unknown as string[] | undefined;
   const wi = nearestHourIndex(wTimes, nowMs);
-  const mi = nearestHourIndex(mTimes, nowMs);
-
-  const currentKn =
-    pickCurrentOrHour(marine.current, marine.hourly, "ocean_current_velocity", mi);
-  const currentKnVal = currentKn != null ? currentKn * 1.94384 : null;
+  const sea = marineNow(marine, nowMs);
 
   const now: MeteoNow = {
     fetchedAt: nowMs,
@@ -250,16 +371,7 @@ export async function fetchMeteoUpstream(
     gustKn: pickCurrentOrHour(weather.current, weather.hourly, "wind_gusts_10m", wi) ?? 0,
     pressureHpa: pickCurrentOrHour(weather.current, weather.hourly, "pressure_msl", wi),
     visibilityM: pickCurrentOrHour(weather.current, weather.hourly, "visibility", wi),
-    waveHs: pickCurrentOrHour(marine.current, marine.hourly, "wave_height", mi),
-    waveDir: pickCurrentOrHour(marine.current, marine.hourly, "wave_direction", mi),
-    wavePeriod: pickCurrentOrHour(marine.current, marine.hourly, "wave_period", mi),
-    wavePeak: pickCurrentOrHour(marine.current, marine.hourly, "wave_peak_period", mi),
-    swellHs: pickCurrentOrHour(marine.current, marine.hourly, "swell_wave_height", mi),
-    swellPeriod: pickCurrentOrHour(marine.current, marine.hourly, "swell_wave_period", mi),
-    windWaveHs: pickCurrentOrHour(marine.current, marine.hourly, "wind_wave_height", mi),
-    sstC: pickCurrentOrHour(marine.current, marine.hourly, "sea_surface_temperature", mi),
-    currentKn: currentKnVal,
-    currentDir: pickCurrentOrHour(marine.current, marine.hourly, "ocean_current_direction", mi),
+    ...sea,
   };
 
   const hours: MeteoHour[] = [];
@@ -267,9 +379,8 @@ export async function fetchMeteoUpstream(
   for (let i = 0; i < n; i++) {
     const tStr = (mTimes?.[i] ?? wTimes?.[i]) as string | undefined;
     if (!tStr) continue;
-    const t = Date.parse(tStr);
     hours.push({
-      t,
+      t: Date.parse(tStr),
       windKn: num(weather.hourly?.wind_speed_10m?.[i]),
       windDir: num(weather.hourly?.wind_direction_10m?.[i]),
       gustKn: num(weather.hourly?.wind_gusts_10m?.[i]),
@@ -277,8 +388,27 @@ export async function fetchMeteoUpstream(
       waveDir: num(marine.hourly?.wave_direction?.[i]),
       wavePeriod: num(marine.hourly?.wave_period?.[i]),
       swellHs: num(marine.hourly?.swell_wave_height?.[i]),
+      currentKn: msToKn(num(marine.hourly?.ocean_current_velocity?.[i])),
+      currentDir: num(marine.hourly?.ocean_current_direction?.[i]),
     });
   }
 
-  return { now, hourly: hours, plano: comercial ? "comercial" : "gratuito" };
+  const alongRoute: RouteStation[] = uniqueWps.map((wp, i) => {
+    const block = wpMarine[i] ?? {};
+    const s = marineNow(block, nowMs);
+    return {
+      lat: wp.lat,
+      lon: wp.lon,
+      distNm: wp.distNm ?? 0,
+      label: wp.label ?? `WP ${i + 1}`,
+      waveHs: s.waveHs,
+      waveDir: s.waveDir,
+      wavePeriod: s.wavePeriod,
+      swellHs: s.swellHs,
+      currentKn: s.currentKn,
+      currentDir: s.currentDir,
+    };
+  });
+
+  return { now, hourly: hours, alongRoute, plano: comercial ? "comercial" : "gratuito" };
 }

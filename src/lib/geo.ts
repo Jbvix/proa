@@ -123,6 +123,29 @@ export function alongTrack(
   };
 }
 
+export function sampleRouteStations(
+  points: LatLon[],
+  maxStations = 6,
+): Array<LatLon & { distNm: number; label: string }> {
+  if (points.length === 0) return [];
+  if (points.length === 1) {
+    const p = points[0]!;
+    return [{ lat: p.lat, lon: p.lon, distNm: 0, label: "Origem" }];
+  }
+  const total = pathLengthNm(points);
+  const n = Math.max(2, Math.min(maxStations, Math.round(total / 8) + 1));
+  const out: Array<LatLon & { distNm: number; label: string }> = [];
+  for (let i = 0; i < n; i++) {
+    const distNm = n === 1 ? 0 : (total * i) / (n - 1);
+    const p = alongTrack(points, distNm);
+    if (!p) continue;
+    const label =
+      i === 0 ? "Origem" : i === n - 1 ? "Destino" : `${distNm.toFixed(1)} nmi`;
+    out.push({ lat: p.lat, lon: p.lon, distNm, label });
+  }
+  return out;
+}
+
 export function nearestProgress(points: LatLon[], lat: number, lon: number) {
   if (points.length < 2) return 0;
   let best = Infinity;

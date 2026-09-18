@@ -5,7 +5,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { recommendRpm } from "@/lib/rpm";
-import { blendHs } from "@/lib/waves";
 import { useLiveBridge } from "@/components/bridge-provider";
 import { useSettings } from "@/lib/store";
 import { clamp } from "@/lib/utils";
@@ -17,11 +16,8 @@ export function RpmScreen() {
   const setProfile = useSettings((s) => s.setProfile);
   const { engine, meteo } = useLiveBridge();
 
-  const hs = blendHs(
-    (engine?.wave.hsM ?? 0) > 0.05 ? engine!.wave.hsM : null,
-    meteo?.now.waveHs ?? null,
-  );
-  const period = engine?.wave.periodS || meteo?.now.wavePeriod || 0;
+  const hs = engine?.wave.hsM ?? 0;
+  const period = engine?.wave.periodS ?? 0;
   const heading = engine?.fix?.cogDeg ?? engine?.attitude?.heading ?? null;
   const advice = recommendRpm({
     profile,
@@ -38,7 +34,7 @@ export function RpmScreen() {
       <div>
         <h1 className="font-display text-3xl tracking-[-0.03em]">RPM</h1>
         <p className="mt-1 text-sm text-muted">
-          Informe o regime atual. A faixa de viagem reage ao mar e ao vento.
+          Informe o regime atual. A faixa usa o mar do casco e o vento da Open-Meteo.
         </p>
       </div>
 
@@ -112,7 +108,7 @@ export function RpmScreen() {
         <CardTitle>Por que esta faixa</CardTitle>
         <ul className="mt-3 space-y-2 text-sm text-muted">
           <li>
-            Mar: −{advice.seaPenalty} rpm (Hs {hs.toFixed(1)} m
+            Mar do casco: −{advice.seaPenalty} rpm (Hs {hs.toFixed(1)} m
             {period ? `, Tz ${period.toFixed(0)} s` : ""})
           </li>
           <li>Vento: −{advice.windPenalty} rpm</li>

@@ -7,9 +7,9 @@ import { useLiveBridge } from "@/components/bridge-provider";
 import { cardinal, formatLatLon, pad3 } from "@/lib/utils";
 import { weatherLabel } from "@/lib/meteo";
 import { recommendRpm } from "@/lib/rpm";
-import { blendHs, seaStateFromHs } from "@/lib/waves";
+import { seaStateFromHs } from "@/lib/waves";
 import { useSettings } from "@/lib/store";
-import { alongTrack, pathLengthNm } from "@/lib/geo";
+import { alongTrack, nearestProgress, pathLengthNm } from "@/lib/geo";
 
 export function PainelScreen() {
   const rpm = useSettings((s) => s.rpm);
@@ -17,13 +17,22 @@ export function PainelScreen() {
   const route = useSettings((s) => s.route);
   const { engine, meteo } = useLiveBridge();
 
-  const obsHs = engine?.wave.hsM ?? 0;
-  const fcHs = meteo?.now.waveHs ?? null;
-  const hs = blendHs(obsHs > 0.05 ? obsHs : null, fcHs);
-  const period = engine?.wave.periodS || meteo?.now.wavePeriod || 0;
-  const amp = hs / 2;
+  const hs = engine?.wave.hsM ?? 0;
+  const period = engine?.wave.periodS ?? 0;
+  const amp = engine?.wave.amplitudeM ?? hs / 2;
   const sea = seaStateFromHs(hs);
   const heading = engine?.fix?.cogDeg ?? engine?.attitude?.heading ?? null;
+  const nextWp = (() => {
+    const stations = meteo?.alongRoute ?? [];
+    if (!stations.length) return stations[0] ?? null;
+    const along =
+      engine?.mode === "sim"
+        ? engine.simNm
+        : engine?.fix && route
+          ? nearestProgress(route.points, engine.fix.lat, engine.fix.lon)
+          : 0;
+    return stations.find((s) => s.distNm >= along - 0.05) ?? stations[stations.length - 1]!;
+  })();
   const advice = recommendRpm({
     profile,
     currentRpm: rpm,
@@ -31,7 +40,7 @@ export function PainelScreen() {
     periodS: period,
     windKn: meteo?.now.windKn ?? 0,
     headingDeg: heading,
-    waveDirDeg: meteo?.now.waveDir ?? null,
+    waveDirDeg: nextWp?.waveDir ?? meteo?.now.waveDir ?? null,
   });
 
   const remain = (() => {
@@ -72,27 +81,31 @@ export function PainelScreen() {
         ) : null}
       </div>
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
         <Card className="rounded-2xl p-4">
           <Stat
-            label="Altura Hs"
+            label="Hs casco"
             value={hs.toFixed(2)}
             unit="m"
-            hint={fcHs != null ? `previsão ${fcHs.toFixed(2)} m` : "sem previsão"}
+            hint={
+              nextWp?.waveHs != null
+                ? `prev. ${nextWp.label} ${nextWp.waveHs.toFixed(2)} m`
+                : "sensores do aparelho"
+            }
           />
         </Card>
         <Card className="rounded-2xl p-4">
-          <Stat label="Amplitude" value={amp.toFixed(2)} unit="m" hint="Hs / 2" />
+          <Stat label="Amplitude" value={amp.toFixed(2)} unit="m" hint="Hs / 2 do casco" />
         </Card>
         <Card className="rounded-2xl p-4">
           <Stat
-            label="Período"
+            label="Período Tz"
             value={period ? period.toFixed(1) : "—"}
             unit="s"
             hint={
-              meteo?.now.wavePeriod
-                ? `Open-Meteo ${meteo.now.wavePeriod.toFixed(1)} s`
-                : undefined
+              nextWp?.wavePeriod
+                ? `prev. ${nextWp.wavePeriod.toFixed(1)} s`
+                : "cruzamentos de zero"
             }
           />
         </Card>
@@ -102,6 +115,28 @@ export function PainelScreen() {
             value={(meteo?.now.windKn ?? 0).toFixed(0)}
             unit="kn"
             hint={`${pad3(meteo?.now.windDir ?? 0)}° ${cardinal(meteo?.now.windDir ?? 0)} · raj. ${(meteo?.now.gustKn ?? 0).toFixed(0)}`}
+          />
+        </Card>
+        <Card className="rounded-2xl p-4">
+          <Stat
+            label="Corrente"
+            value={
+              meteo?.now.currentKn != null ? meteo.now.currentKn.toFixed(1) : "—"
+            }
+            unit="kn"
+            hint={
+              meteo?.now.currentDir != null
+                ? `${pad3(meteo.now.currentDir)}° ${cardinal(meteo.now.currentDir)}`
+                : "Open-Meteo Marine"
+            }
+          />
+        </Card>
+        <Card className="rounded-2xl p-4">
+          <Stat
+            label="Swell prev."
+            value={meteo?.now.swellHs != null ? meteo.now.swellHs.toFixed(2) : "—"}
+            unit="m"
+            hint="Open-Meteo na posição"
           />
         </Card>
       </div>
@@ -120,11 +155,10 @@ export function PainelScreen() {
         </div>
         <HeaveScope />
         <p className="mt-2 text-xs text-subtle">
-          Janela de{" "}
+          Mar ao vivo pelos sensores · janela{" "}
           {(engine?.wave.windowS ?? 0) >= 60
             ? `${Math.round((engine?.wave.windowS ?? 0) / 60)} min`
-            : `${Math.round(engine?.wave.windowS ?? 0)} s`}{" "}
-          · Hs observado {(engine?.wave.hsM ?? 0).toFixed(2)} m
+            : `${Math.round(engine?.wave.windowS ?? 0)} s`}
         </p>
       </Card>
 

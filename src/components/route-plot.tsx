@@ -1,5 +1,5 @@
 import type { ParsedRoute } from "@/lib/gpx";
-import { haversineNm } from "@/lib/geo";
+import type { RouteStation } from "@/lib/meteo";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -7,10 +7,11 @@ type Props = {
   lat?: number | null;
   lon?: number | null;
   cog?: number | null;
+  stations?: RouteStation[];
   className?: string;
 };
 
-export function RoutePlot({ route, lat, lon, cog, className }: Props) {
+export function RoutePlot({ route, lat, lon, cog, stations, className }: Props) {
   const pts = route?.points ?? [];
   if (pts.length < 2) {
     return (
@@ -39,7 +40,6 @@ export function RoutePlot({ route, lat, lon, cog, className }: Props) {
   const spanX = Math.max(maxX - minX, 0.002);
   const spanY = Math.max(maxY - minY, 0.002);
   const vb = 100;
-  const aspectPad = spanX / spanY;
 
   const sx = (x: number) => ((x - minX) / spanX) * (vb * (1 - pad * 2)) + vb * pad;
   const sy = (y: number) =>
@@ -57,11 +57,6 @@ export function RoutePlot({ route, lat, lon, cog, className }: Props) {
   const fx = hasFix ? sx(lon! * cos) : 0;
   const fy = hasFix ? sy(lat!) : 0;
   const rot = cog ?? 0;
-
-  const nm =
-    haversineNm(Math.min(...lats), Math.min(...lons), Math.min(...lats), Math.max(...lons)) || 1;
-  void nm;
-  void aspectPad;
 
   return (
     <svg
@@ -93,6 +88,11 @@ export function RoutePlot({ route, lat, lon, cog, className }: Props) {
         strokeLinejoin="round"
         strokeLinecap="round"
       />
+      {(stations ?? []).map((s, i) => (
+        <g key={`${s.lat}-${s.lon}-${i}`}>
+          <circle cx={sx(s.lon * cos)} cy={sy(s.lat)} r="1.6" fill="#c4a574" />
+        </g>
+      ))}
       <circle cx={sx(pts[0]!.lon * cos)} cy={sy(pts[0]!.lat)} r="2" fill="#e8eef2" />
       <circle
         cx={sx(pts[pts.length - 1]!.lon * cos)}
