@@ -1,15 +1,108 @@
 let ctx: AudioContext | null = null;
 let node: AudioBufferSourceNode | null = null;
 let html: HTMLAudioElement | null = null;
+let aecStream: MediaStream | null = null;
+let aecSrc: MediaStreamAudioSourceNode | null = null;
+let aecGain: GainNode | null = null;
+let aecGen = 0;
+
+export function isAndroidVoice() {
+  if (typeof navigator === "undefined") return false;
+  return /android/i.test(navigator.userAgent);
+}
+
+export function voiceCool() {
+  if (isAndroidVoice()) return { cool: 3_200, tail: 800, flush: 1_000 };
+  return { cool: 2_200, tail: 450, flush: 650 };
+}
 
 function audioCtx(): AudioContext {
   if (!ctx) {
     const Ctor = window.AudioContext ||
       (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
     if (!Ctor) throw new Error("sem audio");
-    ctx = new Ctor();
+    try {
+      ctx = new Ctor({ latencyHint: "interactive", sampleRate: 24_000 });
+    } catch {
+      ctx = new Ctor();
+    }
   }
   return ctx;
+}
+
+function hushMediaSession() {
+  const ms = navigator.mediaSession;
+  if (!ms) return;
+  try {
+    ms.metadata = null;
+    ms.playbackState = "none";
+    for (const a of [
+      "play",
+      "pause",
+      "stop",
+      "seekbackward",
+      "seekforward",
+      "previoustrack",
+      "nexttrack",
+    ] as const) {
+      try {
+        ms.setActionHandler(a, null);
+      } catch {
+        /* ok */
+      }
+    }
+  } catch {
+    /* ok */
+  }
+}
+
+/** Opens a silent capture so the tablet HAL can cancel the loud speakers. Released before STT. */
+export async function holdEchoCanceller() {
+  const my = ++aecGen;
+  if (aecStream) return;
+  if (!navigator.mediaDevices?.getUserMedia) return;
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+        channelCount: 1,
+      },
+    });
+    if (my !== aecGen) {
+      for (const t of stream.getTracks()) t.stop();
+      return;
+    }
+    aecStream = stream;
+    const c = audioCtx();
+    if (c.state === "suspended") await c.resume();
+    if (my !== aecGen) {
+      releaseEchoCanceller();
+      return;
+    }
+    aecSrc = c.createMediaStreamSource(stream);
+    aecGain = c.createGain();
+    aecGain.gain.value = 0;
+    aecSrc.connect(aecGain);
+  } catch {
+    if (my === aecGen) aecStream = null;
+  }
+}
+
+export function releaseEchoCanceller() {
+  aecGen += 1;
+  try {
+    aecSrc?.disconnect();
+  } catch {
+    /* ok */
+  }
+  aecSrc = null;
+  aecGain = null;
+  if (aecStream) {
+    for (const t of aecStream.getTracks()) t.stop();
+    aecStream = null;
+  }
 }
 
 export async function unlockVoice() {
@@ -17,13 +110,14 @@ export async function unlockVoice() {
     const c = audioCtx();
     if (c.state === "suspended") await c.resume();
   } catch {
-    /* iPad libera no primeiro toque */
+    /* primeiro toque no tablet */
   }
   try {
     speechSynthesis.cancel();
   } catch {
     /* ok */
   }
+  hushMediaSession();
 }
 
 export function stopVoice() {
@@ -44,6 +138,7 @@ export function stopVoice() {
   } catch {
     /* ok */
   }
+  hushMediaSession();
 }
 
 function b64buf(b64: string): ArrayBuffer {
@@ -51,14 +146,27 @@ function b64buf(b64: string): ArrayBuffer {
   return raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength);
 }
 
+async function decodeMp3(c: AudioContext, b64: string): Promise<AudioBuffer> {
+  const copy = b64buf(b64);
+  try {
+    return await c.decodeAudioData(copy.slice(0));
+  } catch {
+    return await new Promise((resolve, reject) => {
+      const again = b64buf(b64);
+      void c.decodeAudioData(again, resolve, reject);
+    });
+  }
+}
+
 async function playWebAudio(b64: string): Promise<number> {
   const c = audioCtx();
   if (c.state === "suspended") await c.resume();
-  const buf = await c.decodeAudioData(b64buf(b64));
+  hushMediaSession();
+  const buf = await decodeMp3(c, b64);
   const src = c.createBufferSource();
   src.buffer = buf;
   const gain = c.createGain();
-  gain.gain.value = 0.86;
+  gain.gain.value = isAndroidVoice() ? 0.72 : 0.86;
   src.connect(gain);
   gain.connect(c.destination);
   node = src;
@@ -71,10 +179,18 @@ async function playWebAudio(b64: string): Promise<number> {
     };
     src.start();
   });
+  try {
+    src.disconnect();
+    gain.disconnect();
+  } catch {
+    /* ok */
+  }
+  hushMediaSession();
   return buf.duration * 1000;
 }
 
 async function playHtmlAudio(b64: string): Promise<number> {
+  hushMediaSession();
   const url = URL.createObjectURL(new Blob([b64buf(b64)], { type: "audio/mpeg" }));
   const a = new Audio();
   a.preload = "auto";
@@ -82,6 +198,7 @@ async function playHtmlAudio(b64: string): Promise<number> {
   a.setAttribute("webkit-playsinline", "true");
   a.controls = false;
   a.loop = false;
+  a.volume = 1;
   a.disableRemotePlayback = true;
   a.src = url;
   html = a;
@@ -91,6 +208,7 @@ async function playHtmlAudio(b64: string): Promise<number> {
     URL.revokeObjectURL(url);
     throw new Error("play");
   }
+  hushMediaSession();
   await new Promise<void>((resolve) => {
     const wait = Number.isFinite(a.duration) ? a.duration * 1000 + 200 : 8_000;
     const t = window.setTimeout(resolve, Math.min(20_000, wait));
@@ -109,6 +227,7 @@ async function playHtmlAudio(b64: string): Promise<number> {
   a.load();
   URL.revokeObjectURL(url);
   if (html === a) html = null;
+  hushMediaSession();
   return ms;
 }
 
@@ -117,6 +236,11 @@ export async function playVoiceMp3(b64: string): Promise<number> {
   try {
     return await playWebAudio(b64);
   } catch {
-    return await playHtmlAudio(b64);
+    try {
+      return await playWebAudio(b64);
+    } catch {
+      if (isAndroidVoice()) return 0;
+      return await playHtmlAudio(b64);
+    }
   }
 }

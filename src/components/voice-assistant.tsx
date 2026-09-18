@@ -3,7 +3,15 @@ import { Mic, Send, X } from "lucide-react";
 import { useLiveBridge } from "@/components/bridge-provider";
 import { useBridge, useSettings } from "@/lib/store";
 import { ALANA_BYE, ALANA_GREET, type CannedKind } from "@/lib/voice-copy";
-import { playVoiceMp3, stopVoice, unlockVoice } from "@/lib/voice-play";
+import {
+  holdEchoCanceller,
+  isAndroidVoice,
+  playVoiceMp3,
+  releaseEchoCanceller,
+  stopVoice,
+  unlockVoice,
+  voiceCool,
+} from "@/lib/voice-play";
 import { buildVoiceContext, type VoiceTurn } from "@/lib/voice-context";
 import { hearWake, isAlanaEcho } from "@/lib/wake-word";
 import { cn } from "@/lib/utils";
@@ -12,6 +20,7 @@ type Recog = {
   lang: string;
   interimResults: boolean;
   continuous: boolean;
+  maxAlternatives: number;
   start: () => void;
   stop: () => void;
   abort: () => void;
@@ -26,9 +35,6 @@ type Recog = {
 type Mode = "off" | "wake" | "session";
 
 const SESSION_MS = 90_000;
-const COOL_MS = 2_200;
-const ARM_FLUSH_MS = 650;
-const ROOM_TAIL_MS = 450;
 const TTS_CACHE = {
   greet: "proa-alana-tts-greet-v2",
   bye: "proa-alana-tts-bye-v2",
@@ -157,7 +163,7 @@ export function AlanaRadio() {
     try {
       rec.stop();
     } catch {
-      /* ios */
+      /* ok */
     }
     try {
       rec.abort();
@@ -183,12 +189,15 @@ export function AlanaRadio() {
       return;
     }
     stopRec();
+    releaseEchoCanceller();
     const my = genRef.current;
-    liveAt.current = performance.now() + ARM_FLUSH_MS;
+    const { flush } = voiceCool();
+    liveAt.current = performance.now() + flush;
     const rec = new Ctor();
     rec.lang = "pt-BR";
     rec.interimResults = true;
     rec.continuous = true;
+    rec.maxAlternatives = 1;
     rec.onresult = (ev) => {
       if (my !== genRef.current) return;
       if (blocked()) return;
@@ -229,6 +238,12 @@ export function AlanaRadio() {
         return;
       }
       if (err === "aborted") return;
+      if (err === "audio-capture") {
+        releaseEchoCanceller();
+        window.setTimeout(() => {
+          if (my === genRef.current && wanted.current && !muted && !blocked()) arm();
+        }, 700);
+      }
     };
     rec.onend = () => {
       if (my !== genRef.current) return;
@@ -236,7 +251,7 @@ export function AlanaRadio() {
       if (wanted.current && !muted && !blocked()) {
         window.setTimeout(() => {
           if (my === genRef.current && wanted.current && !muted && !blocked()) arm();
-        }, 400);
+        }, isAndroidVoice() ? 800 : 400);
       }
     };
     recRef.current = rec;
@@ -257,8 +272,9 @@ export function AlanaRadio() {
 
   function coolThenArm(extra = 0) {
     cooling.current = true;
-    const wait = COOL_MS + Math.max(0, extra);
-    deafUntil.current = performance.now() + wait + ARM_FLUSH_MS;
+    const { cool, flush } = voiceCool();
+    const wait = cool + Math.max(0, extra);
+    deafUntil.current = performance.now() + wait + flush;
     window.clearTimeout(coolTimer.current);
     coolTimer.current = window.setTimeout(() => {
       cooling.current = false;
@@ -271,13 +287,15 @@ export function AlanaRadio() {
     cooling.current = true;
     stopRec();
     stopVoice();
+    void holdEchoCanceller();
     let extra = 0;
+    const { tail } = voiceCool();
     try {
       if (audio) {
         const dur = await playVoiceMp3(audio);
-        extra = Math.min(1_400, Math.max(0, dur * 0.12));
+        extra = Math.min(1_600, Math.max(0, dur * 0.14));
       }
-      await new Promise((r) => window.setTimeout(r, ROOM_TAIL_MS));
+      await new Promise((r) => window.setTimeout(r, tail));
     } finally {
       speaking.current = false;
       coolThenArm(extra);
@@ -413,6 +431,7 @@ export function AlanaRadio() {
       wanted.current = false;
       stopRec();
       stopVoice();
+      releaseEchoCanceller();
       setMode("off");
       return;
     }
@@ -422,6 +441,7 @@ export function AlanaRadio() {
       if (document.hidden) {
         stopRec();
         stopVoice();
+        releaseEchoCanceller();
       } else if (wanted.current && !muted) arm();
     };
     const onPtr = () => {
@@ -437,6 +457,7 @@ export function AlanaRadio() {
       wanted.current = false;
       stopRec();
       stopVoice();
+      releaseEchoCanceller();
       document.removeEventListener("visibilitychange", onVis);
       window.removeEventListener("pointerdown", onPtr);
       window.clearTimeout(sessionTimer.current);
@@ -455,6 +476,7 @@ export function AlanaRadio() {
     holdTimer.current = window.setTimeout(() => {
       held.current = true;
       stopVoice();
+      releaseEchoCanceller();
       setMuted(true);
       setOpen(false);
     }, 650);
@@ -476,6 +498,7 @@ export function AlanaRadio() {
         onContextMenu={(e) => {
           e.preventDefault();
           stopVoice();
+          releaseEchoCanceller();
           setMuted(true);
           setOpen(false);
         }}
