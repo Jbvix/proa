@@ -34,8 +34,10 @@ export function isAlanaEcho(raw: string, lastLine?: string | null) {
   if (t.length < 4) return true;
   if (/^(oi|ola|eai|eae)\.?$/.test(t)) return true;
   if (/na escuta/.test(t)) return true;
-  if (/me chama quando precisar/.test(t)) return true;
-  if (/^fechou\b/.test(t) && t.length < 48) return true;
+  if (/to no radio/.test(t)) return true;
+  if (/manda ai/.test(t) && t.length < 48) return true;
+  if (/me chama (quando|se) precisar/.test(t)) return true;
+  if (/^(fechou|beleza)\b/.test(t) && t.length < 48) return true;
   const last = foldPt(lastLine ?? "");
   if (last && (t === last || (last.includes(t) && t.length >= 10) || (t.includes(last) && last.length >= 10))) {
     return true;

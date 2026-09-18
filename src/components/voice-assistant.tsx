@@ -28,15 +28,15 @@ type Mode = "off" | "wake" | "session";
 const SESSION_MS = 90_000;
 const COOL_MS = 1_200;
 const TTS_CACHE = {
-  greet: "proa-alana-tts-greet-v1",
-  bye: "proa-alana-tts-bye-v1",
+  greet: "proa-alana-tts-greet-v2",
+  bye: "proa-alana-tts-bye-v2",
 } as const;
 
 const ASK_CHIPS: { q: string; label: string }[] = [
-  { q: "Relatório da viagem agora.", label: "Relatório" },
-  { q: "Onde estamos? Lat, long e referência na costa.", label: "Posição" },
+  { q: "Como tá a viagem agora? Me dá um relatório.", label: "Relatório" },
+  { q: "Onde a gente tá? Lat, long e a costa.", label: "Posição" },
   {
-    q: "Como economizar combustível na faixa de RPM aproveitando o tempo a favor?",
+    q: "Dá pra economizar combustível na faixa de RPM, aproveitando o tempo a favor?",
     label: "Combustível",
   },
 ];
@@ -480,9 +480,10 @@ export function AlanaRadio() {
             <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 pb-3">
               {turns.length === 0 ? (
                 <p className="text-sm text-muted">
-                  Chama <span className="text-fg">Alana</span> pelo nome. Ela
-                  vê a viagem toda — posição, mar, rota, RPM — sem mudar de
-                  tela. Pede relatório, posição ou como economizar combustível.
+                  Chama <span className="text-fg">Alana</span> pelo nome. Conversa
+                  solta, mas ela fica no apoio da viagem — posição, mar, rota,
+                  RPM — sem mudar de tela. Pede relatório, posição ou como
+                  economizar combustível.
                 </p>
               ) : (
                 turns.map((t, i) => (

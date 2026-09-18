@@ -1,5 +1,5 @@
-export const ALANA_GREET = "Oi. Tô na escuta.";
-export const ALANA_BYE = "Fechou. Me chama quando precisar.";
+export const ALANA_GREET = "Oi. Tô no rádio, manda aí.";
+export const ALANA_BYE = "Beleza. Me chama se precisar.";
 
 export type CannedKind = "greet" | "bye";
 
