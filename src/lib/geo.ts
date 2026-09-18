@@ -1,4 +1,5 @@
-const EARTH_NM = 3440.065;
+/** Mean Earth radius in nautical miles (6371 km / 1852 m). */
+export const EARTH_NM = 3440.065;
 const DEG = Math.PI / 180;
 
 export function toRad(d: number) {
@@ -72,6 +73,45 @@ export function knToMs(kn: number) {
 }
 
 export type LatLon = { lat: number; lon: number };
+
+/** Short-segment closest-point distance (local tangent). Fine for < ~80 nmi legs. */
+export function distToSegmentNm(
+  lat: number,
+  lon: number,
+  aLat: number,
+  aLon: number,
+  bLat: number,
+  bLon: number,
+) {
+  const dA = haversineNm(lat, lon, aLat, aLon);
+  const dAB = haversineNm(aLat, aLon, bLat, bLon);
+  if (dAB < 1e-4) return dA;
+  const mid = toRad((aLat + bLat) / 2);
+  const k = Math.cos(mid);
+  const dx = (bLon - aLon) * k;
+  const dy = bLat - aLat;
+  const len2 = dx * dx + dy * dy;
+  if (len2 < 1e-16) return dA;
+  const t = ((lon - aLon) * k * dx + (lat - aLat) * dy) / len2;
+  const u = t < 0 ? 0 : t > 1 ? 1 : t;
+  return haversineNm(lat, lon, aLat + u * (bLat - aLat), aLon + u * (bLon - aLon));
+}
+
+export function distToPolylineNm(lat: number, lon: number, line: Array<[number, number]>) {
+  if (line.length === 0) return 0;
+  if (line.length === 1) {
+    const p = line[0]!;
+    return haversineNm(lat, lon, p[0], p[1]);
+  }
+  let best = Infinity;
+  for (let i = 1; i < line.length; i++) {
+    const a = line[i - 1]!;
+    const b = line[i]!;
+    const d = distToSegmentNm(lat, lon, a[0], a[1], b[0], b[1]);
+    if (d < best) best = d;
+  }
+  return best;
+}
 
 export function pathLengthNm(points: LatLon[]) {
   let d = 0;

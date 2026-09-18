@@ -123,6 +123,9 @@ export class SensorEngine {
   private lastLiveMotion = 0;
   private handlingUntil = 0;
   private trail: Array<{ lat: number; lon: number; t: number }> = [];
+  private wantLive = false;
+  private gotGps = false;
+  private gpsTimer: number | null = null;
 
   on(fn: Listener) {
     this.listeners.add(fn);
@@ -165,28 +168,60 @@ export class SensorEngine {
   async start(mode: SensorMode) {
     this.stop();
     this.mode = mode;
+    this.wantLive = mode === "live";
     this.capturing = true;
     this.lastTick = performance.now();
     this.hzStamp = this.lastTick;
     this.ticks = 0;
     this.resetFilters();
     this.trail = [];
-    if (mode === "live") {
-      await this.startLive();
-    }
+    this.gotGps = false;
+    this.seedFix();
     this.timer = window.setInterval(() => this.tick(), 1000 / HEAVE_HZ);
     this.emit();
+    if (mode === "live") {
+      this.gpsTimer = window.setTimeout(() => {
+        if (!this.capturing || !this.wantLive) return;
+        if (this.gotGps) return;
+        this.mode = "sim";
+        this.seedFix();
+        this.emit();
+      }, 4000);
+      void this.startLive();
+    }
   }
 
   stop() {
     this.capturing = false;
+    this.wantLive = false;
     if (this.timer != null) {
       clearInterval(this.timer);
       this.timer = null;
     }
+    if (this.gpsTimer != null) {
+      clearTimeout(this.gpsTimer);
+      this.gpsTimer = null;
+    }
     this.stopLive();
     this.mode = "idle";
     this.emit();
+  }
+
+  /** Park a visible position so the map is never empty while GPS warms up. */
+  private seedFix() {
+    if (this.fix) return;
+    const p = this.route?.points[0];
+    this.fix = {
+      lat: p?.lat ?? -3.7184,
+      lon: p?.lon ?? -38.4732,
+      sogKn: 0,
+      gpsKn: null,
+      trackKn: null,
+      valid: false,
+      cogDeg: 0,
+      accM: null,
+      t: Date.now(),
+    };
   }
 
   private resetFilters() {
@@ -203,6 +238,8 @@ export class SensorEngine {
   }
 
   private async startLive() {
+    this.startGps();
+
     const motion = window.DeviceMotionEvent as
       | (typeof DeviceMotionEvent & {
           requestPermission?: () => Promise<string>;
@@ -219,70 +256,72 @@ export class SensorEngine {
         const r = await motion.requestPermission();
         if (r !== "granted") {
           this.permission = "denied";
-          this.mode = "sim";
-          return;
+        } else {
+          this.permission = "granted";
         }
+      } else if (!motion) {
+        this.permission = "unavailable";
+      } else {
+        this.permission = "granted";
       }
       if (orient && typeof orient.requestPermission === "function") {
         await orient.requestPermission().catch(() => "denied");
       }
-      this.permission = "granted";
     } catch {
       this.permission = "unavailable";
-      this.mode = "sim";
-      return;
     }
 
-    if (!motion) {
-      this.permission = "unavailable";
-      this.mode = "sim";
-      return;
+    if (motion && this.permission !== "denied") {
+      window.addEventListener("devicemotion", this.onMotion);
+      this.motionOn = true;
     }
-
-    window.addEventListener("devicemotion", this.onMotion);
-    window.addEventListener("deviceorientation", this.onOrient);
-    this.motionOn = true;
-    this.orientOn = true;
-
-    if (navigator.geolocation) {
-      this.geoWatch = navigator.geolocation.watchPosition(
-        (pos) => {
-          const c = pos.coords;
-          const t = pos.timestamp || Date.now();
-          const gpsKn =
-            c.speed != null && Number.isFinite(c.speed) && c.speed >= 0
-              ? msToKn(c.speed)
-              : null;
-          this.trail.push({ lat: c.latitude, lon: c.longitude, t });
-          if (this.trail.length > 24) this.trail.splice(0, this.trail.length - 24);
-          const trackKn = this.measureTrackKn();
-          const sogKn =
-            gpsKn != null && gpsKn > 0.3 ? gpsKn : (trackKn ?? gpsKn ?? 0);
-          const valid =
-            gpsKn != null && trackKn != null
-              ? Math.abs(gpsKn - trackKn) <= 1.8
-              : trackKn != null || (gpsKn != null && gpsKn > 0.3);
-          this.fix = {
-            lat: c.latitude,
-            lon: c.longitude,
-            sogKn,
-            gpsKn,
-            trackKn,
-            valid,
-            cogDeg:
-              c.heading != null && Number.isFinite(c.heading)
-                ? c.heading
-                : this.fix?.cogDeg ?? 0,
-            accM: c.accuracy,
-            t,
-          };
-        },
-        () => {
-          /* keep last fix */
-        },
-        { enableHighAccuracy: true, maximumAge: 2000, timeout: 8000 },
-      );
+    if (orient) {
+      window.addEventListener("deviceorientation", this.onOrient);
+      this.orientOn = true;
     }
+  }
+
+  private startGps() {
+    if (!navigator.geolocation) return;
+    this.geoWatch = navigator.geolocation.watchPosition(
+      (pos) => {
+        const c = pos.coords;
+        const t = pos.timestamp || Date.now();
+        const gpsKn =
+          c.speed != null && Number.isFinite(c.speed) && c.speed >= 0
+            ? msToKn(c.speed)
+            : null;
+        this.trail.push({ lat: c.latitude, lon: c.longitude, t });
+        if (this.trail.length > 24) this.trail.splice(0, this.trail.length - 24);
+        const trackKn = this.measureTrackKn();
+        const sogKn =
+          gpsKn != null && gpsKn > 0.3 ? gpsKn : (trackKn ?? gpsKn ?? 0);
+        const valid =
+          gpsKn != null && trackKn != null
+            ? Math.abs(gpsKn - trackKn) <= 1.8
+            : trackKn != null || (gpsKn != null && gpsKn > 0.3);
+        this.fix = {
+          lat: c.latitude,
+          lon: c.longitude,
+          sogKn,
+          gpsKn,
+          trackKn,
+          valid,
+          cogDeg:
+            c.heading != null && Number.isFinite(c.heading)
+              ? c.heading
+              : this.fix?.cogDeg ?? 0,
+          accM: c.accuracy,
+          t,
+        };
+        this.gotGps = true;
+        if (this.wantLive) this.mode = "live";
+      },
+      () => {
+        /* keep last / seeded fix — timeout may fall back to sim */
+      },
+      { enableHighAccuracy: true, maximumAge: 2000, timeout: 8000 },
+    );
   }
 
   private stopLive() {
@@ -435,6 +474,8 @@ export class SensorEngine {
             heading: p.cog,
           };
         }
+      } else if (!this.fix) {
+        this.seedFix();
       }
     } else if (this.mode === "live") {
       if (now - this.lastLiveMotion > 400) {

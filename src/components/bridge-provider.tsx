@@ -26,6 +26,39 @@ type BridgeCtx = {
   meteoLoading: boolean;
 };
 
+const BOOT_FIX = {
+  lat: -3.7184,
+  lon: -38.4732,
+  sogKn: 0,
+  gpsKn: null,
+  trackKn: null,
+  valid: false,
+  cogDeg: 0,
+  accM: null,
+  t: 0,
+};
+
+const BOOT_ENGINE: EngineSnapshot = {
+  mode: "live",
+  capturing: true,
+  fix: BOOT_FIX,
+  attitude: null,
+  wave: {
+    heaveM: 0,
+    hsM: 0,
+    amplitudeM: 0,
+    periodS: 0,
+    perMin: 0,
+    samples: 0,
+    windowS: 0,
+    trusted: true,
+  },
+  hz: 0,
+  simNm: 0,
+  lastHourKey: 0,
+  permission: "unknown",
+};
+
 const Ctx = createContext<BridgeCtx>({
   engine: null,
   meteo: null,
@@ -38,14 +71,15 @@ export function useLiveBridge() {
 }
 
 export function BridgeProvider({ children }: { children: ReactNode }) {
-  const onboarded = useSettings((s) => s.onboarded);
   const route = useSettings((s) => s.route);
-  const [engine, setEngine] = useState<EngineSnapshot | null>(null);
+  const [engine, setEngine] = useState<EngineSnapshot | null>(BOOT_ENGINE);
   const [meteo, setMeteo] = useState<MeteoBundle | null>(null);
   const [meteoError, setMeteoError] = useState<string | null>(null);
   const [meteoLoading, setMeteoLoading] = useState(false);
 
   useEffect(() => {
+    if (route) sensorEngine.setRoute(route);
+    if (!sensorEngine.capturing) void sensorEngine.start("live");
     const push = () => setEngine(sensorEngine.snapshot());
     const unsub = sensorEngine.on(push);
     push();
@@ -54,16 +88,13 @@ export function BridgeProvider({ children }: { children: ReactNode }) {
       unsub();
       window.clearInterval(poll);
     };
-  }, []);
+  }, [route]);
+
+  const fixBucket = engine?.fix
+    ? `${Math.round(engine.fix.lat * 8) / 8}_${Math.round(engine.fix.lon * 8) / 8}`
+    : "boot";
 
   useEffect(() => {
-    if (!onboarded) return;
-    if (route) sensorEngine.setRoute(route);
-    if (!sensorEngine.capturing) void sensorEngine.start("sim");
-  }, [onboarded, route]);
-
-  useEffect(() => {
-    if (!onboarded) return;
     let cancelled = false;
     const { lat, lon } = preferredLatLon();
     const stations = route
@@ -107,7 +138,7 @@ export function BridgeProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [onboarded, route?.source]);
+  }, [fixBucket, route?.source]);
 
   const lastHour = useRef(0);
 

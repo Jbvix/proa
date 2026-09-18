@@ -1,4 +1,5 @@
 import { HeaveScope } from "@/components/heave-scope";
+import { NauticalMap } from "@/components/nautical-map";
 import { RpmBand } from "@/components/rpm-band";
 import { Stat } from "@/components/stat";
 import { Badge } from "@/components/ui/badge";
@@ -10,6 +11,7 @@ import { recommendRpm } from "@/lib/rpm";
 import { seaStateFromHs } from "@/lib/waves";
 import { useSettings } from "@/lib/store";
 import { nearestProgress, pathLengthNm } from "@/lib/geo";
+import { coastFix } from "@/lib/coastline";
 import { passageOf, speedHint } from "@/lib/passage";
 import { phaseLabel, planFloodArrival } from "@/lib/tide";
 
@@ -52,6 +54,7 @@ export function PainelScreen() {
     headingDeg: heading,
     waveDirDeg: nextWp?.waveDir ?? meteo?.now.waveDir ?? null,
   });
+  const coast = engine?.fix ? coastFix(engine.fix.lat, engine.fix.lon) : null;
 
   return (
     <div className="space-y-4">
@@ -86,6 +89,25 @@ export function PainelScreen() {
           </Badge>
         ) : null}
       </div>
+
+      <Card className="overflow-hidden rounded-2xl p-0">
+        <NauticalMap
+          route={route}
+          lat={engine?.fix?.lat}
+          lon={engine?.fix?.lon}
+          cog={engine?.fix?.cogDeg}
+          sogKn={passage?.sogKn ?? engine?.fix?.sogKn}
+          speedValid={passage?.valid ?? engine?.fix?.valid}
+          perMin={engine?.wave.perMin}
+          etaLabel={
+            passage?.etaMs != null ? formatEtaClock(passage.etaMs) : null
+          }
+          tideLabel={plan.atEta ? phaseLabel(plan.atEta.phase) : null}
+          coastLabel={coast?.label ?? null}
+          stations={meteo?.alongRoute}
+          className="h-56 w-full md:h-80"
+        />
+      </Card>
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <Card className="rounded-2xl p-4">
@@ -127,9 +149,9 @@ export function PainelScreen() {
         <Card className="rounded-2xl p-4">
           <Stat
             label="Velocidade"
-            value={passage ? passage.sogKn.toFixed(1) : "—"}
+            value={(passage?.sogKn ?? engine?.fix?.sogKn)?.toFixed(1) ?? "—"}
             unit="kn"
-            hint={passage ? speedHint(passage) : "SOG"}
+            hint={passage ? speedHint(passage) : engine?.fix?.valid ? "GPS" : "SOG"}
           />
         </Card>
         <Card className="rounded-2xl p-4">
@@ -195,12 +217,13 @@ export function PainelScreen() {
               ? formatLatLon(engine.fix.lat, engine.fix.lon)
               : "Sem fixo"}
           </p>
+          <p className="mt-1 text-sm text-muted">{coast?.phrase ?? "Costa —"}</p>
           <div className="mt-4 grid grid-cols-3 gap-3">
             <Stat
               label="SOG"
-              value={passage ? passage.sogKn.toFixed(1) : "—"}
+              value={(passage?.sogKn ?? engine?.fix?.sogKn)?.toFixed(1) ?? "—"}
               unit="kn"
-              hint={passage ? speedHint(passage) : undefined}
+              hint={passage ? speedHint(passage) : engine?.fix?.valid ? "GPS" : undefined}
             />
             <Stat
               label="COG"

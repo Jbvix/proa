@@ -2,6 +2,7 @@ import { passageOf, speedHint } from "./passage";
 import { planFloodArrival, phaseLabel } from "./tide";
 import { fuelHint, recommendRpm } from "./rpm";
 import { nearestPlaceAny, withCity } from "./places";
+import { coastFix } from "./coastline";
 import { weatherLabel } from "./meteo";
 import { seaStateFromHs } from "./waves";
 import { cardinal, formatDurationMin, formatEtaClock, formatLatLon } from "./utils";
@@ -31,6 +32,7 @@ export type VoiceContext = {
     costa: string | null;
     costaNome: string | null;
     costaNm: number | null;
+    portoNm: number | null;
     rumoDeg: number | null;
     rumo: string | null;
     sogKn: number | null;
@@ -138,11 +140,8 @@ export function buildVoiceContext(opts: {
 
   const fix = engine?.fix ?? null;
   const near = fix ? nearestPlaceAny(fix.lat, fix.lon) : null;
-  const costa = near
-    ? near.nm < 1.2
-      ? `em ${near.name}`
-      : `ao largo de ${near.name}, ${near.nm.toFixed(1)} nmi`
-    : null;
+  const shore = fix ? coastFix(fix.lat, fix.lon) : null;
+  const costa = shore?.phrase ?? null;
 
   const origin = route?.points[0] ?? null;
   const dest = route?.points.length ? route.points[route.points.length - 1]! : null;
@@ -198,7 +197,8 @@ export function buildVoiceContext(opts: {
       latLon: fix ? formatLatLon(fix.lat, fix.lon) : null,
       costa,
       costaNome: near?.name ?? null,
-      costaNm: near ? Number(near.nm.toFixed(1)) : null,
+      costaNm: shore ? Number(shore.coastNm.toFixed(1)) : null,
+      portoNm: near ? Number(near.nm.toFixed(1)) : null,
       rumoDeg: heading != null ? Math.round(heading) : null,
       rumo: heading != null ? `${String(Math.round(heading)).padStart(3, "0")}° ${cardinal(heading)}` : null,
       sogKn: passage?.sogKn ?? fix?.sogKn ?? null,

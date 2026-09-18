@@ -5,11 +5,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardTitle } from "@/components/ui/card";
 import { parseGpxFile } from "@/lib/gpx";
+import { loadSampleRoute } from "@/lib/sample-route";
 import { sensorEngine } from "@/lib/sensor-engine";
 import { useLiveBridge } from "@/components/bridge-provider";
 import { useSettings } from "@/lib/store";
 import { passageOf, speedHint } from "@/lib/passage";
 import { routeMapMarks } from "@/lib/places";
+import { coastFix } from "@/lib/coastline";
 import { phaseLabel, planFloodArrival } from "@/lib/tide";
 import { formatEtaClock, formatDurationMin, formatLatLon } from "@/lib/utils";
 
@@ -17,6 +19,7 @@ export function RotaScreen() {
   const inputRef = useRef<HTMLInputElement>(null);
   const route = useSettings((s) => s.route);
   const setRoute = useSettings((s) => s.setRoute);
+  const setOnboarded = useSettings((s) => s.setOnboarded);
   const { engine, meteo } = useLiveBridge();
   const [error, setError] = useState<string | null>(null);
   const passage = passageOf(route, engine);
@@ -34,6 +37,7 @@ export function RotaScreen() {
       const parsed = await parseGpxFile(file);
       setRoute(parsed);
       sensorEngine.setRoute(parsed);
+      setOnboarded(true);
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "GPX inválido");
@@ -48,6 +52,7 @@ export function RotaScreen() {
     ? `${phaseLabel(plan.atEta.phase)} ${plan.atEta.seaM.toFixed(2)} m`
     : null;
   const marks = routeMapMarks(route, meteo?.alongRoute);
+  const coast = engine?.fix ? coastFix(engine.fix.lat, engine.fix.lon) : null;
 
   return (
     <div className="space-y-4">
@@ -58,13 +63,30 @@ export function RotaScreen() {
             Posição do rebocador no mapa, ETA e maré de chegada.
           </p>
         </div>
-        <Button
-          className="w-full shrink-0 sm:w-auto"
-          size="lg"
-          onClick={() => inputRef.current?.click()}
-        >
-          {route ? "Trocar GPX" : "Importar GPX"}
-        </Button>
+        <div className="flex w-full shrink-0 flex-col gap-2 sm:w-auto sm:flex-row">
+          {!route ? (
+            <Button
+              className="w-full sm:w-auto"
+              size="lg"
+              variant="ghost"
+              onClick={() => {
+                const sample = loadSampleRoute();
+                setRoute(sample);
+                sensorEngine.setRoute(sample);
+                setOnboarded(true);
+              }}
+            >
+              Derrota demo
+            </Button>
+          ) : null}
+          <Button
+            className="w-full sm:w-auto"
+            size="lg"
+            onClick={() => inputRef.current?.click()}
+          >
+            {route ? "Trocar GPX" : "Importar GPX"}
+          </Button>
+        </div>
       </div>
 
       <input
@@ -93,6 +115,7 @@ export function RotaScreen() {
           perMin={engine?.wave.perMin}
           etaLabel={etaLabel}
           tideLabel={tideLabel}
+          coastLabel={coast?.label ?? null}
           stations={meteo?.alongRoute}
           className="h-72 w-full md:h-[28rem]"
         />
@@ -121,9 +144,9 @@ export function RotaScreen() {
         <Card className="rounded-2xl">
           <Stat
             label="Velocidade"
-            value={passage ? passage.sogKn.toFixed(1) : "—"}
+            value={(passage?.sogKn ?? engine?.fix?.sogKn)?.toFixed(1) ?? "—"}
             unit="kn"
-            hint={passage ? speedHint(passage) : "SOG"}
+            hint={passage ? speedHint(passage) : engine?.fix?.valid ? "GPS" : "SOG"}
           />
         </Card>
         <Card className="rounded-2xl">

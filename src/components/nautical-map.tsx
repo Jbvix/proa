@@ -16,6 +16,7 @@ type Props = {
   perMin?: number | null;
   etaLabel?: string | null;
   tideLabel?: string | null;
+  coastLabel?: string | null;
   stations?: RouteStation[];
   className?: string;
 };
@@ -36,6 +37,7 @@ export function NauticalMap({
   perMin,
   etaLabel,
   tideLabel,
+  coastLabel,
   stations,
   className,
 }: Props) {
@@ -186,6 +188,7 @@ export function NauticalMap({
         tugRef.current = L.marker([lat, lon], { icon, zIndexOffset: 800 })
           .bindTooltip("Rebocador", { direction: "right", offset: [12, 0] })
           .addTo(map);
+        if (!route?.points.length) map.setView([lat, lon], 11);
       } else {
         tugRef.current.setLatLng([lat, lon]);
         tugRef.current.setIcon(icon);
@@ -195,7 +198,7 @@ export function NauticalMap({
         map.panTo([lat, lon], { animate: true, duration: 0.4 });
       }
     });
-  }, [lat, lon, cog, ready]);
+  }, [lat, lon, cog, ready, route]);
 
   const hasFix = lat != null && lon != null;
 
@@ -216,6 +219,9 @@ export function NauticalMap({
           {hasFix ? formatLatLon(lat, lon) : "Sem fixo"}
           {cog != null ? ` · ${pad3(cog)}°` : ""}
         </p>
+        {coastLabel ? (
+          <p className="mt-1 text-xs text-subtle">{coastLabel}</p>
+        ) : null}
         <p className="mt-1 text-xs text-subtle">
           ETA {etaLabel ?? "—"}
           {tideLabel ? ` · ${tideLabel}` : ""}
