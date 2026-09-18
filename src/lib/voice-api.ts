@@ -1,5 +1,13 @@
 import { Buffer } from "node:buffer";
 import type { VoiceContext, VoiceTurn } from "./voice-context";
+import { ALANA_BYE, ALANA_GREET, isCannedKind, type CannedKind } from "./voice-copy";
+
+export { ALANA_BYE, ALANA_GREET, isCannedKind, type CannedKind };
+
+const CANNED: Record<CannedKind, string> = {
+  greet: ALANA_GREET,
+  bye: ALANA_BYE,
+};
 
 const SYSTEM = `Você é a Alana, rádio do passadiço do app Proa, da TugLife. Fala português do Brasil, bem informal, voz de bordo: direto, curto, sem firula, sem emoji. Quem te chama já sabe o nome — não se apresente em toda resposta e não fique repetindo "Alana", senão o microfone acorda de novo. Se perguntarem quem você é: "Sou a Alana, rádio do passadiço."
 
@@ -17,6 +25,12 @@ type FetchOpts = RequestInit & { ignoreResponseError?: boolean };
 function clip(s: string, n: number) {
   const t = s.trim();
   return t.length <= n ? t : t.slice(0, n);
+}
+
+function cannedStore(): Map<string, string> {
+  const g = globalThis as { __proaAlanaTts?: Map<string, string> };
+  if (!g.__proaAlanaTts) g.__proaAlanaTts = new Map();
+  return g.__proaAlanaTts;
 }
 
 async function grokFetch(url: string, apiKey: string, body: unknown): Promise<Response> {
@@ -71,12 +85,30 @@ export async function askGrokVoice(
   return { text, audio };
 }
 
+export async function speakCanned(
+  apiKey: string,
+  kind: CannedKind,
+): Promise<{ text: string; audio: string | null }> {
+  if (!isCannedKind(kind)) return { text: ALANA_GREET, audio: null };
+  const text = CANNED[kind];
+  const hit = cannedStore().get(kind);
+  if (hit) return { text, audio: hit };
+  const audio = await speakGrok(apiKey, text);
+  if (audio) cannedStore().set(kind, audio);
+  return { text, audio };
+}
+
 async function speakGrok(apiKey: string, text: string): Promise<string | null> {
   try {
     const res = await grokFetch("https://api.x.ai/v1/tts", apiKey, {
       text: clip(text, 700),
       voice_id: "ara",
       language: "pt-BR",
+      output_format: {
+        codec: "mp3",
+        sample_rate: 24000,
+        bit_rate: 128000,
+      },
     });
     if (!res.ok) return null;
     const buf = Buffer.from(await res.arrayBuffer());

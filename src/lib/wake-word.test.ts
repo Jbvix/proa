@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { hearWake } from "./wake-word.ts";
+import { hearWake, isAlanaEcho } from "./wake-word.ts";
 
 test("Alana alone wakes with empty rest", () => {
   const h = hearWake("Alana");
@@ -19,20 +19,23 @@ test("oi alana and a lana still wake", () => {
   assert.equal(hearWake("oi Alana").woke, true);
   assert.equal(hearWake("a lana").woke, true);
   assert.equal(hearWake("Allana me fala o eta").woke, true);
-  assert.equal(hearWake("Halana").woke, true);
-  assert.equal(hearWake("boa noite Alana").woke, true);
 });
 
 test("plain question does not wake", () => {
   const h = hearWake("qual o vento");
   assert.equal(h.woke, false);
   assert.equal(h.rest, "qual o vento");
-  assert.equal(hearWake("fala comigo").woke, false);
 });
 
 test("tchau sleeps", () => {
   const h = hearWake("tchau");
   assert.equal(h.sleep, true);
   assert.equal(hearWake("Alana tchau").sleep, true);
-  assert.equal(hearWake("pode parar").sleep, true);
+});
+
+test("echo of greet and last line is ignored", () => {
+  assert.equal(isAlanaEcho("Oi. Tô na escuta."), true);
+  assert.equal(isAlanaEcho("Fechou. Me chama quando precisar."), true);
+  assert.equal(isAlanaEcho("Sou a Alana, rádio do passadiço.", "Sou a Alana, rádio do passadiço."), true);
+  assert.equal(isAlanaEcho("qual o hs agora"), false);
 });

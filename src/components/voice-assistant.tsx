@@ -2,8 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import { Mic, Send, X } from "lucide-react";
 import { useLiveBridge } from "@/components/bridge-provider";
 import { useBridge, useSettings } from "@/lib/store";
+import { ALANA_BYE, ALANA_GREET, type CannedKind } from "@/lib/voice-copy";
+import { playVoiceMp3, stopVoice, unlockVoice } from "@/lib/voice-play";
 import { buildVoiceContext, type VoiceTurn } from "@/lib/voice-context";
-import { hearWake } from "@/lib/wake-word";
+import { hearWake, isAlanaEcho } from "@/lib/wake-word";
 import { cn } from "@/lib/utils";
 
 type Recog = {
@@ -24,8 +26,11 @@ type Recog = {
 type Mode = "off" | "wake" | "session";
 
 const SESSION_MS = 90_000;
-const GREET = "Oi. Tô na escuta.";
-const BYE = "Fechou. Me chama quando precisar.";
+const COOL_MS = 1_200;
+const TTS_CACHE = {
+  greet: "proa-alana-tts-greet-v1",
+  bye: "proa-alana-tts-bye-v1",
+} as const;
 
 function getCtor() {
   const w = window as unknown as {
@@ -35,27 +40,21 @@ function getCtor() {
   return w.SpeechRecognition || w.webkitSpeechRecognition || null;
 }
 
-function speakLocal(text: string): Promise<void> {
-  return new Promise((resolve) => {
-    try {
-      speechSynthesis.cancel();
-      const u = new SpeechSynthesisUtterance(text);
-      u.lang = "pt-BR";
-      const voices = speechSynthesis.getVoices();
-      const fem = voices.find(
-        (v) =>
-          v.lang.startsWith("pt") &&
-          /female|lucia|fernanda|maria|google|luciana|francisca/.test(v.name.toLowerCase()),
-      );
-      if (fem) u.voice = fem;
-      u.onend = () => resolve();
-      u.onerror = () => resolve();
-      speechSynthesis.speak(u);
-      window.setTimeout(resolve, Math.min(8000, 900 + text.length * 80));
-    } catch {
-      resolve();
-    }
-  });
+function readTtsCache(kind: CannedKind): string | null {
+  try {
+    const v = localStorage.getItem(TTS_CACHE[kind]);
+    return v && v.length > 80 ? v : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeTtsCache(kind: CannedKind, audio: string) {
+  try {
+    localStorage.setItem(TTS_CACHE[kind], audio);
+  } catch {
+    /* quota */
+  }
 }
 
 export function AlanaRadio() {
@@ -76,15 +75,17 @@ export function AlanaRadio() {
   const [lastLine, setLastLine] = useState<string | null>(null);
 
   const recRef = useRef<Recog | null>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
   const asking = useRef(false);
   const locking = useRef(false);
   const speaking = useRef(false);
+  const cooling = useRef(false);
   const wanted = useRef(false);
   const held = useRef(false);
   const holdTimer = useRef(0);
+  const coolTimer = useRef(0);
   const modeRef = useRef<Mode>("off");
   const sessionTimer = useRef<number>(0);
+  const lastLineRef = useRef<string | null>(null);
   const engineRef = useRef(engine);
   const meteoRef = useRef(meteo);
   const routeRef = useRef(route);
@@ -100,6 +101,11 @@ export function AlanaRadio() {
   tabRef.current = tab;
   turnsRef.current = turns;
   modeRef.current = mode;
+  lastLineRef.current = lastLine;
+
+  function blocked() {
+    return speaking.current || asking.current || cooling.current;
+  }
 
   function bumpSession() {
     window.clearTimeout(sessionTimer.current);
@@ -115,7 +121,7 @@ export function AlanaRadio() {
   }
 
   function arm() {
-    if (muted || speaking.current || asking.current) return;
+    if (muted || blocked()) return;
     if (typeof window === "undefined") return;
     const Ctor = getCtor();
     if (!Ctor) {
@@ -128,6 +134,7 @@ export function AlanaRadio() {
     rec.interimResults = true;
     rec.continuous = true;
     rec.onresult = (ev) => {
+      if (blocked()) return;
       let final = "";
       let mid = "";
       for (let i = ev.resultIndex; i < ev.results.length; i++) {
@@ -138,6 +145,7 @@ export function AlanaRadio() {
       setInterim(mid);
       const heard = (final || mid).trim();
       if (!heard) return;
+      if (isAlanaEcho(heard, lastLineRef.current)) return;
       const parse = hearWake(heard);
       if (modeRef.current !== "session") {
         if (!parse.woke || !final) return;
@@ -150,7 +158,7 @@ export function AlanaRadio() {
         return;
       }
       const q = parse.rest;
-      if (q) void ask(q);
+      if (q && !isAlanaEcho(q, lastLineRef.current)) void ask(q);
     };
     rec.onerror = (ev) => {
       const err = ev.error ?? "";
@@ -164,7 +172,7 @@ export function AlanaRadio() {
     };
     rec.onend = () => {
       recRef.current = null;
-      if (wanted.current && !muted && !speaking.current && !asking.current) {
+      if (wanted.current && !muted && !blocked()) {
         window.setTimeout(() => arm(), 280);
       }
     };
@@ -184,34 +192,44 @@ export function AlanaRadio() {
     }
   }
 
+  function coolThenArm() {
+    cooling.current = true;
+    window.clearTimeout(coolTimer.current);
+    coolTimer.current = window.setTimeout(() => {
+      cooling.current = false;
+      if (wanted.current && !muted && !speaking.current && !asking.current) arm();
+    }, COOL_MS);
+  }
+
   async function playReply(text: string, audio: string | null) {
     speaking.current = true;
+    cooling.current = true;
     stopRec();
-    audioRef.current?.pause();
-    speechSynthesis.cancel();
+    stopVoice();
     try {
-      if (audio) {
-        const bin = Uint8Array.from(atob(audio), (c) => c.charCodeAt(0));
-        const url = URL.createObjectURL(new Blob([bin], { type: "audio/mpeg" }));
-        const a = new Audio(url);
-        audioRef.current = a;
-        await new Promise<void>((resolve) => {
-          a.onended = () => {
-            URL.revokeObjectURL(url);
-            resolve();
-          };
-          a.onerror = () => resolve();
-          void a.play().catch(() => {
-            void speakLocal(text).then(resolve);
-          });
-        });
-      } else {
-        await speakLocal(text);
-      }
+      if (audio) await playVoiceMp3(audio);
     } finally {
       speaking.current = false;
-      if (wanted.current && !muted) window.setTimeout(() => arm(), 350);
+      coolThenArm();
     }
+    void text;
+  }
+
+  async function fetchCanned(kind: CannedKind): Promise<string | null> {
+    const cached = readTtsCache(kind);
+    if (cached) return cached;
+    const res = await fetch("/api/voice", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ canned: kind }),
+      signal: AbortSignal.timeout(20_000),
+    });
+    const data = (await res.json()) as { ok?: boolean; audio?: string | null };
+    if (data.ok && data.audio) {
+      writeTtsCache(kind, data.audio);
+      return data.audio;
+    }
+    return null;
   }
 
   async function wake(rest: string, goingSleep: boolean) {
@@ -227,9 +245,15 @@ export function AlanaRadio() {
         return;
       }
       if (!rest) {
-        setLastLine(GREET);
-        setTurns((t) => [...t, { role: "assistant", content: GREET }]);
-        await playReply(GREET, null);
+        setLastLine(ALANA_GREET);
+        setTurns((t) => [...t, { role: "assistant", content: ALANA_GREET }]);
+        setBusy(true);
+        try {
+          const audio = await fetchCanned("greet");
+          await playReply(ALANA_GREET, audio);
+        } finally {
+          setBusy(false);
+        }
         return;
       }
       await ask(rest);
@@ -242,9 +266,15 @@ export function AlanaRadio() {
     window.clearTimeout(sessionTimer.current);
     modeRef.current = "wake";
     setMode("wake");
-    setLastLine(BYE);
-    setTurns((t) => [...t, { role: "assistant", content: BYE }]);
-    await playReply(BYE, null);
+    setLastLine(ALANA_BYE);
+    setTurns((t) => [...t, { role: "assistant", content: ALANA_BYE }]);
+    setBusy(true);
+    try {
+      const audio = await fetchCanned("bye");
+      await playReply(ALANA_BYE, audio);
+    } finally {
+      setBusy(false);
+    }
     window.setTimeout(() => setOpen(false), 1800);
   }
 
@@ -259,6 +289,7 @@ export function AlanaRadio() {
     const history = turnsRef.current.slice(-6);
     setTurns((t) => [...t, { role: "user", content: q }]);
     stopRec();
+    stopVoice();
     try {
       const ctx = buildVoiceContext({
         engine: engineRef.current,
@@ -293,7 +324,7 @@ export function AlanaRadio() {
     } finally {
       setBusy(false);
       asking.current = false;
-      if (!speaking.current && wanted.current && !muted) arm();
+      if (!speaking.current && !cooling.current && wanted.current && !muted) arm();
     }
   }
 
@@ -301,16 +332,20 @@ export function AlanaRadio() {
     if (muted) {
       wanted.current = false;
       stopRec();
+      stopVoice();
       setMode("off");
       return;
     }
     wanted.current = true;
     arm();
     const onVis = () => {
-      if (document.hidden) stopRec();
-      else if (wanted.current && !muted) arm();
+      if (document.hidden) {
+        stopRec();
+        stopVoice();
+      } else if (wanted.current && !muted) arm();
     };
     const onPtr = () => {
+      void unlockVoice();
       if (!wanted.current || modeRef.current === "off") {
         wanted.current = true;
         arm();
@@ -321,10 +356,12 @@ export function AlanaRadio() {
     return () => {
       wanted.current = false;
       stopRec();
+      stopVoice();
       document.removeEventListener("visibilitychange", onVis);
       window.removeEventListener("pointerdown", onPtr);
       window.clearTimeout(sessionTimer.current);
       window.clearTimeout(holdTimer.current);
+      window.clearTimeout(coolTimer.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [muted]);
@@ -336,6 +373,7 @@ export function AlanaRadio() {
     window.clearTimeout(holdTimer.current);
     holdTimer.current = window.setTimeout(() => {
       held.current = true;
+      stopVoice();
       setMuted(true);
       setOpen(false);
     }, 650);
@@ -356,6 +394,7 @@ export function AlanaRadio() {
         onPointerCancel={endHold}
         onContextMenu={(e) => {
           e.preventDefault();
+          stopVoice();
           setMuted(true);
           setOpen(false);
         }}
@@ -364,6 +403,7 @@ export function AlanaRadio() {
             held.current = false;
             return;
           }
+          void unlockVoice();
           if (muted) {
             setMuted(false);
             return;

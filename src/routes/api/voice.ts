@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { env } from "@/lib/env.server";
-import { askGrokVoice } from "@/lib/voice-api";
+import { isCannedKind } from "@/lib/voice-copy";
+import { askGrokVoice, speakCanned } from "@/lib/voice-api";
 import type { VoiceContext, VoiceTurn } from "@/lib/voice-context";
 
 function fail(status: number, error: string, detail?: string) {
@@ -23,6 +24,7 @@ export const Route = createFileRoute("/api/voice")({
             return fail(503, "Assistente Grok indisponível neste aparelho.");
           }
           let body: {
+            canned?: unknown;
             message?: string;
             context?: VoiceContext;
             history?: VoiceTurn[];
@@ -31,6 +33,10 @@ export const Route = createFileRoute("/api/voice")({
             body = (await request.json()) as typeof body;
           } catch {
             return fail(400, "Pedido inválido.");
+          }
+          if (isCannedKind(body.canned)) {
+            const out = await speakCanned(key, body.canned);
+            return Response.json({ ok: true, text: out.text, audio: out.audio });
           }
           const message = String(body.message ?? "").trim();
           if (!message) return fail(400, "Fala vazia.");
