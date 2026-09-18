@@ -12,12 +12,14 @@ export type TabId = "painel" | "ondas" | "rota" | "rpm";
 type SettingsState = {
   onboarded: boolean;
   theme: ThemeId;
+  alanaMuted: boolean;
   rpm: number;
   profile: EngineProfile;
   route: ParsedRoute | null;
   hourly: HourlyWave[];
   setOnboarded: (v: boolean) => void;
   setTheme: (t: ThemeId) => void;
+  setAlanaMuted: (v: boolean) => void;
   setRpm: (n: number) => void;
   setProfile: (p: Partial<EngineProfile>) => void;
   setRoute: (r: ParsedRoute | null) => void;
@@ -30,6 +32,7 @@ export const useSettings = create<SettingsState>()(
     (set, get) => ({
       onboarded: false,
       theme: "night",
+      alanaMuted: false,
       rpm: 920,
       profile: DEFAULT_PROFILE,
       route: null,
@@ -39,6 +42,7 @@ export const useSettings = create<SettingsState>()(
         applyTheme(t);
         set({ theme: t });
       },
+      setAlanaMuted: (v) => set({ alanaMuted: v }),
       setRpm: (n) => set({ rpm: n }),
       setProfile: (p) => set({ profile: { ...get().profile, ...p } }),
       setRoute: (r) => set({ route: r }),
@@ -73,6 +77,7 @@ export const useSettings = create<SettingsState>()(
       partialize: (s) => ({
         onboarded: s.onboarded,
         theme: s.theme,
+        alanaMuted: s.alanaMuted,
         rpm: s.rpm,
         profile: s.profile,
         route: s.route,

@@ -27,7 +27,8 @@ export function Onboarding({
       </h1>
       <p className="mt-4 text-base text-muted">
         Importe o arquivo da viagem. Sem o track o painel não tem rumo, distância
-        nem o que falta até o destino.
+        nem o que falta até o destino. No passadiço, chama{" "}
+        <span className="text-fg">Alana</span> pelo nome — ela escuta sem botão.
       </p>
 
       <ol className="mt-8 space-y-4">

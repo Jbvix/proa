@@ -11,6 +11,7 @@ Captura movimento e posição do rebocador, atualiza características de onda a 
 - **Sensores** — mar ao vivo no casco (heave → Hs, amplitude, período)
 - **Open-Meteo** — vento e corrente na posição; previsão marinha em cada waypoint do GPX
 - **RPM ideal** — banda de viagem a partir do mar do casco, vento e encontro com a onda
+- **Alana** — rádio de voz. Chama pelo nome; ela responde e fica à disposição, sem apertar o microfone
 
 ## Uso a bordo
 
@@ -18,6 +19,7 @@ Captura movimento e posição do rebocador, atualiza características de onda a 
 2. Informe o RPM atual
 3. Permita sensores e localização para captura ao vivo
 4. Acompanhe o **Painel**, **Ondas**, **Rota** e **RPM**
+5. Chama **Alana** pelo nome. Ela cumprimenta e escuta ~90 s. “Tchau” pra ela voltar a esperar o nome. Segura o ícone do microfone pra desligar. No iPad, o primeiro toque na tela libera o microfone.
 
 Dados ficam só neste aparelho (sem conta, sem nuvem).
 
@@ -37,4 +39,4 @@ Variáveis:
 
 - `VITE_AUTH_ENABLED=false` — o app não usa login nem banco
 - `OPENMETEO_API_KEY` — assinatura comercial Open-Meteo (a mesma do Atalaia). Escopos: Functions + Runtime. Secret.
-- `XAI_API_KEY` — assistente de voz Grok (chat + fala). No preview já entra sozinha; no Netlify, a mesma chave no painel (Functions + Runtime). Secret. Nunca vai ao aparelho.
+- `XAI_API_KEY` — Alana (Grok chat + fala feminina). No preview já entra sozinha; no Netlify, a mesma chave no painel (Functions + Runtime). Secret. Nunca vai ao aparelho.
