@@ -107,10 +107,26 @@
   border: none;
 }
 
+.tug-wrap {
+  position: relative;
+  width: 44px;
+  height: 44px;
+}
+
+.tug-halo {
+  position: absolute;
+  inset: 6px;
+  border-radius: 999px;
+  border: 2px solid var(--color-accent);
+  box-shadow: 0 0 0 6px color-mix(in srgb, var(--color-accent) 28%, transparent);
+}
+
 .tug-marker-inner {
+  position: absolute;
+  left: 14px;
+  top: 8px;
   width: 0;
   height: 0;
-  margin: 4px auto 0;
   border-left: 8px solid transparent;
   border-right: 8px solid transparent;
   border-bottom: 18px solid var(--color-fg);

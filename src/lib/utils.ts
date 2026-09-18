@@ -51,3 +51,20 @@ export function formatClock(ms: number) {
     second: "2-digit",
   });
 }
+
+export function formatEtaClock(ms: number) {
+  return new Date(ms).toLocaleTimeString("pt-BR", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+export function formatDurationMin(min: number) {
+  if (!Number.isFinite(min) || min < 0) return "—";
+  if (min >= 60) {
+    const h = Math.floor(min / 60);
+    const m = Math.round(min % 60);
+    return `${h}h${String(m).padStart(2, "0")}`;
+  }
+  return `${Math.round(min)} min`;
+}

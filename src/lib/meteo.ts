@@ -1,3 +1,5 @@
+import type { TideHour } from "./tide";
+
 export type MeteoPlano = "comercial" | "gratuito";
 
 export type MeteoNow = {
@@ -53,6 +55,7 @@ export type MeteoBundle = {
   now: MeteoNow;
   hourly: MeteoHour[];
   alongRoute: RouteStation[];
+  tideHours: TideHour[];
   plano: MeteoPlano;
 };
 
@@ -202,6 +205,32 @@ function marineNow(marine: OmBlock, nowMs: number) {
   };
 }
 
+function tideHoursFrom(marine: OmBlock): TideHour[] {
+  const times = marine.hourly?.time as unknown as string[] | undefined;
+  const sea = marine.hourly?.sea_level_height_msl;
+  if (!times?.length || !sea) return [];
+  const out: TideHour[] = [];
+  for (let i = 0; i < times.length; i++) {
+    const t = Date.parse(times[i]!);
+    const seaM = num(sea[i]);
+    if (!Number.isFinite(t) || seaM == null) continue;
+    out.push({ t, seaM });
+  }
+  return out;
+}
+
+function syntheticTide(nowMs: number): TideHour[] {
+  const out: TideHour[] = [];
+  const start = Math.floor(nowMs / 3_600_000) * 3_600_000 - 3 * 3_600_000;
+  const period = 12.42 * 3_600_000;
+  for (let i = 0; i < 72; i++) {
+    const t = start + i * 3_600_000;
+    const seaM = 0.15 + 1.05 * Math.sin((2 * Math.PI * (t - start)) / period);
+    out.push({ t, seaM });
+  }
+  return out;
+}
+
 async function fetchMarineJson(
   lat: number,
   lon: number,
@@ -213,13 +242,13 @@ async function fetchMarineJson(
   const full =
     `${host("marine-api")}/v1/marine?latitude=${latS}&longitude=${lonS}` +
     `&current=wave_height,wave_direction,wave_period,wave_peak_period,swell_wave_height,swell_wave_period,wind_wave_height,sea_surface_temperature,ocean_current_velocity,ocean_current_direction` +
-    `&hourly=wave_height,wave_direction,wave_period,swell_wave_height,ocean_current_velocity,ocean_current_direction` +
-    `&forecast_days=2&timezone=auto` +
+    `&hourly=wave_height,wave_direction,wave_period,swell_wave_height,ocean_current_velocity,ocean_current_direction,sea_level_height_msl` +
+    `&forecast_days=4&timezone=auto` +
     q;
   const fallback =
     `${host("marine-api")}/v1/marine?latitude=${latS}&longitude=${lonS}` +
-    `&hourly=wave_height,wave_direction,wave_period,swell_wave_height` +
-    `&forecast_days=2&timezone=auto` +
+    `&hourly=wave_height,wave_direction,wave_period,swell_wave_height,sea_level_height_msl` +
+    `&forecast_days=4&timezone=auto` +
     q;
   let res = await pullJson(full);
   if (!res.ok) res = await pullJson(fallback);
@@ -292,6 +321,7 @@ export function syntheticMeteo(
         currentDir: 300 + i * 6,
       };
     }),
+    tideHours: syntheticTide(nowMs),
     plano: "gratuito",
   };
 }
@@ -311,6 +341,7 @@ export async function fetchMeteo(
   if (!r.ok) throw new Error("Falha ao ler meteorologia.");
   const data = (await r.json()) as MeteoBundle;
   if (!Array.isArray(data.alongRoute)) data.alongRoute = [];
+  if (!Array.isArray(data.tideHours)) data.tideHours = [];
   data.alongRoute = data.alongRoute.map((s, i) => ({
     ...s,
     distNm: stations[i]?.distNm ?? s.distNm ?? 0,
@@ -410,5 +441,13 @@ export async function fetchMeteoUpstream(
     };
   });
 
-  return { now, hourly: hours, alongRoute, plano: comercial ? "comercial" : "gratuito" };
+  const destMarine = wpMarine[wpMarine.length - 1] ?? marine;
+  const tideHours = tideHoursFrom(destMarine);
+  return {
+    now,
+    hourly: hours,
+    alongRoute,
+    tideHours,
+    plano: comercial ? "comercial" : "gratuito",
+  };
 }

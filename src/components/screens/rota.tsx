@@ -1,14 +1,16 @@
 import { useRef, useState } from "react";
 import { NauticalMap } from "@/components/nautical-map";
 import { Stat } from "@/components/stat";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardTitle } from "@/components/ui/card";
 import { parseGpxFile } from "@/lib/gpx";
 import { sensorEngine } from "@/lib/sensor-engine";
 import { useLiveBridge } from "@/components/bridge-provider";
 import { useSettings } from "@/lib/store";
-import { pathLengthNm } from "@/lib/geo";
-import { formatLatLon } from "@/lib/utils";
+import { passageOf, speedHint } from "@/lib/passage";
+import { phaseLabel, planFloodArrival } from "@/lib/tide";
+import { formatEtaClock, formatDurationMin, formatLatLon } from "@/lib/utils";
 
 export function RotaScreen() {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -16,6 +18,14 @@ export function RotaScreen() {
   const setRoute = useSettings((s) => s.setRoute);
   const { engine, meteo } = useLiveBridge();
   const [error, setError] = useState<string | null>(null);
+  const passage = passageOf(route, engine);
+  const plan = planFloodArrival(
+    meteo?.tideHours ?? [],
+    passage?.etaMs ?? null,
+    passage?.remainNm ?? 0,
+    passage?.sogKn ?? 0,
+    9.2,
+  );
 
   async function onFile(file: File | undefined) {
     if (!file) return;
@@ -29,13 +39,21 @@ export function RotaScreen() {
     }
   }
 
+  const etaLabel =
+    passage?.etaMs != null
+      ? `${formatEtaClock(passage.etaMs)} (${formatDurationMin(passage.etaMin ?? 0)})`
+      : null;
+  const tideLabel = plan.atEta
+    ? `${phaseLabel(plan.atEta.phase)} ${plan.atEta.seaM.toFixed(2)} m`
+    : null;
+
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div className="min-w-0">
           <h1 className="font-display text-3xl tracking-[-0.03em]">Derrota</h1>
           <p className="mt-1 text-sm text-muted">
-            Mapa da viagem. A posição do rebocador segue o GPS (ou a simulação).
+            Posição do rebocador no mapa, ETA e maré de chegada.
           </p>
         </div>
         <Button
@@ -68,8 +86,11 @@ export function RotaScreen() {
           lat={engine?.fix?.lat}
           lon={engine?.fix?.lon}
           cog={engine?.fix?.cogDeg}
-          sogKn={engine?.fix?.sogKn}
+          sogKn={passage?.sogKn ?? engine?.fix?.sogKn}
+          speedValid={passage?.valid}
           perMin={engine?.wave.perMin}
+          etaLabel={etaLabel}
+          tideLabel={tideLabel}
           stations={meteo?.alongRoute}
           className="h-72 w-full md:h-[28rem]"
         />
@@ -79,38 +100,74 @@ export function RotaScreen() {
         <Card className="rounded-2xl">
           <Stat
             label="Velocidade"
-            value={engine?.fix ? engine.fix.sogKn.toFixed(1) : "—"}
+            value={passage ? passage.sogKn.toFixed(1) : "—"}
             unit="kn"
-            hint="SOG"
+            hint={passage ? speedHint(passage) : "SOG"}
           />
         </Card>
         <Card className="rounded-2xl">
           <Stat
-            label="Ondas / min"
+            label="ETA"
+            value={passage?.etaMs != null ? formatEtaClock(passage.etaMs) : "—"}
+            hint={
+              passage?.etaMin != null
+                ? `${formatDurationMin(passage.etaMin)} · falta ${passage.remainNm.toFixed(1)} nmi`
+                : "precisa de SOG"
+            }
+          />
+        </Card>
+        <Card className="rounded-2xl">
+          <Stat
+            label="Maré na chegada"
+            value={plan.atEta ? phaseLabel(plan.atEta.phase) : "—"}
+            hint={
+              plan.atEta ? `${plan.atEta.seaM >= 0 ? "+" : ""}${plan.atEta.seaM.toFixed(2)} m MSL` : undefined
+            }
+          />
+        </Card>
+        <Card className="rounded-2xl">
+          <Stat
+            label="ETA enchente"
             value={
-              engine?.wave.perMin ? engine.wave.perMin.toFixed(1) : "—"
+              plan.idealEtaMs != null ? formatEtaClock(plan.idealEtaMs) : "—"
             }
             hint={
-              engine?.wave.periodS
-                ? `Tz ${engine.wave.periodS.toFixed(1)} s`
-                : "casco"
+              plan.targetKn != null
+                ? `${plan.targetKn.toFixed(1)} kn para a janela`
+                : "sem janela"
             }
-          />
-        </Card>
-        <Card className="rounded-2xl">
-          <Stat
-            label="Pontos"
-            value={route ? String(route.points.length) : "—"}
-          />
-        </Card>
-        <Card className="rounded-2xl">
-          <Stat
-            label="Distância"
-            value={route ? pathLengthNm(route.points).toFixed(1) : "—"}
-            unit="nmi"
           />
         </Card>
       </div>
+
+      <Card className="rounded-2xl p-4">
+        <div className="flex flex-wrap items-center gap-2">
+          <CardTitle>Aproveitamento de enchente</CardTitle>
+          {plan.atEta ? (
+            <Badge
+              tone={
+                plan.atEta.phase === "enchente" || plan.atEta.phase === "preamar"
+                  ? "ok"
+                  : "warn"
+              }
+            >
+              {phaseLabel(plan.atEta.phase)}
+            </Badge>
+          ) : null}
+        </div>
+        <p className="mt-3 text-sm leading-relaxed text-muted">{plan.advice}</p>
+        {plan.window ? (
+          <p className="mt-2 font-mono text-xs tabular text-subtle">
+            Enchente {formatEtaClock(plan.window.lowT)} → preá-mar{" "}
+            {formatEtaClock(plan.window.highT)} · alvo{" "}
+            {formatEtaClock(plan.window.idealT)}
+          </p>
+        ) : null}
+        <p className="mt-3 text-xs text-subtle">
+          Nível do mar Open-Meteo (MSL, malha ~8 km) — estimativa, não substitui
+          tábua de maré do porto.
+        </p>
+      </Card>
 
       {route?.points[0] ? (
         <Card className="rounded-2xl p-4">
@@ -130,6 +187,7 @@ export function RotaScreen() {
             <p className="mt-3 font-mono text-sm tabular text-accent">
               Rebocador {formatLatLon(engine.fix.lat, engine.fix.lon)} ·{" "}
               {engine.fix.sogKn.toFixed(1)} kn
+              {passage?.valid ? " · validada" : ""}
             </p>
           ) : null}
         </Card>

@@ -11,7 +11,10 @@ type Props = {
   lon?: number | null;
   cog?: number | null;
   sogKn?: number | null;
+  speedValid?: boolean;
   perMin?: number | null;
+  etaLabel?: string | null;
+  tideLabel?: string | null;
   stations?: RouteStation[];
   className?: string;
 };
@@ -22,7 +25,10 @@ export function NauticalMap({
   lon,
   cog,
   sogKn,
+  speedValid,
   perMin,
+  etaLabel,
+  tideLabel,
   stations,
   className,
 }: Props) {
@@ -30,6 +36,7 @@ export function NauticalMap({
   const mapRef = useRef<LeafletMap | null>(null);
   const trackRef = useRef<Polyline | null>(null);
   const tugRef = useRef<Marker | null>(null);
+  const destRef = useRef<CircleMarker | null>(null);
   const wpRef = useRef<CircleMarker[]>([]);
   const fitted = useRef("");
   const [ready, setReady] = useState(false);
@@ -48,7 +55,7 @@ export function NauticalMap({
       L.tileLayer(
         "https://server.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Base/MapServer/tile/{z}/{y}/{x}",
         {
-          attribution: "Tiles &copy; Esri &mdash; GEBCO, NOAA, National Geographic",
+          attribution: "Tiles &copy; Esri — GEBCO, NOAA, National Geographic",
           maxZoom: 16,
         },
       ).addTo(map);
@@ -71,6 +78,7 @@ export function NauticalMap({
       mapRef.current = null;
       trackRef.current = null;
       tugRef.current = null;
+      destRef.current = null;
       wpRef.current = [];
       fitted.current = "";
     };
@@ -85,6 +93,10 @@ export function NauticalMap({
         trackRef.current.remove();
         trackRef.current = null;
       }
+      if (destRef.current) {
+        destRef.current.remove();
+        destRef.current = null;
+      }
       if (pts.length >= 2) {
         const latlngs = pts.map((p) => [p.lat, p.lon] as [number, number]);
         trackRef.current = L.polyline(latlngs, {
@@ -92,6 +104,16 @@ export function NauticalMap({
           weight: 5,
           opacity: 1,
         }).addTo(map);
+        const dest = pts[pts.length - 1]!;
+        destRef.current = L.circleMarker([dest.lat, dest.lon], {
+          radius: 8,
+          color: "#e8eef2",
+          weight: 2,
+          fillColor: "#7aa3b0",
+          fillOpacity: 1,
+        })
+          .bindTooltip("Destino", { direction: "top", permanent: false })
+          .addTo(map);
         const key = route?.source ?? `${pts.length}`;
         if (fitted.current !== key) {
           map.fitBounds(trackRef.current.getBounds(), {
@@ -133,18 +155,24 @@ export function NauticalMap({
     if (!map || !ready || lat == null || lon == null) return;
     void import("leaflet").then(({ default: L }) => {
       const rot = cog ?? 0;
-      const html = `<div class="tug-marker-inner" style="transform:rotate(${rot}deg)"></div>`;
+      const html = `<div class="tug-wrap"><span class="tug-halo"></span><span class="tug-marker-inner" style="transform:rotate(${rot}deg)"></span></div>`;
       const icon = L.divIcon({
         className: "tug-marker",
         html,
-        iconSize: [28, 28],
-        iconAnchor: [14, 14],
+        iconSize: [44, 44],
+        iconAnchor: [22, 22],
       });
       if (!tugRef.current) {
-        tugRef.current = L.marker([lat, lon], { icon, zIndexOffset: 600 }).addTo(map);
+        tugRef.current = L.marker([lat, lon], { icon, zIndexOffset: 800 })
+          .bindTooltip("Rebocador", { direction: "right", offset: [12, 0] })
+          .addTo(map);
       } else {
         tugRef.current.setLatLng([lat, lon]);
         tugRef.current.setIcon(icon);
+      }
+      const padded = map.getBounds().pad(-0.18);
+      if (!padded.contains([lat, lon])) {
+        map.panTo([lat, lon], { animate: true, duration: 0.4 });
       }
     });
   }, [lat, lon, cog, ready]);
@@ -154,14 +182,23 @@ export function NauticalMap({
   return (
     <div className={cn("relative overflow-hidden rounded-lg bg-bg", className)}>
       <div ref={hostRef} className="absolute inset-0 z-0" />
-      <div className="pointer-events-none absolute left-3 top-3 z-10 max-w-[min(100%-1.5rem,18rem)] rounded-md bg-bg/80 px-3 py-2 text-fg shadow-[var(--shadow-border)] backdrop-blur-sm">
+      <div className="pointer-events-none absolute left-3 top-3 z-10 max-w-[min(100%-1.5rem,20rem)] rounded-md bg-bg/80 px-3 py-2 text-fg shadow-[var(--shadow-border)] backdrop-blur-sm">
         <p className="font-mono text-lg tabular leading-none">
           {sogKn != null ? sogKn.toFixed(1) : "—"}
           <span className="ml-1 text-xs text-muted">kn</span>
+          {speedValid ? (
+            <span className="ml-2 text-[11px] uppercase tracking-[0.12em] text-ok">
+              validada
+            </span>
+          ) : null}
         </p>
         <p className="mt-1 font-mono text-xs tabular text-muted">
           {hasFix ? formatLatLon(lat, lon) : "Sem fixo"}
           {cog != null ? ` · ${pad3(cog)}°` : ""}
+        </p>
+        <p className="mt-1 text-xs text-subtle">
+          ETA {etaLabel ?? "—"}
+          {tideLabel ? ` · ${tideLabel}` : ""}
         </p>
         <p className="mt-1 text-xs text-subtle">
           {perMin != null && perMin > 0

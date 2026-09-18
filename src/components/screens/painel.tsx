@@ -4,12 +4,14 @@ import { Stat } from "@/components/stat";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardTitle } from "@/components/ui/card";
 import { useLiveBridge } from "@/components/bridge-provider";
-import { cardinal, formatLatLon, pad3 } from "@/lib/utils";
+import { cardinal, formatDurationMin, formatEtaClock, formatLatLon, pad3 } from "@/lib/utils";
 import { weatherLabel } from "@/lib/meteo";
 import { recommendRpm } from "@/lib/rpm";
 import { seaStateFromHs } from "@/lib/waves";
 import { useSettings } from "@/lib/store";
-import { alongTrack, nearestProgress, pathLengthNm } from "@/lib/geo";
+import { nearestProgress, pathLengthNm } from "@/lib/geo";
+import { passageOf, speedHint } from "@/lib/passage";
+import { phaseLabel, planFloodArrival } from "@/lib/tide";
 
 export function PainelScreen() {
   const rpm = useSettings((s) => s.rpm);
@@ -22,6 +24,14 @@ export function PainelScreen() {
   const amp = engine?.wave.amplitudeM ?? hs / 2;
   const sea = seaStateFromHs(hs);
   const heading = engine?.fix?.cogDeg ?? engine?.attitude?.heading ?? null;
+  const passage = passageOf(route, engine);
+  const plan = planFloodArrival(
+    meteo?.tideHours ?? [],
+    passage?.etaMs ?? null,
+    passage?.remainNm ?? 0,
+    passage?.sogKn ?? 0,
+    9.2,
+  );
   const nextWp = (() => {
     const stations = meteo?.alongRoute ?? [];
     if (!stations.length) return stations[0] ?? null;
@@ -43,21 +53,6 @@ export function PainelScreen() {
     waveDirDeg: nextWp?.waveDir ?? meteo?.now.waveDir ?? null,
   });
 
-  const remain = (() => {
-    if (!route || !engine?.fix) return null;
-    const along = engine.mode === "sim" ? engine.simNm : null;
-    if (along != null) {
-      const p = alongTrack(route.points, along);
-      return p;
-    }
-    return null;
-  })();
-
-  const etaMin =
-    remain && engine?.fix && engine.fix.sogKn > 0.4
-      ? (remain.remainNm / engine.fix.sogKn) * 60
-      : null;
-
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
@@ -77,6 +72,17 @@ export function PainelScreen() {
         {meteo ? (
           <Badge tone={meteo.plano === "comercial" ? "ok" : "mute"}>
             {meteo.plano === "comercial" ? "Open-Meteo" : "Open-Meteo livre"}
+          </Badge>
+        ) : null}
+        {plan.atEta ? (
+          <Badge
+            tone={
+              plan.atEta.phase === "enchente" || plan.atEta.phase === "preamar"
+                ? "ok"
+                : "warn"
+            }
+          >
+            {phaseLabel(plan.atEta.phase)}
           </Badge>
         ) : null}
       </div>
@@ -119,9 +125,9 @@ export function PainelScreen() {
         <Card className="rounded-2xl p-4">
           <Stat
             label="Velocidade"
-            value={engine?.fix ? engine.fix.sogKn.toFixed(1) : "—"}
+            value={passage ? passage.sogKn.toFixed(1) : "—"}
             unit="kn"
-            hint="SOG"
+            hint={passage ? speedHint(passage) : "SOG"}
           />
         </Card>
         <Card className="rounded-2xl p-4">
@@ -148,10 +154,13 @@ export function PainelScreen() {
         </Card>
         <Card className="rounded-2xl p-4">
           <Stat
-            label="Swell prev."
-            value={meteo?.now.swellHs != null ? meteo.now.swellHs.toFixed(2) : "—"}
-            unit="m"
-            hint="Open-Meteo na posição"
+            label="ETA"
+            value={passage?.etaMs != null ? formatEtaClock(passage.etaMs) : "—"}
+            hint={
+              passage?.etaMin != null
+                ? `${formatDurationMin(passage.etaMin)} · ${plan.atEta ? phaseLabel(plan.atEta.phase) : "maré?"}`
+                : "precisa de SOG"
+            }
           />
         </Card>
       </div>
@@ -188,8 +197,9 @@ export function PainelScreen() {
           <div className="mt-4 grid grid-cols-3 gap-3">
             <Stat
               label="SOG"
-              value={engine?.fix ? engine.fix.sogKn.toFixed(1) : "—"}
+              value={passage ? passage.sogKn.toFixed(1) : "—"}
               unit="kn"
+              hint={passage ? speedHint(passage) : undefined}
             />
             <Stat
               label="COG"
@@ -213,19 +223,19 @@ export function PainelScreen() {
             />
             <Stat
               label="Falta"
-              value={remain ? remain.remainNm.toFixed(1) : "—"}
+              value={passage ? passage.remainNm.toFixed(1) : "—"}
               unit="nmi"
             />
             <Stat
-              label="ETA"
+              label="Enchente"
               value={
-                etaMin == null
-                  ? "—"
-                  : etaMin >= 60
-                    ? `${Math.floor(etaMin / 60)}h${String(Math.round(etaMin % 60)).padStart(2, "0")}`
-                    : `${Math.round(etaMin)}`
+                plan.idealEtaMs != null ? formatEtaClock(plan.idealEtaMs) : "—"
               }
-              unit={etaMin != null && etaMin < 60 ? "min" : undefined}
+              hint={
+                plan.targetKn != null
+                  ? `${plan.targetKn.toFixed(1)} kn`
+                  : undefined
+              }
             />
           </div>
         </Card>

@@ -1,4 +1,4 @@
-import { alongTrack, msToKn } from "./geo";
+import { alongTrack, haversineNm, msToKn } from "./geo";
 import type { ParsedRoute } from "./gpx";
 import {
   amplitudeFromHs,
@@ -13,6 +13,9 @@ export type Fix = {
   lat: number;
   lon: number;
   sogKn: number;
+  gpsKn: number | null;
+  trackKn: number | null;
+  valid: boolean;
   cogDeg: number;
   accM: number | null;
   t: number;
@@ -111,6 +114,7 @@ export class SensorEngine {
   private attitude: Attitude | null = null;
   private listeners = new Set<Listener>();
   private lastLiveMotion = 0;
+  private trail: Array<{ lat: number; lon: number; t: number }> = [];
 
   on(fn: Listener) {
     this.listeners.add(fn);
@@ -158,6 +162,7 @@ export class SensorEngine {
     this.hzStamp = this.lastTick;
     this.ticks = 0;
     this.resetFilters();
+    this.trail = [];
     if (mode === "live") {
       await this.startLive();
     }
@@ -236,14 +241,33 @@ export class SensorEngine {
       this.geoWatch = navigator.geolocation.watchPosition(
         (pos) => {
           const c = pos.coords;
+          const t = pos.timestamp || Date.now();
+          const gpsKn =
+            c.speed != null && Number.isFinite(c.speed) && c.speed >= 0
+              ? msToKn(c.speed)
+              : null;
+          this.trail.push({ lat: c.latitude, lon: c.longitude, t });
+          if (this.trail.length > 24) this.trail.splice(0, this.trail.length - 24);
+          const trackKn = this.measureTrackKn();
+          const sogKn =
+            gpsKn != null && gpsKn > 0.3 ? gpsKn : (trackKn ?? gpsKn ?? 0);
+          const valid =
+            gpsKn != null && trackKn != null
+              ? Math.abs(gpsKn - trackKn) <= 1.8
+              : trackKn != null || (gpsKn != null && gpsKn > 0.3);
           this.fix = {
             lat: c.latitude,
             lon: c.longitude,
-            sogKn: c.speed != null && c.speed >= 0 ? msToKn(c.speed) : 0,
+            sogKn,
+            gpsKn,
+            trackKn,
+            valid,
             cogDeg:
-              c.heading != null && Number.isFinite(c.heading) ? c.heading : this.fix?.cogDeg ?? 0,
+              c.heading != null && Number.isFinite(c.heading)
+                ? c.heading
+                : this.fix?.cogDeg ?? 0,
             accM: c.accuracy,
-            t: pos.timestamp,
+            t,
           };
         },
         () => {
@@ -267,6 +291,17 @@ export class SensorEngine {
       navigator.geolocation.clearWatch(this.geoWatch);
       this.geoWatch = null;
     }
+  }
+
+  private measureTrackKn(): number | null {
+    if (this.trail.length < 2) return null;
+    const now = this.trail[this.trail.length - 1]!;
+    let i = 0;
+    while (i < this.trail.length - 1 && now.t - this.trail[i]!.t > 40_000) i += 1;
+    const a = this.trail[i]!;
+    const dtH = (now.t - a.t) / 3_600_000;
+    if (dtH < 0.002) return null;
+    return haversineNm(a.lat, a.lon, now.lat, now.lon) / dtH;
   }
 
   private onMotion = (ev: DeviceMotionEvent) => {
@@ -377,6 +412,9 @@ export class SensorEngine {
             lat: p.lat,
             lon: p.lon,
             sogKn: this.simSpeedKn,
+            gpsKn: this.simSpeedKn,
+            trackKn: this.simSpeedKn,
+            valid: true,
             cogDeg: p.cog,
             accM: 4,
             t: Date.now(),
