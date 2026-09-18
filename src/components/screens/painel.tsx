@@ -81,7 +81,7 @@ export function PainelScreen() {
         ) : null}
       </div>
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <Card className="rounded-2xl p-4">
           <Stat
             label="Hs casco"
@@ -107,6 +107,21 @@ export function PainelScreen() {
                 ? `prev. ${nextWp.wavePeriod.toFixed(1)} s`
                 : "cruzamentos de zero"
             }
+          />
+        </Card>
+        <Card className="rounded-2xl p-4">
+          <Stat
+            label="Ondas / min"
+            value={engine?.wave.perMin ? engine.wave.perMin.toFixed(1) : "—"}
+            hint="casco"
+          />
+        </Card>
+        <Card className="rounded-2xl p-4">
+          <Stat
+            label="Velocidade"
+            value={engine?.fix ? engine.fix.sogKn.toFixed(1) : "—"}
+            unit="kn"
+            hint="SOG"
           />
         </Card>
         <Card className="rounded-2xl p-4">

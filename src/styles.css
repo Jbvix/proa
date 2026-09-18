@@ -6,6 +6,7 @@
 @import "@fontsource/ibm-plex-mono/500.css";
 @import "@fontsource/instrument-serif/400.css";
 @import "@fontsource/instrument-serif/400-italic.css";
+@import "leaflet/dist/leaflet.css";
 
 @theme {
   --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
@@ -77,6 +78,44 @@
   select {
     font: inherit;
   }
+}
+
+.leaflet-container {
+  background: var(--color-bg);
+  font-family: var(--font-sans);
+  z-index: 0;
+}
+
+.leaflet-control-attribution {
+  background: rgba(8, 20, 28, 0.7) !important;
+  color: var(--color-subtle);
+  font-size: 10px;
+}
+
+.leaflet-control-attribution a {
+  color: var(--color-muted);
+}
+
+.leaflet-control-zoom a {
+  background: var(--color-surface) !important;
+  color: var(--color-fg) !important;
+  border-color: var(--color-border) !important;
+}
+
+.tug-marker {
+  background: transparent;
+  border: none;
+}
+
+.tug-marker-inner {
+  width: 0;
+  height: 0;
+  margin: 4px auto 0;
+  border-left: 8px solid transparent;
+  border-right: 8px solid transparent;
+  border-bottom: 18px solid var(--color-fg);
+  filter: drop-shadow(0 0 2px var(--color-bg));
+  transform-origin: 50% 70%;
 }
 
 @utility tabular {

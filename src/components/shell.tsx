@@ -28,8 +28,8 @@ export function Shell({
   const setTab = useBridge((s) => s.setTab);
 
   return (
-    <div className="mx-auto flex min-h-[100dvh] w-full max-w-5xl flex-col">
-      <header className="sticky top-0 z-20 flex items-center gap-3 border-b border-border bg-bg/85 px-4 py-3 backdrop-blur-md">
+    <div className="mx-auto flex h-[100dvh] w-full max-w-5xl flex-col overflow-hidden">
+      <header className="z-20 flex shrink-0 items-center gap-3 border-b border-border bg-bg/85 px-4 py-3 backdrop-blur-md">
         <ProaMark className="size-6 text-accent" />
         <div className="min-w-0 flex-1">
           <p className="font-display text-xl italic leading-none text-fg">Proa</p>
@@ -56,10 +56,12 @@ export function Shell({
         </button>
       </header>
 
-      <main className="flex-1 px-4 py-5 pb-28 md:px-6 md:py-6">{children}</main>
+      <main className="min-h-0 flex-1 overflow-y-auto px-4 py-5 md:px-6 md:py-6">
+        {children}
+      </main>
 
-      <nav className="fixed inset-x-0 bottom-0 z-20 border-t border-border bg-bg/90 pb-[env(safe-area-inset-bottom)] backdrop-blur-md">
-        <ul className="mx-auto grid max-w-5xl grid-cols-4">
+      <nav className="z-20 shrink-0 border-t border-border bg-bg/95 pb-[env(safe-area-inset-bottom)]">
+        <ul className="grid grid-cols-4">
           {TABS.map((t) => {
             const Icon = t.icon;
             const active = tab === t.id;

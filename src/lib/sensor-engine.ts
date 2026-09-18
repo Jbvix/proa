@@ -29,6 +29,7 @@ export type WaveLive = {
   hsM: number;
   amplitudeM: number;
   periodS: number;
+  perMin: number;
   samples: number;
   windowS: number;
 };
@@ -69,6 +70,7 @@ function emptyWave(): WaveLive {
     hsM: 0,
     amplitudeM: 0,
     periodS: 0,
+    perMin: 0,
     samples: 0,
     windowS: 0,
   };
@@ -411,6 +413,7 @@ export class SensorEngine {
       hsM: hs,
       amplitudeM: amplitudeFromHs(hs),
       periodS: period,
+      perMin: period > 0 ? 60 / period : 0,
       samples: n,
       windowS: n * dt,
     };

@@ -51,16 +51,9 @@ export function OndasScreen() {
         </Card>
         <Card className="rounded-2xl">
           <Stat
-            label="Corrente"
-            value={
-              meteo?.now.currentKn != null ? meteo.now.currentKn.toFixed(1) : "—"
-            }
-            unit="kn"
-            hint={
-              meteo?.now.currentDir != null
-                ? `${pad3(meteo.now.currentDir)}° ${cardinal(meteo.now.currentDir)}`
-                : undefined
-            }
+            label="Ondas / min"
+            value={engine?.wave.perMin ? engine.wave.perMin.toFixed(1) : "—"}
+            hint="casco"
           />
         </Card>
       </div>
