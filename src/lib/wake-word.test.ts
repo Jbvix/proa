@@ -40,6 +40,7 @@ test("tchau sleeps", () => {
 });
 
 test("echo of greet and last line is ignored", () => {
+  assert.equal(isAlanaEcho("E aí. Tô no rádio, pode mandar."), true);
   assert.equal(isAlanaEcho("Oi. Tô no rádio, manda aí."), true);
   assert.equal(isAlanaEcho("Beleza. Me chama se precisar."), true);
   assert.equal(isAlanaEcho("Oi. Tô na escuta."), true);

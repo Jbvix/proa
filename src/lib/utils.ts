@@ -59,6 +59,35 @@ export function formatEtaClock(ms: number) {
   });
 }
 
+export function formatEtaDay(ms: number, nowMs = Date.now()) {
+  const t = new Date(ms).toLocaleTimeString("pt-BR", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  const start = (x: number) => {
+    const d = new Date(x);
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  };
+  const diff = Math.round((start(ms) - start(nowMs)) / 86_400_000);
+  if (diff === 0) return `hoje ${t}`;
+  if (diff === 1) return `amanhã ${t}`;
+  if (diff === -1) return `ontem ${t}`;
+  const dia = new Date(ms).toLocaleDateString("pt-BR", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+  });
+  return `${dia} ${t}`;
+}
+
+export function formatNowStamp(ms = Date.now()) {
+  const d = new Date(ms);
+  const wd = d.toLocaleDateString("pt-BR", { weekday: "long" });
+  const day = d.toLocaleDateString("pt-BR", { day: "numeric", month: "short" });
+  const t = d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+  return `${wd} ${day} ${t}`;
+}
+
 export function formatDurationMin(min: number) {
   if (!Number.isFinite(min) || min < 0) return "—";
   if (min >= 60) {

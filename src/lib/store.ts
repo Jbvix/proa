@@ -14,6 +14,7 @@ type SettingsState = {
   theme: ThemeId;
   alanaMuted: boolean;
   alanaPtt: boolean;
+  crewNames: string[];
   rpm: number;
   profile: EngineProfile;
   route: ParsedRoute | null;
@@ -22,6 +23,7 @@ type SettingsState = {
   setTheme: (t: ThemeId) => void;
   setAlanaMuted: (v: boolean) => void;
   setAlanaPtt: (v: boolean) => void;
+  setCrewNames: (n: string[]) => void;
   setRpm: (n: number) => void;
   setProfile: (p: Partial<EngineProfile>) => void;
   setRoute: (r: ParsedRoute | null) => void;
@@ -36,6 +38,7 @@ export const useSettings = create<SettingsState>()(
       theme: "night",
       alanaMuted: false,
       alanaPtt: false,
+      crewNames: [],
       rpm: 920,
       profile: DEFAULT_PROFILE,
       route: null,
@@ -47,6 +50,7 @@ export const useSettings = create<SettingsState>()(
       },
       setAlanaMuted: (v) => set({ alanaMuted: v }),
       setAlanaPtt: (v) => set({ alanaPtt: v }),
+      setCrewNames: (n) => set({ crewNames: n.slice(0, 6) }),
       setRpm: (n) => set({ rpm: n }),
       setProfile: (p) => set({ profile: { ...get().profile, ...p } }),
       setRoute: (r) => set({ route: r }),
@@ -83,6 +87,7 @@ export const useSettings = create<SettingsState>()(
         theme: s.theme,
         alanaMuted: s.alanaMuted,
         alanaPtt: s.alanaPtt,
+        crewNames: s.crewNames,
         rpm: s.rpm,
         profile: s.profile,
         route: s.route,
@@ -94,6 +99,7 @@ export const useSettings = create<SettingsState>()(
         if (state?.route && !Array.isArray(state.route.waypoints)) {
           state.route.waypoints = [];
         }
+        if (!Array.isArray(state?.crewNames) && state) state.crewNames = [];
       },
     },
   ),

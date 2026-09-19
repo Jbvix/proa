@@ -27,15 +27,16 @@ import {
 } from "@/lib/voice-listen";
 import { buildVoiceContext, type VoiceTurn } from "@/lib/voice-context";
 import { hearWake, isAlanaEcho } from "@/lib/wake-word";
+import { extractCrewNames, mergeCrew } from "@/lib/crew";
 import { passageOf } from "@/lib/passage";
 import { tickWatch, WATCH_IDLE, type WatchKind, type WatchState } from "@/lib/voice-watch";
 import { cn } from "@/lib/utils";
 
 type Mode = "off" | "wake" | "session";
 
-const SESSION_MS = 90_000;
+const SESSION_MS = 180_000;
 const TTS_CACHE = {
-  greet: "proa-alana-tts-greet-v2",
+  greet: "proa-alana-tts-greet-v3",
   bye: "proa-alana-tts-bye-v2",
   miss: "proa-alana-tts-miss-v1",
   xte: "proa-alana-tts-xte-v1",
@@ -77,6 +78,8 @@ export function AlanaRadio() {
   const setMuted = useSettings((s) => s.setAlanaMuted);
   const ptt = useSettings((s) => s.alanaPtt);
   const setPtt = useSettings((s) => s.setAlanaPtt);
+  const crewNames = useSettings((s) => s.crewNames);
+  const setCrewNames = useSettings((s) => s.setCrewNames);
   const tab = useBridge((s) => s.tab);
 
   const [open, setOpen] = useState(false);
@@ -117,6 +120,7 @@ export function AlanaRadio() {
   const rpmRef = useRef(rpm);
   const profileRef = useRef(profile);
   const tabRef = useRef(tab);
+  const crewRef = useRef(crewNames);
   const turnsRef = useRef(turns);
   engineRef.current = engine;
   meteoRef.current = meteo;
@@ -124,6 +128,7 @@ export function AlanaRadio() {
   rpmRef.current = rpm;
   profileRef.current = profile;
   tabRef.current = tab;
+  crewRef.current = crewNames;
   turnsRef.current = turns;
   modeRef.current = mode;
   lastLineRef.current = lastLine;
@@ -435,11 +440,17 @@ export function AlanaRadio() {
     setError(null);
     setInterim("");
     bumpSession();
-    const history = turnsRef.current.slice(-6);
+    const history = turnsRef.current.slice(-8);
     setTurns((t) => [...t, { role: "user", content: q }]);
     stopRec();
     stopVoice();
     try {
+      const found = extractCrewNames(q);
+      if (found.length) {
+        const next = mergeCrew(crewRef.current, found);
+        crewRef.current = next;
+        setCrewNames(next);
+      }
       const ctx = buildVoiceContext({
         engine: engineRef.current,
         meteo: meteoRef.current,
@@ -447,6 +458,7 @@ export function AlanaRadio() {
         rpm: rpmRef.current,
         profile: profileRef.current,
         tab: tabRef.current,
+        crewNames: crewRef.current,
       });
       const res = await fetch("/api/voice", {
         method: "POST",
@@ -727,10 +739,9 @@ export function AlanaRadio() {
               {turns.length === 0 ? (
                 <p className="text-sm text-muted">
                   Chama <span className="text-fg">Alana</span> pelo nome. Só
-                  voz — não tem teclado. O microfone fica aberto. Se o ruído
-                  apertar, usa <span className="text-fg">Aperta pra falar</span>.
-                  Se o rebocador abrir da derrota ou o balanço de banda apertar,
-                  ela fala sozinha.
+                  voz. Se apresentar, ela guarda o nome e papo no passadiço
+                  vale — cidade, ETA, enchente, vento, onda, maré, o que
+                  vier da viagem.
                 </p>
               ) : (
                 turns.map((t, i) => (

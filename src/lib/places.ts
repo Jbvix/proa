@@ -1,6 +1,7 @@
-import { haversineNm } from "./geo.ts";
+import { alongTrack, haversineNm, nearestProgress, type LatLon } from "./geo.ts";
 import type { ParsedRoute } from "./gpx";
 import type { RouteStation } from "./meteo";
+import { formatDurationMin, formatEtaDay } from "./utils.ts";
 
 export type Place = { name: string; lat: number; lon: number };
 
@@ -69,6 +70,49 @@ export function withCity(lat: number, lon: number, label: string) {
   if (!city) return label;
   if (label.toLowerCase().includes(city.name.toLowerCase())) return label;
   return `${label} · ${city.name}`;
+}
+
+export type CityPass = {
+  nome: string;
+  nm: number;
+  faltaNm: number;
+  offNm: number;
+  passou: boolean;
+  eta: string | null;
+  falta: string | null;
+};
+
+export function cityPassages(
+  points: LatLon[],
+  alongNm: number,
+  sogKn: number,
+  nowMs = Date.now(),
+  maxOffNm = 22,
+): CityPass[] {
+  if (points.length < 2) return [];
+  const out: CityPass[] = [];
+  for (const place of COAST_PLACES) {
+    const along = nearestProgress(points, place.lat, place.lon);
+    const p = alongTrack(points, along);
+    if (!p) continue;
+    const offNm = haversineNm(p.lat, p.lon, place.lat, place.lon);
+    if (offNm > maxOffNm) continue;
+    const faltaNm = along - alongNm;
+    const passou = faltaNm < -0.6;
+    const etaMin = sogKn > 0.4 && faltaNm > 0.15 ? (faltaNm / sogKn) * 60 : null;
+    const etaMs = etaMin != null ? nowMs + etaMin * 60_000 : null;
+    out.push({
+      nome: place.name,
+      nm: Number(along.toFixed(1)),
+      faltaNm: Number(Math.max(0, faltaNm).toFixed(1)),
+      offNm: Number(offNm.toFixed(1)),
+      passou,
+      eta: passou ? "já passou" : etaMs ? formatEtaDay(etaMs, nowMs) : null,
+      falta: passou ? null : etaMin != null ? formatDurationMin(etaMin) : null,
+    });
+  }
+  out.sort((a, b) => a.nm - b.nm);
+  return out.slice(0, 12);
 }
 
 export type MapMark = {

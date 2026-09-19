@@ -46,7 +46,7 @@ export default async (req: Request) => {
       key,
       message,
       body.context ?? ({} as VoiceContext),
-      Array.isArray(body.history) ? body.history.slice(-6) : [],
+      Array.isArray(body.history) ? body.history.slice(-8) : [],
     );
     return Response.json({ ok: true, text: out.text, audio: out.audio });
   } catch {

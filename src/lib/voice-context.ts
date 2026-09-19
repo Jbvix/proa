@@ -1,11 +1,11 @@
 import { passageOf, speedHint } from "./passage";
 import { planFloodArrival, phaseLabel } from "./tide";
 import { fuelHint, recommendRpm } from "./rpm";
-import { nearestPlaceAny, withCity } from "./places";
+import { nearestPlaceAny, withCity, cityPassages } from "./places";
 import { coastFix } from "./coastline";
 import { weatherLabel } from "./meteo";
 import { seaStateFromHs } from "./waves";
-import { cardinal, formatDurationMin, formatEtaClock, formatLatLon } from "./utils";
+import { cardinal, formatDurationMin, formatEtaClock, formatEtaDay, formatLatLon, formatNowStamp } from "./utils";
 import { xteSideLabel } from "./geo";
 import type { EngineSnapshot } from "./sensor-engine";
 import type { MeteoBundle } from "./meteo";
@@ -41,7 +41,10 @@ export type VoiceContext = {
     xteNm: number | null;
     xteLado: string | null;
   };
-  waypoints: { nome: string; nm: number; hsPrev: number | null }[];
+  waypoints: { nome: string; nm: number; faltaNm: number | null; eta: string | null; hsPrev: number | null }[];
+  cidades: { nome: string; faltaNm: number; eta: string | null; passou: boolean }[];
+  tripulacao: string[];
+  agora: string;
   mar: {
     hsCasco: number;
     ampM: number;
@@ -68,6 +71,7 @@ export type VoiceContext = {
     fase: string | null;
     m: number | null;
     eta: string | null;
+    etaDia: string | null;
     etaFalta: string | null;
     enchenteIdeal: string | null;
     sogAlvoKn: number | null;
@@ -104,8 +108,9 @@ export function buildVoiceContext(opts: {
   rpm: number;
   profile: EngineProfile;
   tab?: string;
+  crewNames?: string[];
 }): VoiceContext {
-  const { engine, meteo, route, rpm, profile, tab } = opts;
+  const { engine, meteo, route, rpm, profile, tab, crewNames = [] } = opts;
   const passage = passageOf(route, engine);
   const plan = planFloodArrival(
     meteo?.tideHours ?? [],
@@ -151,19 +156,37 @@ export function buildVoiceContext(opts: {
   const dest = route?.points.length ? route.points[route.points.length - 1]! : null;
 
   const wpts: VoiceContext["waypoints"] = [];
+  const sog = passage?.sogKn ?? 0;
+  const nowMs = Date.now();
+  const etaOf = (nm: number): { faltaNm: number | null; eta: string | null } => {
+    const falta = nm - along;
+    if (falta < -0.6) return { faltaNm: 0, eta: "já passou" };
+    const etaMin = sog > 0.4 && falta > 0.15 ? (falta / sog) * 60 : null;
+    return {
+      faltaNm: Number(Math.max(0, falta).toFixed(1)),
+      eta: etaMin != null ? formatEtaDay(nowMs + etaMin * 60_000, nowMs) : null,
+    };
+  };
   if (origin) {
+    const pass = etaOf(0);
     wpts.push({
       nome: withCity(origin.lat, origin.lon, origin.name || "Origem"),
       nm: 0,
+      faltaNm: pass.faltaNm,
+      eta: pass.eta,
       hsPrev: stations[0]?.waveHs ?? null,
     });
   }
   for (const w of route?.waypoints ?? []) {
     if (wpts.length >= 8) break;
     const st = stations.find((s) => Math.abs(s.lat - w.lat) < 0.02 && Math.abs(s.lon - w.lon) < 0.02);
+    const nm = Number((st?.distNm ?? 0).toFixed(1));
+    const pass = etaOf(nm);
     wpts.push({
       nome: withCity(w.lat, w.lon, w.name),
-      nm: Number((st?.distNm ?? 0).toFixed(1)),
+      nm,
+      faltaNm: pass.faltaNm,
+      eta: pass.eta,
       hsPrev: st?.waveHs ?? null,
     });
   }
@@ -171,9 +194,13 @@ export function buildVoiceContext(opts: {
     const last = wpts[wpts.length - 1];
     const destName = withCity(dest.lat, dest.lon, dest.name || "Destino");
     if (!last || last.nome !== destName) {
+      const nm = Number((passage?.totalNm ?? stations[stations.length - 1]?.distNm ?? 0).toFixed(1));
+      const pass = etaOf(nm);
       wpts.push({
         nome: destName,
-        nm: Number((passage?.totalNm ?? stations[stations.length - 1]?.distNm ?? 0).toFixed(1)),
+        nm,
+        faltaNm: pass.faltaNm,
+        eta: pass.eta,
         hsPrev: stations[stations.length - 1]?.waveHs ?? null,
       });
     }
@@ -181,11 +208,21 @@ export function buildVoiceContext(opts: {
 
   const hs = engine?.wave.hsM ?? 0;
   const sea = seaStateFromHs(hs);
+  const cidades = route
+    ? cityPassages(route.points, along, sog, nowMs).map((c) => ({
+        nome: c.nome,
+        faltaNm: c.faltaNm,
+        eta: c.eta,
+        passou: c.passou,
+      }))
+    : [];
 
   return {
     telaAberta: tab,
     aviso:
-      "Contexto da VIAGEM INTEIRA (Painel, Ondas, Rota e RPM). A tela aberta não limita o que você sabe. Sempre use lat/lon + costa. Combustível = combustivel.conselho.",
+      "Viagem inteira + papo do passadiço. Cidades da derrota em cidades[].eta (dia e hora). Tripulação em tripulacao. Relógio em agora. Fatos de mar/vento/ETA só do contexto.",
+    agora: formatNowStamp(nowMs),
+    tripulacao: crewNames.slice(0, 6),
     viagem: {
       nome: route?.name ?? null,
       origem: origin ? withCity(origin.lat, origin.lon, origin.name || "Origem") : null,
@@ -211,6 +248,7 @@ export function buildVoiceContext(opts: {
       xteLado: passage ? xteSideLabel(passage.xteSide) : null,
     },
     waypoints: wpts.slice(0, 8),
+    cidades,
     mar: {
       hsCasco: Number(hs.toFixed(2)),
       ampM: Number((engine?.wave.amplitudeM ?? 0).toFixed(2)),
@@ -243,6 +281,7 @@ export function buildVoiceContext(opts: {
       fase: plan.atEta ? phaseLabel(plan.atEta.phase) : null,
       m: plan.atEta ? Number(plan.atEta.seaM.toFixed(2)) : null,
       eta: clock(passage?.etaMs),
+      etaDia: passage?.etaMs != null ? formatEtaDay(passage.etaMs, nowMs) : null,
       etaFalta: passage?.etaMin != null ? formatDurationMin(passage.etaMin) : null,
       enchenteIdeal: clock(plan.idealEtaMs),
       sogAlvoKn: plan.targetKn != null ? Number(plan.targetKn.toFixed(1)) : null,
