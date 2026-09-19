@@ -15,7 +15,7 @@ import {
 } from "./crew.ts";
 
 test("picks up a bridge intro", () => {
-  assert.deepEqual(extractCrewNames("Alana, meu nome é Jossian"), ["Jossian"]);
+  assert.deepEqual(extractCrewNames("Iara, meu nome é Jossian"), ["Jossian"]);
   assert.deepEqual(extractCrewNames("me chamo maria silva"), ["Maria Silva"]);
   assert.deepEqual(extractCrewNames("sou o pedro"), ["Pedro"]);
   assert.deepEqual(extractCrewNames("aqui é o carlos"), ["Carlos"]);
@@ -53,7 +53,7 @@ test("clocks land on the next occurrence", () => {
 
 test("watch ask captures name and time", () => {
   const now = Date.parse("2026-09-18T23:10:00-03:00");
-  const a = parseWatchAsk("Alana, avisa o Jossian as 8 da manha", [], now);
+  const a = parseWatchAsk("Iara, avisa o Jossian as 8 da manha", [], now);
   assert.ok(a);
   assert.equal(a!.name, "Jossian");
   assert.equal(new Date(a!.endMs).getHours(), 8);

@@ -92,7 +92,7 @@ function n1(v: number | null | undefined) {
   return v.toFixed(v >= 10 ? 0 : 1);
 }
 
-/** Short voyage report at a waypoint. No "Alana", no hold phrase. */
+/** Short voyage report at a waypoint. No wake name, no hold phrase. */
 export function waypointReport(passed: WpMark, live: ReportLive, lastNm = Infinity) {
   const hi = live.name ? `${live.name}. ` : "";
   const arriving = passed.nm >= lastNm - 0.4 || (live.remainNm != null && live.remainNm < 0.8);

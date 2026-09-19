@@ -67,7 +67,7 @@ test("marks follow GPX waypoints on the track", () => {
   assert.ok(m[2]!.nm > m[1]!.nm);
 });
 
-test("report uses live numbers and does not say Alana", () => {
+test("report uses live numbers and does not say the wake name", () => {
   const t = waypointReport(
     { nome: "WP meio", nm: 8.2 },
     {
@@ -90,6 +90,7 @@ test("report uses live numbers and does not say Alana", () => {
   assert.match(t, /Passando WP meio/);
   assert.match(t, /7\.2 nós/);
   assert.match(t, /Pecém/);
+  assert.doesNotMatch(t, /Iara/i);
   assert.doesNotMatch(t, /Alana/i);
   assert.doesNotMatch(t, /Um momento/i);
 });

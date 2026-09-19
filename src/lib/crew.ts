@@ -2,6 +2,9 @@ import { foldPt } from "./wake-word.ts";
 import { formatEtaClock } from "./utils.ts";
 
 const STOP = new Set([
+  "iara",
+  "yara",
+  "hiara",
   "alana",
   "olana",
   "elana",

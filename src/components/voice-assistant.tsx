@@ -40,11 +40,11 @@ import { cn } from "@/lib/utils";
 type Mode = "off" | "wake" | "session";
 
 const TTS_CACHE = {
-  greet: "proa-alana-tts-greet-v3",
-  bye: "proa-alana-tts-bye-v2",
-  miss: "proa-alana-tts-miss-v1",
-  xte: "proa-alana-tts-xte-v1",
-  roll: "proa-alana-tts-roll-v1",
+  greet: "proa-iara-tts-greet-v1",
+  bye: "proa-iara-tts-bye-v1",
+  miss: "proa-iara-tts-miss-v1",
+  xte: "proa-iara-tts-xte-v1",
+  roll: "proa-iara-tts-roll-v1",
 } as const;
 
 const ASK_CHIPS: { q: string; label: string }[] = [
@@ -289,7 +289,7 @@ export function AlanaRadio() {
       .catch(() => {
         wanted.current = false;
         setMode("off");
-        setError("Microfone bloqueado — toca no ícone da Alana pra liberar.");
+        setError("Microfone bloqueado — toca no ícone da Iara pra liberar.");
       });
   }
 
@@ -324,9 +324,9 @@ export function AlanaRadio() {
       }
       introEchoUntil.current = Math.max(
         introEchoUntil.current,
-        performance.now() + (/sou a alana/i.test(text) ? 3_600 : 2_400),
+        performance.now() + (/sou a iara|sou a yara/i.test(text) ? 3_600 : 2_400),
       );
-      if (/sou a alana/i.test(text)) extra = Math.max(extra, 1_400);
+      if (/sou a iara|sou a yara/i.test(text)) extra = Math.max(extra, 1_400);
       await new Promise((r) => window.setTimeout(r, tail));
     } finally {
       speaking.current = false;
@@ -534,7 +534,7 @@ export function AlanaRadio() {
       setTurns((t) => [...t, { role: "assistant", content: data.text! }]);
       await playReply(data.text, data.audio ?? null);
     } catch {
-      setError("Sem ligação com a Alana.");
+      setError("Sem ligação com a Iara.");
     } finally {
       setBusy(false);
       asking.current = false;
@@ -738,11 +738,11 @@ export function AlanaRadio() {
     <div className="relative shrink-0">
       <button
         type="button"
-        aria-label={muted ? "Ligar Alana" : `Alana ${faceLabel}`}
+        aria-label={muted ? "Ligar Iara" : `Iara ${faceLabel}`}
         title={
           muted
-            ? "Alana desligada — toca pra ligar"
-            : `Alana ${faceLabel}. Segura pra desligar.`
+            ? "Iara desligada — toca pra ligar"
+            : `Iara ${faceLabel}. Segura pra desligar.`
         }
         onPointerDown={beginHold}
         onPointerUp={endHold}
@@ -799,7 +799,7 @@ export function AlanaRadio() {
                   : "text-subtle",
             )}
           />
-          <span className="mr-1 font-display italic text-accent">Alana</span>
+          <span className="mr-1 font-display italic text-accent">Iara</span>
           <span className="min-w-0 truncate">{lastLine}</span>
         </button>
       ) : null}
@@ -808,7 +808,7 @@ export function AlanaRadio() {
         <>
           <button
             type="button"
-            aria-label="Fechar Alana"
+            aria-label="Fechar Iara"
             className="fixed inset-0 z-30 bg-transparent"
             onClick={() => setOpen(false)}
           />
@@ -828,7 +828,7 @@ export function AlanaRadio() {
                         : "text-ok",
                 )}
               />
-              <p className="flex-1 font-display text-2xl italic text-fg">Alana</p>
+              <p className="flex-1 font-display text-2xl italic text-fg">Iara</p>
               <p className="text-[11px] uppercase tracking-[0.12em] text-subtle">{faceLabel}</p>
               <button
                 type="button"
@@ -857,7 +857,7 @@ export function AlanaRadio() {
               ) : null}
               {turns.length === 0 ? (
                 <p className="text-sm text-muted">
-                  Chama <span className="text-fg">Alana</span> pelo nome.
+                  Chama <span className="text-fg">Iara</span> pelo nome.
                   Ela pede o seu, grava a voz e consulta a derrota.
                   Só o XTE e a passagem de waypoint falam sozinhos.
                 </p>

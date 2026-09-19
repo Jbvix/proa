@@ -14,10 +14,10 @@ test("day part splits morning afternoon night", () => {
   assert.equal(helloWord(night), "Boa noite");
 });
 
-test("first greet introduces Alana and asks the name", () => {
+test("first greet introduces Iara and asks the name", () => {
   const t = greetLine([], new Date(2026, 8, 19, 15, 0, 0).getTime());
   assert.match(t, /Boa tarde/);
-  assert.match(t, /Sou a Alana/);
+  assert.match(t, /Sou a Iara/);
   assert.match(t, /Qual o seu nome/);
 });
 
@@ -42,6 +42,6 @@ test("bye uses the name when known", () => {
 });
 
 test("detects a name prompt", () => {
-  assert.equal(askedForName("Boa tarde. Sou a Alana, do passadiço. Qual o seu nome?"), true);
+  assert.equal(askedForName("Boa tarde. Sou a Iara, do passadiço. Qual o seu nome?"), true);
   assert.equal(askedForName("ETA hoje 11:20."), false);
 });

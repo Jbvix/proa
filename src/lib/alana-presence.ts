@@ -21,7 +21,7 @@ export function greetLine(names: string[], ms = Date.now(), heard?: string | nul
   const hi = helloWord(ms);
   const who =
     heard && names.some((n) => n.toLowerCase() === heard.toLowerCase()) ? heard : names[0];
-  if (!who) return `${hi}. Sou a Alana, do passadiço. Qual o seu nome?`;
+  if (!who) return `${hi}. Sou a Iara, do passadiço. Qual o seu nome?`;
   return `${hi}, ${who}. Tô aqui. Pode mandar.`;
 }
 
