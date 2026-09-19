@@ -6,6 +6,7 @@ import { DEFAULT_PROFILE, type EngineProfile } from "./rpm";
 import type { HourlyWave } from "./waves";
 import { sensorEngine } from "./sensor-engine";
 import { applyTheme, type ThemeId } from "./theme";
+import type { CrewWatch } from "./crew";
 
 export type TabId = "painel" | "ondas" | "rota" | "rpm";
 
@@ -15,6 +16,7 @@ type SettingsState = {
   alanaMuted: boolean;
   alanaPtt: boolean;
   crewNames: string[];
+  crewWatches: CrewWatch[];
   rpm: number;
   profile: EngineProfile;
   route: ParsedRoute | null;
@@ -24,6 +26,7 @@ type SettingsState = {
   setAlanaMuted: (v: boolean) => void;
   setAlanaPtt: (v: boolean) => void;
   setCrewNames: (n: string[]) => void;
+  setCrewWatches: (w: CrewWatch[]) => void;
   setRpm: (n: number) => void;
   setProfile: (p: Partial<EngineProfile>) => void;
   setRoute: (r: ParsedRoute | null) => void;
@@ -39,6 +42,7 @@ export const useSettings = create<SettingsState>()(
       alanaMuted: false,
       alanaPtt: false,
       crewNames: [],
+      crewWatches: [],
       rpm: 920,
       profile: DEFAULT_PROFILE,
       route: null,
@@ -51,6 +55,7 @@ export const useSettings = create<SettingsState>()(
       setAlanaMuted: (v) => set({ alanaMuted: v }),
       setAlanaPtt: (v) => set({ alanaPtt: v }),
       setCrewNames: (n) => set({ crewNames: n.slice(0, 6) }),
+      setCrewWatches: (w) => set({ crewWatches: w.slice(-6) }),
       setRpm: (n) => set({ rpm: n }),
       setProfile: (p) => set({ profile: { ...get().profile, ...p } }),
       setRoute: (r) => set({ route: r }),
@@ -88,6 +93,7 @@ export const useSettings = create<SettingsState>()(
         alanaMuted: s.alanaMuted,
         alanaPtt: s.alanaPtt,
         crewNames: s.crewNames,
+        crewWatches: s.crewWatches,
         rpm: s.rpm,
         profile: s.profile,
         route: s.route,
@@ -100,6 +106,7 @@ export const useSettings = create<SettingsState>()(
           state.route.waypoints = [];
         }
         if (!Array.isArray(state?.crewNames) && state) state.crewNames = [];
+        if (!Array.isArray(state?.crewWatches) && state) state.crewWatches = [];
       },
     },
   ),

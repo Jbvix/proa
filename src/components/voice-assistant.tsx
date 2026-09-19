@@ -27,7 +27,7 @@ import {
 } from "@/lib/voice-listen";
 import { buildVoiceContext, type VoiceTurn } from "@/lib/voice-context";
 import { hearWake, isAlanaEcho } from "@/lib/wake-word";
-import { extractCrewNames, mergeCrew } from "@/lib/crew";
+import { extractCrewNames, mergeCrew, parseWatchAsk, pruneWatches, dueWatch, upsertWatch, watchLine } from "@/lib/crew";
 import { passageOf } from "@/lib/passage";
 import { tickWatch, WATCH_IDLE, type WatchKind, type WatchState } from "@/lib/voice-watch";
 import { cn } from "@/lib/utils";
@@ -80,6 +80,8 @@ export function AlanaRadio() {
   const setPtt = useSettings((s) => s.setAlanaPtt);
   const crewNames = useSettings((s) => s.crewNames);
   const setCrewNames = useSettings((s) => s.setCrewNames);
+  const crewWatches = useSettings((s) => s.crewWatches);
+  const setCrewWatches = useSettings((s) => s.setCrewWatches);
   const tab = useBridge((s) => s.tab);
 
   const [open, setOpen] = useState(false);
@@ -121,6 +123,7 @@ export function AlanaRadio() {
   const profileRef = useRef(profile);
   const tabRef = useRef(tab);
   const crewRef = useRef(crewNames);
+  const watchesRef = useRef(crewWatches);
   const turnsRef = useRef(turns);
   engineRef.current = engine;
   meteoRef.current = meteo;
@@ -129,6 +132,7 @@ export function AlanaRadio() {
   profileRef.current = profile;
   tabRef.current = tab;
   crewRef.current = crewNames;
+  watchesRef.current = crewWatches;
   turnsRef.current = turns;
   modeRef.current = mode;
   lastLineRef.current = lastLine;
@@ -362,6 +366,37 @@ export function AlanaRadio() {
     return true;
   }
 
+  async function speakWatch(name: string, endMs: number) {
+    if (muted || speaking.current || asking.current || locking.current) return false;
+    if (performance.now() - lastAlertAt.current < 12_000) return false;
+    lastAlertAt.current = performance.now();
+    locking.current = true;
+    void unlockVoice();
+    const text = watchLine({ name, endMs, fired: false });
+    rememberLine(text);
+    setTurns((t) => [...t, { role: "assistant", content: text }]);
+    modeRef.current = "session";
+    setMode("session");
+    bumpSession();
+    setBusy(true);
+    setThinking(true);
+    try {
+      const res = await fetch("/api/voice", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ say: text }),
+        signal: AbortSignal.timeout(20_000),
+      });
+      const data = (await res.json()) as { ok?: boolean; audio?: string | null; text?: string };
+      await playReply(data.text ?? text, data.audio ?? null);
+    } finally {
+      setBusy(false);
+      setThinking(false);
+      locking.current = false;
+    }
+    return true;
+  }
+
   async function wake(rest: string, goingSleep: boolean) {
     if (asking.current || locking.current) return;
     locking.current = true;
@@ -451,6 +486,17 @@ export function AlanaRadio() {
         crewRef.current = next;
         setCrewNames(next);
       }
+      const watch = parseWatchAsk(q, crewRef.current, Date.now());
+      if (watch) {
+        const nextNames = mergeCrew(crewRef.current, [watch.name]);
+        if (nextNames !== crewRef.current) {
+          crewRef.current = nextNames;
+          setCrewNames(nextNames);
+        }
+        const nextWatches = upsertWatch(pruneWatches(watchesRef.current, Date.now()), watch);
+        watchesRef.current = nextWatches;
+        setCrewWatches(nextWatches);
+      }
       const ctx = buildVoiceContext({
         engine: engineRef.current,
         meteo: meteoRef.current,
@@ -459,6 +505,7 @@ export function AlanaRadio() {
         profile: profileRef.current,
         tab: tabRef.current,
         crewNames: crewRef.current,
+        crewWatches: watchesRef.current,
       });
       const res = await fetch("/api/voice", {
         method: "POST",
@@ -570,6 +617,25 @@ export function AlanaRadio() {
     }
     const id = window.setInterval(() => {
       if (muted || speaking.current || asking.current || cooling.current || locking.current) return;
+      const now = Date.now();
+      const watches = pruneWatches(watchesRef.current, now);
+      const pruned =
+        watches.length !== watchesRef.current.length ||
+        watches.some((w, i) => w.fired !== watchesRef.current[i]?.fired);
+      if (pruned) {
+        watchesRef.current = watches;
+        setCrewWatches(watches);
+      }
+      const due = dueWatch(watches, now);
+      if (due) {
+        const marked = watches.map((w) =>
+          w.name === due.name && w.endMs === due.endMs ? { ...w, fired: true } : w,
+        );
+        watchesRef.current = marked;
+        setCrewWatches(marked);
+        void speakWatch(due.name, due.endMs);
+        return;
+      }
       const engine = engineRef.current;
       const p = passageOf(routeRef.current, engine);
       const hit = tickWatch(watchRef.current, {
@@ -739,9 +805,9 @@ export function AlanaRadio() {
               {turns.length === 0 ? (
                 <p className="text-sm text-muted">
                   Chama <span className="text-fg">Alana</span> pelo nome. Só
-                  voz. Se apresentar, ela guarda o nome e papo no passadiço
-                  vale — cidade, ETA, enchente, vento, onda, maré, o que
-                  vier da viagem.
+                  voz. Se apresentar, ela guarda o nome. Pede pra avisar o
+                  fim de turno pelo nome. Papo no passadiço vale — cidade,
+                  ETA, enchente, vento, onda, maré.
                 </p>
               ) : (
                 turns.map((t, i) => (

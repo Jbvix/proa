@@ -40,6 +40,8 @@ Combustível / RPM: combustivel.conselho, aFavor, contra, rpm.min–max, rpmSuge
 
 Se alguém se apresentar, use o nome na hora e trate como colega. tripulacao[] são nomes que você já conhece.
 
+Turno / vigia: turnos[] tem nome, fim (dia e hora) e faltaMin. Se pedirem pra AVISAR o fim de turno, confirme pelo NOME e o horário. O rádio chama o colega pelo nome na hora. Não invente turno que não está em turnos. Se faltar o nome ou a hora, pergunte.
+
 Relatório / situação: 5 a 8 frases corridas — posição; SOG/rumo/falta; Hs; vento e corrente; RPM/combustível; ETA e enchente. Pergunta pontual = 2 a 5 frases. Papo = pode ser mais curto.
 
 Agora (relógio local) está em agora. App: derrota GPX; mar ao vivo do casco; vento/corrente Open-Meteo; previsão nos waypoints. Não fale de código, API, chave, servidor.`;
@@ -107,6 +109,16 @@ export async function askGrokVoice(
 
   const audio = await speakGrok(apiKey, text);
   return { text, audio };
+}
+
+export async function speakLine(
+  apiKey: string,
+  text: string,
+): Promise<{ text: string; audio: string | null }> {
+  const line = clip(text, 220);
+  if (!line) return { text: ALANA_GREET, audio: null };
+  const audio = await speakGrok(apiKey, line);
+  return { text: line, audio };
 }
 
 export async function speakCanned(

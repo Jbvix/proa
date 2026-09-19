@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { env } from "@/lib/env.server";
 import { isCannedKind } from "@/lib/voice-copy";
-import { askGrokVoice, hearGrok, speakCanned } from "@/lib/voice-api";
+import { askGrokVoice, hearGrok, speakCanned, speakLine } from "@/lib/voice-api";
 import type { VoiceContext, VoiceTurn } from "@/lib/voice-context";
 
 function fail(status: number, error: string, detail?: string) {
@@ -25,6 +25,7 @@ export const Route = createFileRoute("/api/voice")({
           }
           let body: {
             canned?: unknown;
+            say?: string;
             hear?: string;
             mime?: string;
             message?: string;
@@ -38,6 +39,11 @@ export const Route = createFileRoute("/api/voice")({
           }
           if (isCannedKind(body.canned)) {
             const out = await speakCanned(key, body.canned);
+            return Response.json({ ok: true, text: out.text, audio: out.audio });
+          }
+          const say = String(body.say ?? "").trim();
+          if (say) {
+            const out = await speakLine(key, say);
             return Response.json({ ok: true, text: out.text, audio: out.audio });
           }
           const hear = String(body.hear ?? "");
