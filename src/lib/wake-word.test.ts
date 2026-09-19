@@ -54,6 +54,7 @@ test("echo of greet and last line is ignored", () => {
   assert.equal(isAlanaEcho("Ó o balanço de banda. Tá forte. Segura o rumo e a faixa de RPM."), true);
   assert.equal(isAlanaEcho("Não peguei. Manda de novo."), true);
   assert.equal(isAlanaEcho("Jossian. Fim de turno. 08:00."), true);
+  assert.equal(isAlanaEcho("Pedro. 5 minutos pro fim de turno."), true);
 });
 
 const LAST =

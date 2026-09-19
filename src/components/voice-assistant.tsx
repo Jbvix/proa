@@ -27,7 +27,8 @@ import {
 } from "@/lib/voice-listen";
 import { buildVoiceContext, type VoiceTurn } from "@/lib/voice-context";
 import { hearWake, isAlanaEcho } from "@/lib/wake-word";
-import { extractCrewNames, mergeCrew, parseWatchAsk, pruneWatches, dueWatch, upsertWatch, watchLine } from "@/lib/crew";
+import { extractCrewNames, mergeCrew, parseWatchAsk, parseWatchCancel, pruneWatches, dueWarn, dueWatch, dropWatch, upsertWatch, watchLine, watchWarnLine } from "@/lib/crew";
+import { formatEtaClock } from "@/lib/utils";
 import { passageOf } from "@/lib/passage";
 import { tickWatch, WATCH_IDLE, type WatchKind, type WatchState } from "@/lib/voice-watch";
 import { cn } from "@/lib/utils";
@@ -371,13 +372,16 @@ export function AlanaRadio() {
     return true;
   }
 
-  async function speakWatch(name: string, endMs: number) {
+  async function speakWatch(kind: "warn" | "end", name: string, endMs: number) {
     if (muted || speaking.current || asking.current || locking.current) return false;
     if (performance.now() - lastAlertAt.current < 12_000) return false;
     lastAlertAt.current = performance.now();
     locking.current = true;
     void unlockVoice();
-    const text = watchLine({ name, endMs, fired: false });
+    const text =
+      kind === "warn"
+        ? watchWarnLine({ name, endMs, warned: false, fired: false })
+        : watchLine({ name, endMs, warned: true, fired: false });
     rememberLine(text);
     setTurns((t) => [...t, { role: "assistant", content: text }]);
     modeRef.current = "session";
@@ -490,6 +494,12 @@ export function AlanaRadio() {
         const next = mergeCrew(crewRef.current, found);
         crewRef.current = next;
         setCrewNames(next);
+      }
+      const cancel = parseWatchCancel(q, crewRef.current, watchesRef.current);
+      if (cancel) {
+        const nextWatches = dropWatch(watchesRef.current, cancel);
+        watchesRef.current = nextWatches;
+        setCrewWatches(nextWatches);
       }
       const watch = parseWatchAsk(q, crewRef.current, Date.now());
       if (watch) {
@@ -626,19 +636,32 @@ export function AlanaRadio() {
       const watches = pruneWatches(watchesRef.current, now);
       const pruned =
         watches.length !== watchesRef.current.length ||
-        watches.some((w, i) => w.fired !== watchesRef.current[i]?.fired);
+        watches.some(
+          (w, i) =>
+            w.fired !== watchesRef.current[i]?.fired || w.warned !== watchesRef.current[i]?.warned,
+        );
       if (pruned) {
         watchesRef.current = watches;
         setCrewWatches(watches);
       }
-      const due = dueWatch(watches, now);
-      if (due) {
+      const warn = dueWarn(watches, now);
+      if (warn) {
         const marked = watches.map((w) =>
-          w.name === due.name && w.endMs === due.endMs ? { ...w, fired: true } : w,
+          w.name === warn.name && w.endMs === warn.endMs ? { ...w, warned: true } : w,
         );
         watchesRef.current = marked;
         setCrewWatches(marked);
-        void speakWatch(due.name, due.endMs);
+        void speakWatch("warn", warn.name, warn.endMs);
+        return;
+      }
+      const due = dueWatch(watches, now);
+      if (due) {
+        const marked = watches.map((w) =>
+          w.name === due.name && w.endMs === due.endMs ? { ...w, warned: true, fired: true } : w,
+        );
+        watchesRef.current = marked;
+        setCrewWatches(marked);
+        void speakWatch("end", due.name, due.endMs);
         return;
       }
       const engine = engineRef.current;
@@ -813,6 +836,21 @@ export function AlanaRadio() {
               </button>
             </div>
             <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 pb-3">
+              {crewWatches.some((w) => !w.fired) ? (
+                <div className="space-y-1 rounded-md bg-bg px-3 py-2">
+                  {crewWatches
+                    .filter((w) => !w.fired)
+                    .map((w) => (
+                      <p
+                        key={`${w.name}-${w.endMs}`}
+                        className="flex items-baseline justify-between gap-3 text-sm"
+                      >
+                        <span className="text-fg">{w.name}</span>
+                        <span className="text-subtle">{formatEtaClock(w.endMs)}</span>
+                      </p>
+                    ))}
+                </div>
+              ) : null}
               {turns.length === 0 ? (
                 <p className="text-sm text-muted">
                   Chama <span className="text-fg">Alana</span> pelo nome. Só

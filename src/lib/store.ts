@@ -106,7 +106,17 @@ export const useSettings = create<SettingsState>()(
           state.route.waypoints = [];
         }
         if (!Array.isArray(state?.crewNames) && state) state.crewNames = [];
-        if (!Array.isArray(state?.crewWatches) && state) state.crewWatches = [];
+        if (state) {
+          const raw = Array.isArray(state.crewWatches) ? state.crewWatches : [];
+          state.crewWatches = raw
+            .map((w) => ({
+              name: String(w?.name ?? "").trim(),
+              endMs: Number(w?.endMs) || 0,
+              warned: !!(w as { warned?: boolean }).warned || !!w?.fired,
+              fired: !!w?.fired,
+            }))
+            .filter((w) => w.name && w.endMs);
+        }
       },
     },
   ),

@@ -1,12 +1,16 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  dueWarn,
   dueWatch,
+  dropWatch,
   extractCrewNames,
   mergeCrew,
   parseClockPt,
   parseWatchAsk,
+  parseWatchCancel,
   watchLine,
+  watchWarnLine,
 } from "./crew.ts";
 
 test("picks up a bridge intro", () => {
@@ -57,9 +61,27 @@ test("watch ask captures name and time", () => {
 
 test("due watch fires in the window and the line uses the name", () => {
   const now = Date.parse("2026-09-18T08:00:00-03:00");
-  const w = { name: "Jossian", endMs: now, fired: false };
+  const w = { name: "Jossian", endMs: now, warned: true, fired: false };
   assert.equal(dueWatch([w], now)?.name, "Jossian");
   assert.match(watchLine(w), /Jossian/);
   assert.match(watchLine(w), /Fim de turno/);
   assert.equal(dueWatch([{ ...w, fired: true }], now), null);
 });
+
+test("five-minute warn calls the name before the end", () => {
+  const end = Date.parse("2026-09-18T08:00:00-03:00");
+  const w = { name: "Pedro", endMs: end, warned: false, fired: false };
+  assert.equal(dueWarn([w], end - 5 * 60_000)?.name, "Pedro");
+  assert.equal(dueWarn([{ ...w, warned: true }], end - 5 * 60_000), null);
+  assert.match(watchWarnLine(w, end - 5 * 60_000), /Pedro/);
+  assert.match(watchWarnLine(w, end - 5 * 60_000), /5 minutos/);
+});
+
+test("cancel drops the named watch", () => {
+  const now = Date.parse("2026-09-18T08:00:00-03:00");
+  const watches = [{ name: "Jossian", endMs: now + 3600_000, warned: false, fired: false }];
+  assert.equal(parseWatchCancel("cancela o turno do Jossian", ["Jossian"], watches), "Jossian");
+  assert.equal(parseWatchCancel("cancela o aviso", ["Jossian"], watches), "Jossian");
+  assert.deepEqual(dropWatch(watches, "Jossian"), []);
+});
+

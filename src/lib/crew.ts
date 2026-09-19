@@ -39,8 +39,11 @@ const INTRO_RE =
 export type CrewWatch = {
   name: string;
   endMs: number;
+  warned: boolean;
   fired: boolean;
 };
+
+export const WATCH_WARN_MS = 5 * 60_000;
 
 function titleName(s: string) {
   return s.replace(/[a-zà-ú]+/gi, (w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
@@ -152,11 +155,27 @@ export function parseWatchAsk(raw: string, crew: string[], nowMs: number): CrewW
   const names = mergeCrew(crew, intros);
   const name = pickName(t, names) ?? intros[0] ?? null;
   if (!name) return null;
-  return { name, endMs, fired: false };
+  return { name, endMs, warned: false, fired: false };
+}
+
+export function parseWatchCancel(raw: string, crew: string[], watches: CrewWatch[]): string | null {
+  const t = foldPt(raw);
+  if (!t || !/cancela|esquece|nao (precisa|quero) avisar|tira o aviso/.test(t)) return null;
+  const name = pickName(t, crew);
+  if (name) return name;
+  const live = watches.filter((w) => !w.fired);
+  if (live.length === 1) return live[0]!.name;
+  return nameInText(t, watches.map((w) => w.name));
 }
 
 export function watchLine(w: CrewWatch) {
   return `${w.name}. Fim de turno. ${formatEtaClock(w.endMs)}.`;
+}
+
+export function watchWarnLine(w: CrewWatch, nowMs = Date.now()) {
+  const min = Math.max(1, Math.round((w.endMs - nowMs) / 60_000));
+  if (min <= 1) return `${w.name}. Um minuto pro fim de turno.`;
+  return `${w.name}. ${min} minutos pro fim de turno.`;
 }
 
 export function upsertWatch(prev: CrewWatch[], next: CrewWatch): CrewWatch[] {
@@ -164,13 +183,25 @@ export function upsertWatch(prev: CrewWatch[], next: CrewWatch): CrewWatch[] {
   return [...rest, next].slice(-6);
 }
 
+export function dropWatch(prev: CrewWatch[], name: string): CrewWatch[] {
+  return prev.filter((w) => w.name.toLowerCase() !== name.toLowerCase());
+}
+
 export function pruneWatches(watches: CrewWatch[], nowMs: number): CrewWatch[] {
   return watches
     .map((w) => {
-      if (!w.fired && nowMs > w.endMs + 8 * 60_000) return { ...w, fired: true };
+      if (!w.fired && nowMs > w.endMs + 8 * 60_000) return { ...w, warned: true, fired: true };
       return w;
     })
     .filter((w) => w.endMs > nowMs - 36 * 3_600_000);
+}
+
+export function dueWarn(watches: CrewWatch[], nowMs: number): CrewWatch | null {
+  for (const w of watches) {
+    if (w.fired || w.warned) continue;
+    if (nowMs >= w.endMs - WATCH_WARN_MS && nowMs < w.endMs) return w;
+  }
+  return null;
 }
 
 export function dueWatch(watches: CrewWatch[], nowMs: number): CrewWatch | null {
@@ -180,3 +211,4 @@ export function dueWatch(watches: CrewWatch[], nowMs: number): CrewWatch | null 
   }
   return null;
 }
+
