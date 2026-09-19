@@ -1,4 +1,6 @@
-const WAKE_RE = /\balana\b/;
+/** The name Alana, including how STT usually misspells it. Not other words. */
+const WAKE_RE =
+  /\b(?:oi|ola|eai|e ai|fala)?\s*(?:h?a[\s.\-]*l+a+n+a+h?s?|olana|elana|alanna)\b/;
 
 const SLEEP_RE =
   /^(tchau|xau|flw|desliga|pode parar|silencio|cala a boca|ate ja|ate logo|valeu|obrigad[ao]|depois a gente se fala)(?:\s+alana)?\.?$/;
@@ -90,6 +92,8 @@ function digitHits(a: string, b: string): number {
 export function isAlanaEcho(raw: string, lastLine?: string | null) {
   const t = foldPt(raw);
   if (!t) return true;
+  const call = hearWake(raw);
+  if (call.woke && call.rest.length < 2) return false;
   if (t.length < 4) return true;
   if (/^(oi|ola|eai|eae)\.?$/.test(t)) return true;
   if (/na escuta/.test(t)) return true;

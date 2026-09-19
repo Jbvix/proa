@@ -182,11 +182,11 @@ export function AlanaRadio() {
       setThinking(false);
       return;
     }
-    if (heardEcho(text)) {
-      setThinking(false);
-      return;
-    }
     if (fromPtt) {
+      if (heardEcho(text) && !parse.woke) {
+        setThinking(false);
+        return;
+      }
       if (parse.sleep) {
         void sleep();
         return;
@@ -196,7 +196,11 @@ export function AlanaRadio() {
         void wake("", false);
         return;
       }
-      if (!heardEcho(q)) void ask(q);
+      if (parse.rest && heardEcho(parse.rest)) {
+        setThinking(false);
+        return;
+      }
+      void ask(q);
       return;
     }
     if (!parse.woke || !isFinal) {

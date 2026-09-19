@@ -196,8 +196,10 @@ export async function hearGrok(
   const form = new FormData();
   form.append("model", "grok-voice-transcribe-2.0");
   form.append("language", "pt");
-  form.append("vad_threshold", "0.18");
+  form.append("vad_threshold", "0.08");
   form.append("keyterm", "Alana");
+  form.append("keyterm", "a Lana");
+  form.append("keyterm", "Olana");
   form.append("file", new Blob([new Uint8Array(raw)], { type }), `clip.${kind}`);
   const res = await fetch("https://api.x.ai/v1/stt", {
     method: "POST",
@@ -206,6 +208,7 @@ export async function hearGrok(
     ignoreResponseError: true,
   } as FetchOpts);
   if (!res.ok) return "";
-  const body = (await res.json()) as { text?: string };
-  return clip(String(body.text ?? "").trim(), 480);
+  const body = (await res.json()) as { text?: string; words?: { text?: string }[] };
+  const fromWords = (body.words ?? []).map((w) => String(w.text ?? "").trim()).filter(Boolean).join(" ");
+  return clip(String(body.text || fromWords || "").trim(), 480);
 }

@@ -442,7 +442,7 @@ async function sendClip(fromPtt: boolean) {
   const raw = ring.sliceLast(samples);
   pipeState = "waiting";
   emit();
-  if (raw.length < inputHz * 0.18) {
+  if (raw.length < inputHz * 0.12) {
     lastClip = "short";
     pipeState = "listening";
     emit();
