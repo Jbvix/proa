@@ -170,10 +170,8 @@ async function postStt(
   form.append("model", "grok-voice-transcribe-2.0");
   form.append("language", language);
   form.append("format", "true");
-  form.append("vad_threshold", "0.08");
+  form.append("vad_threshold", "0.14");
   form.append("keyterm", "Alana");
-  form.append("keyterm", "a Lana");
-  form.append("keyterm", "Olana");
   form.append("file", new Blob([new Uint8Array(raw)], { type }), `clip.${kind}`);
   return fetch("https://api.x.ai/v1/stt", {
     method: "POST",

@@ -21,13 +21,20 @@ test("Alana and STT misspellings of the name wake", () => {
   assert.equal(hearWake("Alana?").woke, true);
   assert.equal(hearWake("a lana").woke, true);
   assert.equal(hearWake("Allana me fala o eta").woke, true);
-  assert.equal(hearWake("olana, qual o hs").woke, true);
-  assert.equal(hearWake("elana tchau").woke, true);
   assert.equal(hearWake("halana relatório").woke, true);
   assert.equal(hearWake("alanna relatório").woke, true);
   assert.equal(hearWake("alanah, eta").woke, true);
   assert.equal(hearWake("Helena, eta").woke, false);
   assert.equal(hearWake("lana").woke, false);
+});
+
+test("bridge chatter is not a wake", () => {
+  assert.equal(hearWake("olha na derrota").woke, false);
+  assert.equal(hearWake("e lá na costa").woke, false);
+  assert.equal(hearWake("a lancha passou").woke, false);
+  assert.equal(hearWake("qual o vento").woke, false);
+  assert.equal(hearWake("olana, qual o hs").woke, false);
+  assert.equal(hearWake("elana tchau").woke, false);
 });
 
 test("plain question does not wake", () => {

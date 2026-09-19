@@ -178,10 +178,10 @@ export function AlanaRadio() {
   function handleHeard(heard: string, isFinal: boolean, fromPtt = false, miss = false, print?: number[]) {
     const text = heard.trim();
     const parse = hearWake(text);
-    const gated = fromPtt || parse.woke;
     if (print?.length) lastPrint.current = print;
     if (blocked() || performance.now() < liveAt.current) {
-      if (gated && (text || miss)) {
+      const realAsk = parse.woke && parse.rest.length >= 6 && !heardEcho(parse.rest);
+      if (realAsk) {
         pendingHear.current = { text, ptt: fromPtt, miss, print };
         const until = Math.max(deafUntil.current, liveAt.current);
         scheduleFlush(until - performance.now());
@@ -193,7 +193,7 @@ export function AlanaRadio() {
       return;
     }
     if (fromPtt) {
-      if (heardEcho(text) && !parse.woke) {
+      if (!parse.woke) {
         setThinking(false);
         return;
       }
@@ -201,16 +201,15 @@ export function AlanaRadio() {
         void sleep();
         return;
       }
-      const q = parse.woke ? parse.rest : text;
-      if (!q) {
+      if (!parse.rest) {
         void wake("", false);
         return;
       }
-      if (parse.rest && heardEcho(parse.rest)) {
+      if (heardEcho(text) || heardEcho(parse.rest)) {
         setThinking(false);
         return;
       }
-      void ask(q);
+      void ask(parse.rest);
       return;
     }
     if (!parse.woke || !isFinal) {
@@ -221,7 +220,7 @@ export function AlanaRadio() {
       setThinking(false);
       return;
     }
-    if (parse.rest && heardEcho(parse.rest)) {
+    if (heardEcho(text) || (parse.rest && heardEcho(parse.rest))) {
       setThinking(false);
       return;
     }
@@ -317,12 +316,13 @@ export function AlanaRadio() {
     try {
       if (audio) {
         const dur = await playVoiceMp3(audio);
-        extra = Math.min(1_600, Math.max(0, dur * 0.08));
+        extra = Math.min(1_600, Math.max(extra, dur * 0.08));
       }
-      if (/sou a alana/i.test(text)) {
-        extra = Math.max(extra, 1_400);
-        introEchoUntil.current = performance.now() + 2_800;
-      }
+      introEchoUntil.current = Math.max(
+        introEchoUntil.current,
+        performance.now() + (/sou a alana/i.test(text) ? 3_600 : 2_400),
+      );
+      if (/sou a alana/i.test(text)) extra = Math.max(extra, 1_400);
       await new Promise((r) => window.setTimeout(r, tail));
     } finally {
       speaking.current = false;
@@ -331,7 +331,6 @@ export function AlanaRadio() {
       resumeBridgeListen();
       coolThenArm(extra);
     }
-    void text;
   }
 
   async function fetchSay(text: string): Promise<string | null> {
@@ -371,7 +370,7 @@ export function AlanaRadio() {
   async function speakAlert(kind: WatchKind) {
     if (kind !== "xte") return false;
     if (muted || speaking.current || asking.current || locking.current) return false;
-    if (performance.now() - lastAlertAt.current < 12_000) return false;
+    if (performance.now() - lastAlertAt.current < 45_000) return false;
     lastAlertAt.current = performance.now();
     locking.current = true;
     void unlockVoice();
@@ -636,7 +635,7 @@ export function AlanaRadio() {
         capturing: !!engine?.capturing,
       });
       if (hit.alert) {
-        if (performance.now() - lastAlertAt.current < 12_000) return;
+        if (performance.now() - lastAlertAt.current < 45_000) return;
         watchRef.current = hit.state;
         void speakAlert(hit.alert);
         return;
@@ -647,23 +646,16 @@ export function AlanaRadio() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [muted]);
 
-  const listening = mode === "wake" || mode === "session";
   const lost = snap?.state === "mic_lost" || snap?.state === "suspended";
-  const userTalking =
-    snap?.state === "user_speaking" || pttHeld || snap?.vad === "speech";
   const face: AlanaFace = muted
     ? "off"
     : saying
       ? "falando"
-      : thinking || snap?.state === "waiting"
+      : thinking
         ? "processando"
         : lost
           ? "off"
-          : userTalking
-            ? "ouvindo"
-            : listening
-              ? "espera"
-              : "off";
+          : "espera";
   const faceLabel = muted
     ? "desligada"
     : lost
@@ -671,7 +663,7 @@ export function AlanaRadio() {
       : ptt && face === "espera" && !pttHeld
         ? "aperte pra falar"
         : ALANA_FACE_LABEL[face];
-  const hearLevel = face === "ouvindo" ? Math.max(0.12, snap?.level ?? 0.12) : 0;
+  const hearLevel = 0;
 
   function beginHold() {
     held.current = false;
@@ -752,9 +744,7 @@ export function AlanaRadio() {
                 ? "text-accent"
                 : face === "processando"
                   ? "text-warn"
-                  : face === "ouvindo"
-                    ? "text-ok"
-                    : "text-subtle",
+                  : "text-subtle",
             )}
           />
           <span className="mr-1 font-display italic text-accent">Alana</span>

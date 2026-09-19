@@ -46,10 +46,18 @@ test("Alana calls XTE only after crossing the limit, then waits to reset", () =>
   let a = tickWatch(s, { ...underway, xteNm: 0.1 });
   assert.equal(a.alert, null);
   a = tickWatch(a.state, { ...underway, xteNm: XTE_ON_NM });
+  assert.equal(a.alert, null);
+  a = tickWatch(a.state, { ...underway, xteNm: XTE_ON_NM });
+  assert.equal(a.alert, null);
+  a = tickWatch(a.state, { ...underway, xteNm: XTE_ON_NM });
   assert.equal(a.alert, "xte");
   a = tickWatch(a.state, { ...underway, xteNm: 0.4 });
   assert.equal(a.alert, null);
   a = tickWatch(a.state, { ...underway, xteNm: 0.05 });
+  assert.equal(a.alert, null);
+  a = tickWatch(a.state, { ...underway, xteNm: XTE_ON_NM });
+  assert.equal(a.alert, null);
+  a = tickWatch(a.state, { ...underway, xteNm: XTE_ON_NM });
   assert.equal(a.alert, null);
   a = tickWatch(a.state, { ...underway, xteNm: XTE_ON_NM });
   assert.equal(a.alert, "xte");

@@ -1,6 +1,6 @@
-/** The name Alana, including how STT usually misspells it. Not other words. */
-const WAKE_RE =
-  /\b(?:oi|ola|eai|e ai|fala)?\s*(?:h?a[\s.\-]*l+a+n+a+h?s?|olana|elana|alanna)\b/;
+/** One-token Alana. "a lana" only at the start (STT split). No olana/elana — those fire on "olha na" / "e lá na". */
+const NAME_RE = /\b(h?al{1,2}an+a+h?s?)\b/;
+const SPLIT_RE = /^(?:oi|ola|eai|e ai|fala)?\s*(a\s+lana)\b/;
 
 const SLEEP_RE =
   /^(tchau|xau|flw|desliga|pode parar|silencio|cala a boca|ate ja|ate logo|valeu|obrigad[ao]|depois a gente se fala)(?:\s+alana)?\.?$/;
@@ -50,6 +50,17 @@ export function foldPt(s: string) {
     .trim();
 }
 
+function nameHit(t: string): { index: number; len: number } | null {
+  const one = t.match(NAME_RE);
+  if (one && one.index != null) return { index: one.index, len: one[1]!.length };
+  const split = t.match(SPLIT_RE);
+  if (split && split[1]) {
+    const i = t.indexOf(split[1]);
+    return { index: i, len: split[1].length };
+  }
+  return null;
+}
+
 export function hearWake(raw: string): {
   woke: boolean;
   rest: string;
@@ -58,9 +69,9 @@ export function hearWake(raw: string): {
   const t = foldPt(raw);
   if (!t) return { woke: false, rest: "", sleep: false };
   const sleep = SLEEP_RE.test(t);
-  const m = t.match(WAKE_RE);
-  if (!m) return { woke: false, rest: t, sleep };
-  const rest = t.slice((m.index ?? 0) + m[0].length).replace(/^[\s,.\-:;?!]+/, "");
+  const hit = nameHit(t);
+  if (!hit) return { woke: false, rest: t, sleep };
+  const rest = t.slice(hit.index + hit.len).replace(/^[\s,.\-:;?!]+/, "");
   return { woke: true, rest, sleep: SLEEP_RE.test(rest) || (sleep && rest.length < 12) };
 }
 
@@ -94,7 +105,8 @@ export function isAlanaEcho(raw: string, lastLine?: string | null) {
   if (!t) return true;
   const call = hearWake(raw);
   if (call.woke && call.rest.length < 2) {
-    if (/sou a alana/.test(foldPt(lastLine ?? ""))) return true;
+    const last = foldPt(lastLine ?? "");
+    if (/sou a alana|to aqui|pode mandar|qual o seu nome/.test(last)) return true;
     return false;
   }
   if (t.length < 4) return true;
@@ -104,6 +116,8 @@ export function isAlanaEcho(raw: string, lastLine?: string | null) {
   if (/manda ai/.test(t) && t.length < 64) return true;
   if (/abriu demais da derrota/.test(t)) return true;
   if (/volta pra linha/.test(t) && t.length < 96) return true;
+  if (/um momento/.test(t) && t.length < 80) return true;
+  if (/deixa eu verificar/.test(t)) return true;
   if (/balanco de banda/.test(t)) return true;
   if (/segura o rumo/.test(t) && t.length < 96) return true;
   if (/me chama (quando|se) precisar/.test(t)) return true;
@@ -120,6 +134,6 @@ export function isAlanaEcho(raw: string, lastLine?: string | null) {
   if (ja >= 0.36) return true;
   if (digitHits(t, last) >= 2 && t.length > 18) return true;
   if (OPENER_RE.test(t) && ja >= 0.22) return true;
-  if (WAKE_RE.test(t) && ja >= 0.22) return true;
+  if (NAME_RE.test(t) && ja >= 0.22) return true;
   return false;
 }

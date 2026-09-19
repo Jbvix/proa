@@ -7,9 +7,10 @@ export type WatchKind = "xte";
 
 export type WatchState = {
   xteHot: boolean;
+  xteHits: number;
 };
 
-export const WATCH_IDLE: WatchState = { xteHot: false };
+export const WATCH_IDLE: WatchState = { xteHot: false, xteHits: 0 };
 
 export function tickWatch(
   prev: WatchState,
@@ -26,17 +27,22 @@ export function tickWatch(
   }
 
   let xteHot = prev.xteHot;
+  let xteHits = prev.xteHits;
   let alert: WatchKind | null = null;
 
   const xte = input.xteNm;
   if (xte != null) {
-    if (!xteHot && xte >= XTE_ON_NM) {
-      xteHot = true;
-      alert = "xte";
-    } else if (xteHot && xte < XTE_OFF_NM) {
+    if (xte >= XTE_ON_NM) {
+      xteHits += 1;
+      if (!xteHot && xteHits >= 3) {
+        xteHot = true;
+        alert = "xte";
+      }
+    } else if (xte < XTE_OFF_NM) {
+      xteHits = 0;
       xteHot = false;
     }
   }
 
-  return { state: { xteHot }, alert };
+  return { state: { xteHot, xteHits }, alert };
 }
