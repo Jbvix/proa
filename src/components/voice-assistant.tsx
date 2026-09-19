@@ -3,7 +3,7 @@ import { X } from "lucide-react";
 import { AlanaMark, ALANA_FACE_LABEL, type AlanaFace } from "@/components/alana-mark";
 import { useLiveBridge } from "@/components/bridge-provider";
 import { useBridge, useSettings } from "@/lib/store";
-import { ALANA_BYE, ALANA_GREET, ALANA_ROLL, ALANA_XTE, type CannedKind } from "@/lib/voice-copy";
+import { ALANA_XTE, type CannedKind } from "@/lib/voice-copy";
 import {
   holdEchoCanceller,
   playVoiceMp3,
@@ -27,9 +27,10 @@ import {
 } from "@/lib/voice-listen";
 import { buildVoiceContext, type VoiceTurn } from "@/lib/voice-context";
 import { hearWake, isAlanaEcho } from "@/lib/wake-word";
-import { extractCrewNames, mergeCrew, parseWatchAsk, parseWatchCancel, pruneWatches, dueWarn, dueWatch, dropWatch, upsertWatch, watchLine, watchWarnLine } from "@/lib/crew";
+import { extractCrewNames, extractNameAnswer, mergeCrew, parseWatchAsk, parseWatchCancel, pruneWatches, dropWatch, upsertWatch } from "@/lib/crew";
 import { formatEtaClock } from "@/lib/utils";
 import { quickReply } from "@/lib/voice-quick";
+import { greetLine, byeLine, withHold, askedForName } from "@/lib/alana-presence";
 import { passageOf } from "@/lib/passage";
 import { tickWatch, WATCH_IDLE, type WatchKind, type WatchState } from "@/lib/voice-watch";
 import { cn } from "@/lib/utils";
@@ -303,6 +304,7 @@ export function AlanaRadio() {
         const dur = await playVoiceMp3(audio);
         extra = Math.min(1_600, Math.max(0, dur * 0.08));
       }
+      if (/sou a alana/i.test(text)) extra = Math.max(extra, 900);
       await new Promise((r) => window.setTimeout(r, tail));
     } finally {
       speaking.current = false;
@@ -346,47 +348,22 @@ export function AlanaRadio() {
     void fetchCanned("greet");
     void fetchCanned("miss");
     void fetchCanned("xte");
-    void fetchCanned("roll");
   }
 
   async function speakAlert(kind: WatchKind) {
+    if (kind !== "xte") return false;
     if (muted || speaking.current || asking.current || locking.current) return false;
     if (performance.now() - lastAlertAt.current < 12_000) return false;
     lastAlertAt.current = performance.now();
     locking.current = true;
     void unlockVoice();
-    const text = kind === "roll" ? ALANA_ROLL : ALANA_XTE;
+    const text = ALANA_XTE;
     rememberLine(text);
     setTurns((t) => [...t, { role: "assistant", content: text }]);
     setBusy(true);
     setThinking(true);
     try {
-      const audio = await fetchCanned(kind);
-      await playReply(text, audio);
-    } finally {
-      setBusy(false);
-      setThinking(false);
-      locking.current = false;
-    }
-    return true;
-  }
-
-  async function speakWatch(kind: "warn" | "end", name: string, endMs: number) {
-    if (muted || speaking.current || asking.current || locking.current) return false;
-    if (performance.now() - lastAlertAt.current < 12_000) return false;
-    lastAlertAt.current = performance.now();
-    locking.current = true;
-    void unlockVoice();
-    const text =
-      kind === "warn"
-        ? watchWarnLine({ name, endMs, warned: false, fired: false })
-        : watchLine({ name, endMs, warned: true, fired: false });
-    rememberLine(text);
-    setTurns((t) => [...t, { role: "assistant", content: text }]);
-    setBusy(true);
-    setThinking(true);
-    try {
-      const audio = await fetchSay(text);
+      const audio = await fetchCanned("xte");
       await playReply(text, audio);
     } finally {
       setBusy(false);
@@ -406,13 +383,14 @@ export function AlanaRadio() {
         return;
       }
       if (!rest) {
-        rememberLine(ALANA_GREET);
-        setTurns((t) => [...t, { role: "assistant", content: ALANA_GREET }]);
+        const line = greetLine(crewRef.current);
+        rememberLine(line);
+        setTurns((t) => [...t, { role: "assistant", content: line }]);
         setBusy(true);
         setThinking(true);
         try {
-          const audio = await fetchCanned("greet");
-          await playReply(ALANA_GREET, audio);
+          const audio = await fetchSay(line);
+          await playReply(line, audio);
         } finally {
           setBusy(false);
           setThinking(false);
@@ -427,13 +405,14 @@ export function AlanaRadio() {
 
   async function sleep() {
     parkWake();
-    rememberLine(ALANA_BYE);
-    setTurns((t) => [...t, { role: "assistant", content: ALANA_BYE }]);
+    const line = byeLine(crewRef.current);
+    rememberLine(line);
+    setTurns((t) => [...t, { role: "assistant", content: line }]);
     setBusy(true);
     setThinking(true);
     try {
-      const audio = await fetchCanned("bye");
-      await playReply(ALANA_BYE, audio);
+      const audio = await fetchSay(line);
+      await playReply(line, audio);
     } finally {
       setBusy(false);
       setThinking(false);
@@ -455,8 +434,11 @@ export function AlanaRadio() {
     stopVoice();
     try {
       const found = extractCrewNames(q);
-      if (found.length) {
-        const next = mergeCrew(crewRef.current, found);
+      const prevAssist = [...turnsRef.current].reverse().find((t) => t.role === "assistant")?.content;
+      const named =
+        askedForName(prevAssist) && !found.length ? extractNameAnswer(q) : null;
+      if (found.length || named) {
+        const next = mergeCrew(crewRef.current, named ? [named, ...found] : found);
         crewRef.current = next;
         setCrewNames(next);
       }
@@ -485,17 +467,21 @@ export function AlanaRadio() {
         crewNames: crewRef.current,
         crewWatches: watchesRef.current,
       });
-      const local =
-        watch && q.length < 90
+      const who = named ?? found[0];
+      const introOnly = !!who && q.length < 48 && !watch && !cancel;
+      const local = introOnly
+        ? `Prazer, ${who}. Tô aqui. Pode mandar.`
+        : watch && q.length < 90
           ? `Fechou. Aviso o ${watch.name} às ${formatEtaClock(watch.endMs)}.`
           : cancel && !watch && q.length < 70
             ? `Beleza. Cancelei o aviso do ${cancel}.`
             : quickReply(q, ctx);
       if (local) {
-        rememberLine(local);
-        setTurns((t) => [...t, { role: "assistant", content: local }]);
-        const audio = await fetchSay(local);
-        await playReply(local, audio);
+        const spoken = introOnly ? local : withHold(local);
+        rememberLine(spoken);
+        setTurns((t) => [...t, { role: "assistant", content: spoken }]);
+        const audio = await fetchSay(spoken);
+        await playReply(spoken, audio);
         return;
       }
       const res = await fetch("/api/voice", {
@@ -615,31 +601,10 @@ export function AlanaRadio() {
         watchesRef.current = watches;
         setCrewWatches(watches);
       }
-      const warn = dueWarn(watches, now);
-      if (warn) {
-        const marked = watches.map((w) =>
-          w.name === warn.name && w.endMs === warn.endMs ? { ...w, warned: true } : w,
-        );
-        watchesRef.current = marked;
-        setCrewWatches(marked);
-        void speakWatch("warn", warn.name, warn.endMs);
-        return;
-      }
-      const due = dueWatch(watches, now);
-      if (due) {
-        const marked = watches.map((w) =>
-          w.name === due.name && w.endMs === due.endMs ? { ...w, warned: true, fired: true } : w,
-        );
-        watchesRef.current = marked;
-        setCrewWatches(marked);
-        void speakWatch("end", due.name, due.endMs);
-        return;
-      }
       const engine = engineRef.current;
       const p = passageOf(routeRef.current, engine);
       const hit = tickWatch(watchRef.current, {
         xteNm: p?.xteNm ?? null,
-        rollP2P: engine?.rollP2P ?? null,
         sogKn: p?.sogKn ?? engine?.fix?.sogKn ?? 0,
         alongNm: p?.alongNm ?? 0,
         remainNm: p?.remainNm ?? 0,
@@ -825,8 +790,9 @@ export function AlanaRadio() {
               ) : null}
               {turns.length === 0 ? (
                 <p className="text-sm text-muted">
-                  Chama <span className="text-fg">Alana</span> pelo nome cada
-                  vez. Sem o nome, o rádio não responde.
+                  Chama <span className="text-fg">Alana</span> pelo nome.
+                  Ela se apresenta, pede o seu nome e consulta a derrota.
+                  Só o XTE fala sozinho.
                 </p>
               ) : (
                 turns.map((t, i) => (

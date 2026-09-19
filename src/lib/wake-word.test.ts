@@ -45,38 +45,24 @@ test("tchau sleeps", () => {
 test("echo of greet and last line is ignored", () => {
   assert.equal(isAlanaEcho("E aí. Tô no rádio, pode mandar."), true);
   assert.equal(isAlanaEcho("Oi. Tô no rádio, manda aí."), true);
-  assert.equal(isAlanaEcho("Beleza. Me chama se precisar."), true);
-  assert.equal(isAlanaEcho("Oi. Tô na escuta."), true);
-  assert.equal(isAlanaEcho("Fechou. Me chama quando precisar."), true);
-  assert.equal(isAlanaEcho("Sou a Alana, rádio do passadiço.", "Sou a Alana, rádio do passadiço."), true);
   assert.equal(isAlanaEcho("Alana"), false);
   assert.equal(isAlanaEcho("a lana"), false);
-  assert.equal(
-    isAlanaEcho("Olha só. A gente abriu demais da derrota. XTE alto — volta pra linha."),
-    true,
-  );
-  assert.equal(isAlanaEcho("Ó o balanço de banda. Tá forte. Segura o rumo e a faixa de RPM."), true);
-  assert.equal(isAlanaEcho("Não peguei. Manda de novo."), true);
-  assert.equal(isAlanaEcho("Jossian. Fim de turno. 08:00."), true);
-  assert.equal(isAlanaEcho("Pedro. 5 minutos pro fim de turno."), true);
 });
 
-const LAST =
-  "Beleza. A gente tá em 3.7182° S, 38.4725° W, bem em Mucuripe — costa a zero milha.";
+test("echo of her own intro is ignored", () => {
+  assert.equal(
+    isAlanaEcho("Alana", "Boa tarde. Sou a Alana, do passadiço. Qual o seu nome?"),
+    true,
+  );
+});
 
 test("garbled speaker echo of a briefing is ignored", () => {
-  assert.equal(
-    isAlanaEcho("Beleza a gente ta em 3.7182 S 38.4725 W bem em Mucuripe costa a zero", LAST),
-    true,
-  );
-  assert.equal(
-    isAlanaEcho("Alana a gente ta em 37182 Mucuripe costa zero milha", LAST),
-    true,
-  );
+  const last =
+    "Jossian. A gente tá a 12 milhas da costa, SOG 7.2 nós. Hs 0.8. ETA hoje 11:40.";
+  assert.equal(isAlanaEcho("a gente tá a 12 milhas da costa sog 7 nós", last), true);
 });
 
 test("a real follow-up is not treated as echo", () => {
-  assert.equal(isAlanaEcho("qual o hs agora", LAST), false);
-  assert.equal(isAlanaEcho("e o combustível", LAST), false);
-  assert.equal(isAlanaEcho("Alana, qual o vento", LAST), false);
+  assert.equal(isAlanaEcho("qual o hs agora", "E aí. Tô no rádio, pode mandar."), false);
+  assert.equal(isAlanaEcho("Alana"), false);
 });

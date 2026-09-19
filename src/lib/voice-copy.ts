@@ -1,4 +1,4 @@
-export const ALANA_GREET = "E aí. Tô no rádio, pode mandar.";
+export const ALANA_GREET = "Boa tarde. Sou a Alana, do passadiço. Qual o seu nome?";
 export const ALANA_BYE = "Beleza. Me chama se precisar.";
 export const ALANA_MISS = "Não peguei. Manda de novo.";
 export const ALANA_XTE =

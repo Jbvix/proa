@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { crossTrackOf } from "./geo.ts";
 import { sustainedRollP2P } from "./waves.ts";
-import { tickWatch, WATCH_IDLE, XTE_ON_NM, ROLL_ON_DEG } from "./voice-watch.ts";
+import { tickWatch, WATCH_IDLE, XTE_ON_NM } from "./voice-watch.ts";
 
 test("eastbound track: north of the line is bombordo", () => {
   const track = [
@@ -43,50 +43,21 @@ const underway = {
 
 test("Alana calls XTE only after crossing the limit, then waits to reset", () => {
   let s = WATCH_IDLE;
-  let a = tickWatch(s, { ...underway, xteNm: 0.1, rollP2P: 2 });
+  let a = tickWatch(s, { ...underway, xteNm: 0.1 });
   assert.equal(a.alert, null);
-  a = tickWatch(a.state, { ...underway, xteNm: XTE_ON_NM, rollP2P: 2 });
+  a = tickWatch(a.state, { ...underway, xteNm: XTE_ON_NM });
   assert.equal(a.alert, "xte");
-  a = tickWatch(a.state, { ...underway, xteNm: 0.4, rollP2P: 2 });
+  a = tickWatch(a.state, { ...underway, xteNm: 0.4 });
   assert.equal(a.alert, null);
-  a = tickWatch(a.state, { ...underway, xteNm: 0.05, rollP2P: 2 });
+  a = tickWatch(a.state, { ...underway, xteNm: 0.05 });
   assert.equal(a.alert, null);
-  a = tickWatch(a.state, { ...underway, xteNm: XTE_ON_NM, rollP2P: 2 });
+  a = tickWatch(a.state, { ...underway, xteNm: XTE_ON_NM });
   assert.equal(a.alert, "xte");
-});
-
-test("strong roll of the band fires once until it calms", () => {
-  let s = WATCH_IDLE;
-  let a = tickWatch(s, { ...underway, xteNm: 0.02, rollP2P: 4 });
-  assert.equal(a.alert, null);
-  a = tickWatch(a.state, { ...underway, xteNm: 0.02, rollP2P: ROLL_ON_DEG });
-  assert.equal(a.alert, "roll");
-  a = tickWatch(a.state, { ...underway, xteNm: 0.02, rollP2P: 14 });
-  assert.equal(a.alert, null);
-  a = tickWatch(a.state, { ...underway, xteNm: 0.02, rollP2P: 5 });
-  assert.equal(a.alert, null);
-  a = tickWatch(a.state, { ...underway, xteNm: 0.02, rollP2P: ROLL_ON_DEG });
-  assert.equal(a.alert, "roll");
-});
-
-test("XTE wins the tick and leaves roll free to speak next", () => {
-  const a = tickWatch(WATCH_IDLE, {
-    ...underway,
-    xteNm: 0.4,
-    rollP2P: 16,
-  });
-  assert.equal(a.alert, "xte");
-  assert.equal(a.state.xteHot, true);
-  assert.equal(a.state.rollHot, false);
-  const b = tickWatch(a.state, { ...underway, xteNm: 0.4, rollP2P: 16 });
-  assert.equal(b.alert, "roll");
-  assert.equal(b.state.rollHot, true);
 });
 
 test("parked or no capture stays quiet", () => {
   const parked = tickWatch(WATCH_IDLE, {
     xteNm: 1,
-    rollP2P: 20,
     sogKn: 0,
     alongNm: 3,
     remainNm: 10,
@@ -96,14 +67,12 @@ test("parked or no capture stays quiet", () => {
   const idle = tickWatch(WATCH_IDLE, {
     ...underway,
     xteNm: 1,
-    rollP2P: 20,
     capturing: false,
   });
   assert.equal(idle.alert, null);
   const arrived = tickWatch(WATCH_IDLE, {
     ...underway,
     xteNm: 1,
-    rollP2P: 20,
     remainNm: 0.2,
   });
   assert.equal(arrived.alert, null);

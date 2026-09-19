@@ -76,6 +76,17 @@ export function quickReply(raw: string, ctx: VoiceContext): string | null {
     return `${hi}Maré ${fase}.${eta}${tip}`.trim();
   }
 
+  if (/waypoint|derrota|proximo (wp|ponto|marco)|proximo waypoint/.test(t) && ctx.waypoints.length) {
+    const next = ctx.waypoints.find((w) => (w.faltaNm ?? 0) > 0.2) ?? ctx.waypoints[ctx.waypoints.length - 1];
+    if (next) {
+      const falta = nm(next.faltaNm);
+      const eta = next.eta ? `, ${next.eta}` : "";
+      return falta
+        ? `${hi}Próximo: ${next.nome}. Faltam ${falta} milhas${eta}.`
+        : `${hi}${next.nome}${eta}.`;
+    }
+  }
+
   if (/\bsog\b|velocidade|quantos nos|como (ta )?a velocidade/.test(t)) {
     const v = kn(ctx.posicao.sogKn);
     if (!v) return `${hi}SOG ainda não firmou.`;

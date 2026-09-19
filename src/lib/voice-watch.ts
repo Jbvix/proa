@@ -3,20 +3,18 @@ export const XTE_OFF_NM = 0.12;
 export const ROLL_ON_DEG = 12;
 export const ROLL_OFF_DEG = 6.5;
 
-export type WatchKind = "xte" | "roll";
+export type WatchKind = "xte";
 
 export type WatchState = {
   xteHot: boolean;
-  rollHot: boolean;
 };
 
-export const WATCH_IDLE: WatchState = { xteHot: false, rollHot: false };
+export const WATCH_IDLE: WatchState = { xteHot: false };
 
 export function tickWatch(
   prev: WatchState,
   input: {
     xteNm: number | null;
-    rollP2P: number | null;
     sogKn: number;
     alongNm: number;
     remainNm: number;
@@ -28,7 +26,6 @@ export function tickWatch(
   }
 
   let xteHot = prev.xteHot;
-  let rollHot = prev.rollHot;
   let alert: WatchKind | null = null;
 
   const xte = input.xteNm;
@@ -41,17 +38,5 @@ export function tickWatch(
     }
   }
 
-  const roll = input.rollP2P;
-  if (roll != null) {
-    if (!rollHot && roll >= ROLL_ON_DEG) {
-      if (!alert) {
-        rollHot = true;
-        alert = "roll";
-      }
-    } else if (rollHot && roll < ROLL_OFF_DEG) {
-      rollHot = false;
-    }
-  }
-
-  return { state: { xteHot, rollHot }, alert };
+  return { state: { xteHot }, alert };
 }

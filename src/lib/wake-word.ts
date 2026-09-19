@@ -93,7 +93,10 @@ export function isAlanaEcho(raw: string, lastLine?: string | null) {
   const t = foldPt(raw);
   if (!t) return true;
   const call = hearWake(raw);
-  if (call.woke && call.rest.length < 2) return false;
+  if (call.woke && call.rest.length < 2) {
+    if (/sou a alana/.test(foldPt(lastLine ?? ""))) return true;
+    return false;
+  }
   if (t.length < 4) return true;
   if (/^(oi|ola|eai|eae)\.?$/.test(t)) return true;
   if (/na escuta/.test(t)) return true;

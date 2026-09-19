@@ -6,7 +6,8 @@ import { coastFix } from "./coastline";
 import { weatherLabel } from "./meteo";
 import { seaStateFromHs } from "./waves";
 import { cardinal, formatDurationMin, formatEtaClock, formatEtaDay, formatLatLon, formatNowStamp } from "./utils";
-import { xteSideLabel } from "./geo";
+import { nearestProgress, xteSideLabel } from "./geo";
+import { consultBlock } from "./bridge-knowledge";
 import type { EngineSnapshot } from "./sensor-engine";
 import type { MeteoBundle } from "./meteo";
 import type { ParsedRoute } from "./gpx";
@@ -94,6 +95,7 @@ export type VoiceContext = {
     contra: string[];
     conselho: string;
   };
+  consulta: ReturnType<typeof consultBlock>;
   captura: boolean;
   modo: string;
 };
@@ -169,6 +171,11 @@ export function buildVoiceContext(opts: {
       eta: etaMin != null ? formatEtaDay(nowMs + etaMin * 60_000, nowMs) : null,
     };
   };
+  const pts = route?.points ?? [];
+  const alongOf = (lat: number, lon: number, fallback = 0) => {
+    if (pts.length < 2) return fallback;
+    return Number(nearestProgress(pts, lat, lon).toFixed(1));
+  };
   if (origin) {
     const pass = etaOf(0);
     wpts.push({
@@ -180,9 +187,11 @@ export function buildVoiceContext(opts: {
     });
   }
   for (const w of route?.waypoints ?? []) {
-    if (wpts.length >= 5) break;
     const st = stations.find((s) => Math.abs(s.lat - w.lat) < 0.02 && Math.abs(s.lon - w.lon) < 0.02);
-    const nm = Number((st?.distNm ?? 0).toFixed(1));
+    const nm = alongOf(w.lat, w.lon, st?.distNm ?? 0);
+    if (wpts.some((x) => Math.abs(x.nm - nm) < 0.4 && x.nome === withCity(w.lat, w.lon, w.name))) {
+      continue;
+    }
     const pass = etaOf(nm);
     wpts.push({
       nome: withCity(w.lat, w.lon, w.name),
@@ -192,11 +201,11 @@ export function buildVoiceContext(opts: {
       hsPrev: st?.waveHs ?? null,
     });
   }
-  if (dest && nextWp) {
-    const last = wpts[wpts.length - 1];
+  if (dest) {
     const destName = withCity(dest.lat, dest.lon, dest.name || "Destino");
-    if (!last || last.nome !== destName) {
-      const nm = Number((passage?.totalNm ?? stations[stations.length - 1]?.distNm ?? 0).toFixed(1));
+    const nm = alongOf(dest.lat, dest.lon, passage?.totalNm ?? 0);
+    const last = wpts[wpts.length - 1];
+    if (!last || Math.abs(last.nm - nm) > 0.4) {
       const pass = etaOf(nm);
       wpts.push({
         nome: destName,
@@ -207,6 +216,9 @@ export function buildVoiceContext(opts: {
       });
     }
   }
+  const upcoming = wpts.filter((w) => (w.faltaNm ?? 0) > 0.2);
+  const passed = wpts.filter((w) => (w.faltaNm ?? 0) <= 0.2);
+  const slimWpts = [...passed.slice(-2), ...upcoming.slice(0, 10)].slice(0, 12);
 
   const hs = engine?.wave.hsM ?? 0;
   const sea = seaStateFromHs(hs);
@@ -223,7 +235,7 @@ export function buildVoiceContext(opts: {
 
   return {
     telaAberta: tab,
-    aviso: "Nós e milhas. Fatos só daqui.",
+    aviso: "Nós e milhas. Fatos só daqui. Consulta de bordo, não texto oficial.",
     agora: formatNowStamp(nowMs),
     tripulacao: crewNames.slice(0, 6),
     turnos: crewWatches
@@ -258,7 +270,7 @@ export function buildVoiceContext(opts: {
       xteNm: passage ? Number(passage.xteNm.toFixed(2)) : null,
       xteLado: passage ? xteSideLabel(passage.xteSide) : null,
     },
-    waypoints: wpts.slice(0, 5),
+    waypoints: slimWpts,
     cidades,
     mar: {
       hsCasco: Number(hs.toFixed(2)),
@@ -314,6 +326,7 @@ export function buildVoiceContext(opts: {
       contra: fuel.contra,
       conselho: fuel.conselho,
     },
+    consulta: consultBlock(),
     captura: !!engine?.capturing,
     modo: engine?.mode ?? "idle",
   };

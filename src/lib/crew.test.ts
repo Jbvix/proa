@@ -5,6 +5,7 @@ import {
   dueWatch,
   dropWatch,
   extractCrewNames,
+  extractNameAnswer,
   mergeCrew,
   parseClockPt,
   parseWatchAsk,
@@ -18,6 +19,12 @@ test("picks up a bridge intro", () => {
   assert.deepEqual(extractCrewNames("me chamo maria silva"), ["Maria Silva"]);
   assert.deepEqual(extractCrewNames("sou o pedro"), ["Pedro"]);
   assert.deepEqual(extractCrewNames("aqui é o carlos"), ["Carlos"]);
+});
+
+test("bare name after she asked", () => {
+  assert.equal(extractNameAnswer("Jossian"), "Jossian");
+  assert.equal(extractNameAnswer("sou o pedro"), "Pedro");
+  assert.equal(extractNameAnswer("qual o eta de pecem"), null);
 });
 
 test("ignores the radio and generic vocatives", () => {

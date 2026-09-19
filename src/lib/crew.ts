@@ -64,6 +64,16 @@ export function extractCrewNames(raw: string): string[] {
   return out;
 }
 
+/** "Jossian" after she asked the name. */
+export function extractNameAnswer(raw: string): string | null {
+  const t = foldPt(raw).replace(/^(eu sou (o|a)|sou (o|a)|me chamo|meu nome e)\s+/, "");
+  if (/\b(qual|quando|como|onde|quanto|eta|hs|sog|xte|vento|mare|turno)\b/.test(t)) return null;
+  const parts = t.split(/[^a-zà-ú]+/).filter((p) => p.length >= 2 && !STOP.has(p));
+  if (parts.length < 1 || parts.length > 2) return null;
+  if (parts.some((p) => p.length > 14)) return null;
+  return titleName(parts.join(" "));
+}
+
 export function mergeCrew(prev: string[], found: string[]) {
   const next = [...prev];
   for (const n of found) {

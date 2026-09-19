@@ -1,4 +1,4 @@
-import { pathLengthNm, type LatLon } from "./geo";
+import { pathLengthNm, type LatLon } from "./geo.ts";
 
 export type RoutePoint = LatLon & { ele?: number; time?: string; name?: string };
 
@@ -39,7 +39,7 @@ function collectPts(doc: Document, tag: string): RoutePoint[] {
     if (Math.abs(lat) > 90 || Math.abs(lon) > 180) continue;
     const eleRaw = childText(el, "ele");
     const time = childText(el, "time");
-    const name = childText(el, "name");
+    const name = childText(el, "name") || childText(el, "cmt") || clipName(childText(el, "desc"));
     const ele = eleRaw ? Number(eleRaw) : undefined;
     out.push({
       lat,
@@ -63,14 +63,30 @@ function firstText(doc: Document, tag: string) {
   return "";
 }
 
-function namedFrom(pts: RoutePoint[]): NamedWaypoint[] {
+function clipName(s: string) {
+  const t = s.replace(/\s+/g, " ").trim();
+  if (!t) return "";
+  return t.length <= 48 ? t : t.slice(0, 48).trim();
+}
+
+function near(a: { lat: number; lon: number }, b: { lat: number; lon: number }) {
+  return Math.abs(a.lat - b.lat) < 0.0008 && Math.abs(a.lon - b.lon) < 0.0008;
+}
+
+/** All GPX <wpt> plus named rte/trk points. Unnamed wpt become WP 1, WP 2… */
+export function namedWaypointsFrom(
+  wpt: RoutePoint[],
+  rte: RoutePoint[] = [],
+  trk: RoutePoint[] = [],
+): NamedWaypoint[] {
   const out: NamedWaypoint[] = [];
-  for (const p of pts) {
-    if (!p.name) continue;
-    if (out.some((w) => Math.abs(w.lat - p.lat) < 0.0008 && Math.abs(w.lon - p.lon) < 0.0008)) {
-      continue;
-    }
-    out.push({ lat: p.lat, lon: p.lon, name: p.name });
+  const add = (p: RoutePoint, fallback: string) => {
+    if (out.some((w) => near(w, p))) return;
+    out.push({ lat: p.lat, lon: p.lon, name: p.name || fallback });
+  };
+  wpt.forEach((p, i) => add(p, `WP ${i + 1}`));
+  for (const p of [...rte, ...trk]) {
+    if (p.name) add(p, p.name);
   }
   return out;
 }
@@ -101,7 +117,7 @@ export function parseGpx(xml: string, filename = "rota.gpx"): ParsedRoute {
   return {
     name,
     points,
-    waypoints: namedFrom([...wpt, ...rte, ...trk]),
+    waypoints: namedWaypointsFrom(wpt, rte, trk),
     distanceNm: pathLengthNm(points),
     source: filename,
   };
