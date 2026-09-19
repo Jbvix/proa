@@ -3,7 +3,7 @@ import { X } from "lucide-react";
 import { AlanaMark, ALANA_FACE_LABEL, type AlanaFace } from "@/components/alana-mark";
 import { useLiveBridge } from "@/components/bridge-provider";
 import { useBridge, useSettings } from "@/lib/store";
-import { ALANA_BYE, ALANA_GREET, ALANA_MISS, ALANA_ROLL, ALANA_XTE, type CannedKind } from "@/lib/voice-copy";
+import { ALANA_BYE, ALANA_GREET, ALANA_ROLL, ALANA_XTE, type CannedKind } from "@/lib/voice-copy";
 import {
   holdEchoCanceller,
   playVoiceMp3,
@@ -36,7 +36,6 @@ import { cn } from "@/lib/utils";
 
 type Mode = "off" | "wake" | "session";
 
-const SESSION_MS = 180_000;
 const TTS_CACHE = {
   greet: "proa-alana-tts-greet-v3",
   bye: "proa-alana-tts-bye-v2",
@@ -112,7 +111,6 @@ export function AlanaRadio() {
   const liveAt = useRef(0);
   const prevLineRef = useRef<string | null>(null);
   const modeRef = useRef<Mode>("off");
-  const sessionTimer = useRef<number>(0);
   const lastLineRef = useRef<string | null>(null);
   const watchRef = useRef<WatchState>(WATCH_IDLE);
   const lastAlertAt = useRef(0);
@@ -159,12 +157,9 @@ export function AlanaRadio() {
     return isAlanaEcho(raw, lastLineRef.current) || isAlanaEcho(raw, prevLineRef.current);
   }
 
-  function bumpSession() {
-    window.clearTimeout(sessionTimer.current);
-    sessionTimer.current = window.setTimeout(() => {
-      modeRef.current = "wake";
-      setMode("wake");
-    }, SESSION_MS);
+  function parkWake() {
+    modeRef.current = "wake";
+    setMode("wake");
   }
 
   function stopRec() {
@@ -173,8 +168,10 @@ export function AlanaRadio() {
 
   function handleHeard(heard: string, isFinal: boolean, fromPtt = false, miss = false) {
     const text = heard.trim();
+    const parse = hearWake(text);
+    const gated = fromPtt || parse.woke;
     if (blocked() || performance.now() < liveAt.current) {
-      if (text || miss) {
+      if (gated && (text || miss)) {
         pendingHear.current = { text, ptt: fromPtt, miss };
         const until = Math.max(deafUntil.current, liveAt.current);
         scheduleFlush(until - performance.now());
@@ -182,21 +179,19 @@ export function AlanaRadio() {
       return;
     }
     if (!text) {
-      if (miss && modeRef.current === "session") void speakMiss();
+      setThinking(false);
       return;
     }
-    if (heardEcho(text)) return;
-    const parse = hearWake(text);
+    if (heardEcho(text)) {
+      setThinking(false);
+      return;
+    }
     if (fromPtt) {
       if (parse.sleep) {
         void sleep();
         return;
       }
       const q = parse.woke ? parse.rest : text;
-      if (modeRef.current !== "session") {
-        void wake(q, false);
-        return;
-      }
       if (!q) {
         void wake("", false);
         return;
@@ -204,23 +199,15 @@ export function AlanaRadio() {
       if (!heardEcho(q)) void ask(q);
       return;
     }
-    if (modeRef.current !== "session") {
-      if (!parse.woke || !isFinal) return;
-      if (parse.rest && heardEcho(parse.rest)) return;
-      void wake(parse.rest, parse.sleep);
+    if (!parse.woke || !isFinal) {
+      setThinking(false);
       return;
     }
-    if (!isFinal) return;
-    if (parse.sleep) {
-      void sleep();
+    if (parse.rest && heardEcho(parse.rest)) {
+      setThinking(false);
       return;
     }
-    const q = parse.woke ? parse.rest : text;
-    if (!q) {
-      void wake("", false);
-      return;
-    }
-    if (!heardEcho(q)) void ask(q);
+    void wake(parse.rest, parse.sleep);
   }
 
   function scheduleFlush(wait: number) {
@@ -268,9 +255,6 @@ export function AlanaRadio() {
         if (!wanted.current) return;
         handleHeard(heard, true, !!meta?.ptt, !!meta?.miss);
       },
-      () => {
-        setThinking(true);
-      },
     )
       .then(() => {
         if (modeRef.current === "off") {
@@ -303,7 +287,8 @@ export function AlanaRadio() {
     cooling.current = true;
     setThinking(false);
     setSaying(true);
-    bumpSession();
+    modeRef.current = "session";
+    setMode("session");
     stopRec();
     stopVoice();
     void holdEchoCanceller();
@@ -318,6 +303,7 @@ export function AlanaRadio() {
     } finally {
       speaking.current = false;
       setSaying(false);
+      parkWake();
       resumeBridgeListen();
       coolThenArm(extra);
     }
@@ -368,9 +354,6 @@ export function AlanaRadio() {
     const text = kind === "roll" ? ALANA_ROLL : ALANA_XTE;
     rememberLine(text);
     setTurns((t) => [...t, { role: "assistant", content: text }]);
-    modeRef.current = "session";
-    setMode("session");
-    bumpSession();
     setBusy(true);
     setThinking(true);
     try {
@@ -396,9 +379,6 @@ export function AlanaRadio() {
         : watchLine({ name, endMs, warned: true, fired: false });
     rememberLine(text);
     setTurns((t) => [...t, { role: "assistant", content: text }]);
-    modeRef.current = "session";
-    setMode("session");
-    bumpSession();
     setBusy(true);
     setThinking(true);
     try {
@@ -416,9 +396,6 @@ export function AlanaRadio() {
     if (asking.current || locking.current) return;
     locking.current = true;
     setOpen(true);
-    modeRef.current = "session";
-    setMode("session");
-    bumpSession();
     try {
       if (goingSleep) {
         await sleep();
@@ -445,9 +422,7 @@ export function AlanaRadio() {
   }
 
   async function sleep() {
-    window.clearTimeout(sessionTimer.current);
-    modeRef.current = "wake";
-    setMode("wake");
+    parkWake();
     rememberLine(ALANA_BYE);
     setTurns((t) => [...t, { role: "assistant", content: ALANA_BYE }]);
     setBusy(true);
@@ -462,25 +437,6 @@ export function AlanaRadio() {
     window.setTimeout(() => setOpen(false), 1800);
   }
 
-  async function speakMiss() {
-    if (muted || speaking.current || asking.current || locking.current) return;
-    if (lastLineRef.current === ALANA_MISS) return;
-    locking.current = true;
-    rememberLine(ALANA_MISS);
-    setTurns((t) => [...t, { role: "assistant", content: ALANA_MISS }]);
-    bumpSession();
-    setBusy(true);
-    setThinking(true);
-    try {
-      const audio = await fetchCanned("miss");
-      await playReply(ALANA_MISS, audio);
-    } finally {
-      setBusy(false);
-      setThinking(false);
-      locking.current = false;
-    }
-  }
-
   async function ask(text: string) {
     const q = text.trim();
     if (!q || asking.current) return;
@@ -489,7 +445,6 @@ export function AlanaRadio() {
     setThinking(true);
     setError(null);
     setInterim("");
-    bumpSession();
     const history = turnsRef.current.slice(-4);
     setTurns((t) => [...t, { role: "user", content: q }]);
     stopRec();
@@ -537,7 +492,6 @@ export function AlanaRadio() {
         setTurns((t) => [...t, { role: "assistant", content: local }]);
         const audio = await fetchSay(local);
         await playReply(local, audio);
-        bumpSession();
         return;
       }
       const res = await fetch("/api/voice", {
@@ -559,7 +513,6 @@ export function AlanaRadio() {
       rememberLine(data.text);
       setTurns((t) => [...t, { role: "assistant", content: data.text! }]);
       await playReply(data.text, data.audio ?? null);
-      bumpSession();
     } catch {
       setError("Sem ligação com a Alana.");
     } finally {
@@ -574,9 +527,6 @@ export function AlanaRadio() {
 
   function sendChip(q: string) {
     void unlockVoice();
-    modeRef.current = "session";
-    setMode("session");
-    bumpSession();
     void ask(q);
   }
 
@@ -621,7 +571,6 @@ export function AlanaRadio() {
       releaseEchoCanceller();
       document.removeEventListener("visibilitychange", onVis);
       window.removeEventListener("pointerdown", onPtr);
-      window.clearTimeout(sessionTimer.current);
       window.clearTimeout(holdTimer.current);
       window.clearTimeout(coolTimer.current);
       window.clearTimeout(armDelay.current);
@@ -871,10 +820,8 @@ export function AlanaRadio() {
               ) : null}
               {turns.length === 0 ? (
                 <p className="text-sm text-muted">
-                  Chama <span className="text-fg">Alana</span> pelo nome. Só
-                  voz. Se apresentar, ela guarda o nome. Pede pra avisar o
-                  fim de turno pelo nome. Papo no passadiço vale — cidade,
-                  ETA, enchente, vento, onda, maré.
+                  Chama <span className="text-fg">Alana</span> pelo nome cada
+                  vez. Sem o nome, o rádio não responde.
                 </p>
               ) : (
                 turns.map((t, i) => (
