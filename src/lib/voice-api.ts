@@ -28,6 +28,8 @@ Papo do passadiço: pode distrair, zoar leve, café, cansaço da vigia, um futeb
 
 Viagem: responde QUALQUER pergunta da derrota, de qualquer tela. Nunca peça pra mudar de tela. Fatos só do CONTEXTO. Não invente posição, Hs, SOG, ETA, cidade, litros, RPM. Se faltar, diga que não tem.
 
+Unidades: sogKn e vento/corrente estão em NÓS (milhas náuticas por hora). Distâncias (totalNm, faltaNm, costaNm, xteNm, cidades[].faltaNm) em MILHAS NÁUTICAS. Fale "nós" e "milhas". Nunca km, km/h nem nmi.
+
 Passagem por cidade / porto / praia: use cidades[]. eta é dia+hora ("hoje 21:40", "amanhã 08:15", "sáb. 21 set 04:10"). passou = já ficou pra trás. Se a cidade não está em cidades, não está nesta derrota — não invente. ETA do destino: mare.etaDia (preferir) ou mare.eta. Falta: mare.etaFalta. SOG atual constante.
 
 Enchente na chegada: mare.enchenteIdeal, mare.fase, mare.m, mare.sogAlvoKn, mare.conselho. Enchente = maré subindo (estimativa, não tábua oficial).
@@ -42,7 +44,7 @@ Se alguém se apresentar, use o nome na hora e trate como colega. tripulacao[] s
 
 Turno / vigia: turnos[] tem nome, fim (dia e hora) e faltaMin. Se pedirem pra AVISAR o fim de turno, confirme pelo NOME e o horário. O rádio chama o colega pelo nome na hora. Não invente turno que não está em turnos. Se faltar o nome ou a hora, pergunte.
 
-Relatório / situação: 5 a 8 frases corridas — posição; SOG/rumo/falta; Hs; vento e corrente; RPM/combustível; ETA e enchente. Pergunta pontual = 2 a 5 frases. Papo = pode ser mais curto.
+Relatório / situação: 4 a 6 frases corridas — posição; SOG/rumo/falta; Hs; vento e corrente; RPM/combustível; ETA e enchente. Pergunta pontual = 1 a 3 frases. Papo = curto. Vai direto ao número.
 
 Agora (relógio local) está em agora. App: derrota GPX; mar ao vivo do casco; vento/corrente Open-Meteo; previsão nos waypoints. Não fale de código, API, chave, servidor.`;
 
@@ -80,10 +82,9 @@ export async function askGrokVoice(
   const user = clip(message, 720);
   if (!user) return { text: "Manda de novo, não peguei o áudio.", audio: null };
 
-  const res = await grokFetch("https://api.x.ai/v1/chat/completions", apiKey, {
-    model: "grok-4.5",
-    temperature: 0.85,
-    max_tokens: 700,
+  const payload = {
+    temperature: 0.7,
+    max_tokens: 260,
     messages: [
       { role: "system", content: SYSTEM },
       {
@@ -96,7 +97,17 @@ export async function askGrokVoice(
       })),
       { role: "user", content: user },
     ],
+  };
+  let res = await grokFetch("https://api.x.ai/v1/chat/completions", apiKey, {
+    model: "grok-4-fast",
+    ...payload,
   });
+  if (!res.ok && (res.status === 400 || res.status === 404)) {
+    res = await grokFetch("https://api.x.ai/v1/chat/completions", apiKey, {
+      model: "grok-4.5",
+      ...payload,
+    });
+  }
   if (!res.ok) {
     const err = await res.text().catch(() => "");
     throw new Error(`Grok ${res.status} ${err.slice(0, 80)}`);
@@ -104,7 +115,7 @@ export async function askGrokVoice(
   const body = (await res.json()) as {
     choices?: { message?: { content?: string } }[];
   };
-  const text = clip(body.choices?.[0]?.message?.content ?? "", 2_200);
+  const text = clip(body.choices?.[0]?.message?.content ?? "", 900);
   if (!text) throw new Error("Grok vazio");
 
   const audio = await speakGrok(apiKey, text);
@@ -138,7 +149,7 @@ export async function speakCanned(
 async function speakGrok(apiKey: string, text: string): Promise<string | null> {
   try {
     const res = await grokFetch("https://api.x.ai/v1/tts", apiKey, {
-      text: clip(text, 2_400),
+      text: clip(text, 900),
       voice_id: "ara",
       language: "pt-BR",
       output_format: {

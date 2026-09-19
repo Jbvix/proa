@@ -58,7 +58,7 @@ export function speedHint(p: Passage) {
   if (p.gpsKn != null && p.trackKn != null) {
     return `GPS ${p.gpsKn.toFixed(1)} · derrota ${p.trackKn.toFixed(1)}`;
   }
-  if (p.trackKn != null) return `derrota ${p.trackKn.toFixed(1)} kn`;
-  if (p.gpsKn != null) return `GPS ${p.gpsKn.toFixed(1)} kn`;
+  if (p.trackKn != null) return `derrota ${p.trackKn.toFixed(1)} nós`;
+  if (p.gpsKn != null) return `GPS ${p.gpsKn.toFixed(1)} nós`;
   return "sem confirmação";
 }

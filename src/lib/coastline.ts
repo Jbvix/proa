@@ -96,10 +96,10 @@ export function distToCoastNm(lat: number, lon: number) {
 }
 
 export function coastPhrase(name: string, coastNm: number, placeNm: number) {
-  const nmi = coastNm.toFixed(1);
+  const mn = coastNm.toFixed(1);
   if (coastNm < 0.8) return `na costa, em ${name}`;
-  if (placeNm < 2) return `em ${name}, ${nmi} nmi da costa`;
-  return `ao largo de ${name}, ${nmi} nmi da costa`;
+  if (placeNm < 2) return `em ${name}, ${mn} mn da costa`;
+  return `ao largo de ${name}, ${mn} mn da costa`;
 }
 
 export function coastFix(lat: number, lon: number): CoastFix {
@@ -109,6 +109,6 @@ export function coastFix(lat: number, lon: number): CoastFix {
     coastNm,
     place,
     phrase: coastPhrase(place.name, coastNm, place.nm),
-    label: `${coastNm.toFixed(1)} nmi · ${place.name}`,
+    label: `${coastNm.toFixed(1)} mn · ${place.name}`,
   };
 }

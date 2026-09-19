@@ -56,6 +56,7 @@ let pttHeld = false;
 let recovering = false;
 let hearing = false;
 let onHear: HearFn | null = null;
+let onClipStart: (() => void) | null = null;
 let ring: PcmRing | null = null;
 let vad: VadState = { ...VAD_IDLE };
 let inputHz = 48_000;
@@ -301,6 +302,7 @@ export function stopBridgeListen() {
   pttHeld = false;
   hearing = false;
   onHear = null;
+  onClipStart = null;
   if (raf) cancelAnimationFrame(raf);
   raf = 0;
   teardownGraph(true);
@@ -310,8 +312,9 @@ export function stopBridgeListen() {
   emit();
 }
 
-export async function startBridgeListen(hear: HearFn) {
+export async function startBridgeListen(hear: HearFn, onClip?: () => void) {
   onHear = hear;
+  onClipStart = onClip ?? null;
   wanted = true;
   paused = false;
   bindDevices();
@@ -454,12 +457,13 @@ async function sendClip(fromPtt: boolean) {
     return;
   }
   hearing = true;
+  onClipStart?.();
   try {
     const res = await fetch("/api/voice", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ hear: bufB64(wav), mime: "audio/wav" }),
-      signal: AbortSignal.timeout(14_000),
+      signal: AbortSignal.timeout(10_000),
     });
     const data = (await res.json()) as { ok?: boolean; text?: string };
     const text = String(data.text ?? "").trim();

@@ -255,7 +255,7 @@ export function sampleRouteStations(
     const p = alongTrack(points, distNm);
     if (!p) continue;
     const label =
-      i === 0 ? "Origem" : i === n - 1 ? "Destino" : `${distNm.toFixed(1)} nmi`;
+      i === 0 ? "Origem" : i === n - 1 ? "Destino" : `${distNm.toFixed(1)} mn`;
     out.push({ lat: p.lat, lon: p.lon, distNm, label });
   }
   return out;

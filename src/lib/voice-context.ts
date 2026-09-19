@@ -222,7 +222,7 @@ export function buildVoiceContext(opts: {
   return {
     telaAberta: tab,
     aviso:
-      "Viagem inteira + papo do passadiço. Cidades em cidades[].eta. Turnos em turnos[] (nome + fim). Relógio em agora. Fatos de mar/vento/ETA só do contexto.",
+      "Viagem + papo do passadiço. Velocidade em nós, distância em milhas náuticas. Cidades em cidades[].eta. Turnos em turnos[]. Relógio em agora. Fatos só do contexto.",
     agora: formatNowStamp(nowMs),
     tripulacao: crewNames.slice(0, 6),
     turnos: crewWatches

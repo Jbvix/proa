@@ -145,7 +145,7 @@ export function RotaScreen() {
           <Stat
             label="Velocidade"
             value={(passage?.sogKn ?? engine?.fix?.sogKn)?.toFixed(1) ?? "—"}
-            unit="kn"
+            unit="nós"
             hint={passage ? speedHint(passage) : engine?.fix?.valid ? "GPS" : "SOG"}
           />
         </Card>
@@ -155,7 +155,7 @@ export function RotaScreen() {
             value={passage?.etaMs != null ? formatEtaClock(passage.etaMs) : "—"}
             hint={
               passage?.etaMin != null
-                ? `${formatDurationMin(passage.etaMin)} · falta ${passage.remainNm.toFixed(1)} nmi`
+                ? `${formatDurationMin(passage.etaMin)} · falta ${passage.remainNm.toFixed(1)} mn`
                 : "precisa de SOG"
             }
           />
@@ -177,7 +177,7 @@ export function RotaScreen() {
             }
             hint={
               plan.targetKn != null
-                ? `${plan.targetKn.toFixed(1)} kn para a janela`
+                ? `${plan.targetKn.toFixed(1)} nós para a janela`
                 : "sem janela"
             }
           />
@@ -230,7 +230,7 @@ export function RotaScreen() {
           {engine?.fix ? (
             <p className="mt-3 font-mono text-sm tabular text-accent">
               Rebocador {formatLatLon(engine.fix.lat, engine.fix.lon)} ·{" "}
-              {engine.fix.sogKn.toFixed(1)} kn
+              {engine.fix.sogKn.toFixed(1)} nós
               {passage?.valid ? " · validada" : ""}
             </p>
           ) : null}

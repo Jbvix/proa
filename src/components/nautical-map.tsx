@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { CircleMarker, Map as LeafletMap, Marker, Polyline } from "leaflet";
 import type { ParsedRoute } from "@/lib/gpx";
 import type { RouteStation } from "@/lib/meteo";
-import { routeMapMarks } from "@/lib/places";
+import { routeMapMarks, shouldLabelMark } from "@/lib/places";
 import { formatLatLon, pad3 } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 
@@ -152,7 +152,7 @@ export function NauticalMap({
             : s.kind === "wpt"
               ? fg
               : warn;
-        const named = s.kind !== "station";
+        const named = shouldLabelMark(s, marks, lat, lon);
         const mark = L.circleMarker([s.lat, s.lon], {
           radius: named ? 7 : 5,
           color: fg,
@@ -160,17 +160,20 @@ export function NauticalMap({
           fillColor: fill,
           fillOpacity: 0.95,
         }).addTo(map);
-        mark.bindTooltip(s.title, {
-          permanent: named,
-          direction: named ? "right" : "top",
-          offset: named ? [12, 0] : [0, -8],
-          opacity: 1,
-          className: "wp-label",
-        });
+        mark.bindPopup(s.title, { closeButton: false, className: "wp-label" });
+        if (named) {
+          mark.bindTooltip(s.title, {
+            permanent: true,
+            direction: "right",
+            offset: [12, 0],
+            opacity: 1,
+            className: "wp-label",
+          });
+        }
         markRef.current.push(mark);
       }
     });
-  }, [marks, ready]);
+  }, [marks, ready, lat, lon]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -208,7 +211,7 @@ export function NauticalMap({
       <div className="pointer-events-none absolute left-3 top-3 z-20 max-w-[min(100%-1.5rem,20rem)] rounded-md bg-bg/80 px-3 py-2 text-fg shadow-[var(--shadow-border)] backdrop-blur-sm">
         <p className="font-mono text-lg tabular leading-none">
           {sogKn != null ? sogKn.toFixed(1) : "—"}
-          <span className="ml-1 text-xs text-muted">kn</span>
+          <span className="ml-1 text-xs text-muted">nós</span>
           {speedValid ? (
             <span className="ml-2 text-[11px] uppercase tracking-[0.12em] text-ok">
               validada
@@ -232,15 +235,6 @@ export function NauticalMap({
             : "ondas/min —"}
         </p>
       </div>
-      {marks.length ? (
-        <ul className="pointer-events-none absolute bottom-3 left-3 z-20 max-w-[min(100%-1.5rem,18rem)] space-y-1 rounded-md bg-bg/80 px-3 py-2 text-fg shadow-[var(--shadow-border)] backdrop-blur-sm">
-          {marks.slice(0, 8).map((m) => (
-            <li key={`${m.kind}-${m.lat.toFixed(3)}-${m.lon.toFixed(3)}`} className="text-xs leading-tight text-fg">
-              {m.title}
-            </li>
-          ))}
-        </ul>
-      ) : null}
     </div>
   );
 }

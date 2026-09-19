@@ -261,10 +261,15 @@ export function AlanaRadio() {
     wanted.current = true;
     resumeBridgeListen();
     void resumeListenCtx();
-    void startBridgeListen((heard, meta) => {
-      if (!wanted.current) return;
-      handleHeard(heard, true, !!meta?.ptt, !!meta?.miss);
-    })
+    void startBridgeListen(
+      (heard, meta) => {
+        if (!wanted.current) return;
+        handleHeard(heard, true, !!meta?.ptt, !!meta?.miss);
+      },
+      () => {
+        setThinking(true);
+      },
+    )
       .then(() => {
         if (modeRef.current === "off") {
           modeRef.current = "wake";
@@ -703,7 +708,7 @@ export function AlanaRadio() {
   }
 
   return (
-    <>
+    <div className="relative shrink-0">
       <button
         type="button"
         aria-label={muted ? "Ligar Alana" : `Alana ${faceLabel}`}
@@ -773,8 +778,14 @@ export function AlanaRadio() {
       ) : null}
 
       {open ? (
-        <div className="fixed inset-0 z-40 flex items-end justify-center bg-bg/55 p-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] backdrop-blur-[2px]">
-          <div className="flex max-h-[min(78dvh,36rem)] w-full max-w-lg flex-col rounded-2xl bg-surface shadow-[var(--shadow-border)]">
+        <>
+          <button
+            type="button"
+            aria-label="Fechar Alana"
+            className="fixed inset-0 z-30 bg-transparent"
+            onClick={() => setOpen(false)}
+          />
+          <div className="absolute right-0 top-[calc(100%+0.45rem)] z-50 flex max-h-[min(64dvh,28rem)] w-[min(calc(100vw-1.25rem),22rem)] flex-col rounded-2xl bg-surface shadow-[var(--shadow-border)]">
             <div className="flex items-center gap-2 px-4 py-3">
               <AlanaMark
                 face={face}
@@ -903,8 +914,8 @@ export function AlanaRadio() {
               </button>
             ) : null}
           </div>
-        </div>
+        </>
       ) : null}
-    </>
+    </div>
   );
 }

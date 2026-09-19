@@ -85,7 +85,7 @@ export function recommendRpm(opts: {
   const reasonParts = [
     `Hs ${hsM.toFixed(1)} m`,
     periodS > 0 ? `Tz ${periodS.toFixed(0)} s` : null,
-    windKn >= 8 ? `vento ${windKn.toFixed(0)} kn` : null,
+    windKn >= 8 ? `vento ${windKn.toFixed(0)} nós` : null,
     hsM >= 0.4 ? encounterNote : null,
   ].filter(Boolean);
 
@@ -141,15 +141,15 @@ export function fuelHint(opts: {
   if (headingDeg != null && windDir != null && windKn >= 6) {
     const windTo = (windDir + 180) % 360;
     const a = flowAlign(headingDeg, windTo);
-    if (a > 0.35) aFavor.push(`vento a favor ${Math.round(windKn)} kn`);
-    else if (a < -0.35) contra.push(`vento de proa ${Math.round(windKn)} kn`);
+    if (a > 0.35) aFavor.push(`vento a favor ${Math.round(windKn)} nós`);
+    else if (a < -0.35) contra.push(`vento de proa ${Math.round(windKn)} nós`);
   }
 
   if (headingDeg != null && currentDir != null && (currentKn ?? 0) >= 0.2) {
     const a = flowAlign(headingDeg, currentDir);
     const kn = (currentKn ?? 0).toFixed(1);
-    if (a > 0.35) aFavor.push(`corrente a favor ${kn} kn`);
-    else if (a < -0.35) contra.push(`corrente de proa ${kn} kn`);
+    if (a > 0.35) aFavor.push(`corrente a favor ${kn} nós`);
+    else if (a < -0.35) contra.push(`corrente de proa ${kn} nós`);
   }
 
   const favor = aFavor.length > 0 && advice.sea !== "proa";

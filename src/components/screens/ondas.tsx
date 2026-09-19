@@ -104,7 +104,7 @@ export function OndasScreen() {
                     </td>
                     <td className="px-4 py-2.5">
                       {s.currentKn != null
-                        ? `${s.currentKn.toFixed(1)} kn ${s.currentDir != null ? cardinal(s.currentDir) : ""}`
+                        ? `${s.currentKn.toFixed(1)} nós ${s.currentDir != null ? cardinal(s.currentDir) : ""}`
                         : "—"}
                     </td>
                   </tr>

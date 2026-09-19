@@ -16,13 +16,11 @@ export function Shell({
   children,
   capturing,
   onToggleCapture,
-  onLive,
   modeLabel,
 }: {
   children: ReactNode;
   capturing: boolean;
   onToggleCapture: () => void;
-  onLive: () => void;
   modeLabel: string;
 }) {
   const tab = useBridge((s) => s.tab);
@@ -30,11 +28,11 @@ export function Shell({
 
   return (
     <div className="mx-auto flex h-[100dvh] w-full max-w-5xl flex-col overflow-hidden">
-      <header className="z-20 flex shrink-0 items-center gap-1 border-b border-border bg-bg/85 px-2 py-2 backdrop-blur-md sm:gap-3 sm:px-4 sm:py-3">
+      <header className="z-20 flex h-14 shrink-0 items-center gap-2 border-b border-border bg-bg/90 px-2 backdrop-blur-md sm:h-16 sm:px-4">
         <ProaMark className="size-6 shrink-0 text-accent" />
         <div className="min-w-0 flex-1">
           <p className="font-display text-xl italic leading-none text-fg">Proa</p>
-          <p className="mt-1 truncate text-[11px] uppercase tracking-[0.14em] text-subtle">
+          <p className="mt-0.5 truncate text-[11px] uppercase tracking-[0.14em] text-subtle">
             {modeLabel}
           </p>
         </div>
@@ -43,18 +41,11 @@ export function Shell({
           type="button"
           onClick={onToggleCapture}
           className={cn(
-            "h-11 shrink-0 rounded-md px-2.5 text-xs font-medium uppercase tracking-[0.12em] transition-[background-color,color] duration-150 sm:px-3",
+            "h-11 shrink-0 rounded-md px-3 text-xs font-medium uppercase tracking-[0.12em] transition-[background-color,color] duration-150",
             capturing ? "bg-ok/15 text-ok" : "bg-surface-2 text-muted",
           )}
         >
-          {capturing ? "Capturando" : "Iniciar"}
-        </button>
-        <button
-          type="button"
-          onClick={onLive}
-          className="h-11 shrink-0 rounded-md px-2.5 text-xs font-medium uppercase tracking-[0.12em] text-muted transition-[background-color,color] duration-150 hover:bg-surface-2 hover:text-fg sm:px-3"
-        >
-          Live
+          {capturing ? "Ao vivo" : "Iniciar"}
         </button>
       </header>
 

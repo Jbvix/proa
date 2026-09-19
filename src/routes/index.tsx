@@ -37,9 +37,6 @@ function App() {
         if (sensorEngine.capturing) sensorEngine.stop();
         else void sensorEngine.start("live");
       }}
-      onLive={() => {
-        void sensorEngine.start("live");
-      }}
     >
       {tab === "painel" ? <PainelScreen /> : null}
       {tab === "ondas" ? <OndasScreen /> : null}

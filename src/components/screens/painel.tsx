@@ -60,7 +60,7 @@ export function PainelScreen() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-nowrap items-center gap-2 overflow-x-auto pb-0.5">
         <Badge tone={engine?.capturing ? "ok" : "mute"}>
           {engine?.mode === "live"
             ? "Sensores vivos"
@@ -92,7 +92,7 @@ export function PainelScreen() {
         ) : null}
         {passage && passage.xteNm >= XTE_ON_NM ? (
           <Badge tone="danger">
-            XTE {passage.xteNm.toFixed(2)} nmi {passage.xteSide}
+            XTE {passage.xteNm.toFixed(2)} mn {passage.xteSide}
           </Badge>
         ) : null}
         {rollP2P >= ROLL_ON_DEG ? (
@@ -160,7 +160,7 @@ export function PainelScreen() {
           <Stat
             label="Velocidade"
             value={(passage?.sogKn ?? engine?.fix?.sogKn)?.toFixed(1) ?? "—"}
-            unit="kn"
+            unit="nós"
             hint={passage ? speedHint(passage) : engine?.fix?.valid ? "GPS" : "SOG"}
           />
         </Card>
@@ -168,7 +168,7 @@ export function PainelScreen() {
           <Stat
             label="Vento"
             value={(meteo?.now.windKn ?? 0).toFixed(0)}
-            unit="kn"
+            unit="nós"
             hint={`${pad3(meteo?.now.windDir ?? 0)}° ${cardinal(meteo?.now.windDir ?? 0)} · raj. ${(meteo?.now.gustKn ?? 0).toFixed(0)}`}
           />
         </Card>
@@ -178,7 +178,7 @@ export function PainelScreen() {
             value={
               meteo?.now.currentKn != null ? meteo.now.currentKn.toFixed(1) : "—"
             }
-            unit="kn"
+            unit="nós"
             hint={
               meteo?.now.currentDir != null
                 ? `${pad3(meteo.now.currentDir)}° ${cardinal(meteo.now.currentDir)}`
@@ -232,7 +232,7 @@ export function PainelScreen() {
             <Stat
               label="SOG"
               value={(passage?.sogKn ?? engine?.fix?.sogKn)?.toFixed(1) ?? "—"}
-              unit="kn"
+              unit="nós"
               hint={passage ? speedHint(passage) : engine?.fix?.valid ? "GPS" : undefined}
             />
             <Stat
@@ -253,12 +253,12 @@ export function PainelScreen() {
             <Stat
               label="Extensão"
               value={route ? pathLengthNm(route.points).toFixed(1) : "—"}
-              unit="nmi"
+              unit="mn"
             />
             <Stat
               label="Falta"
               value={passage ? passage.remainNm.toFixed(1) : "—"}
-              unit="nmi"
+              unit="mn"
             />
             <Stat
               label="XTE"
@@ -269,7 +269,7 @@ export function PainelScreen() {
                     : `${passage.xteNm.toFixed(2)} ${passage.xteSide}`
                   : "—"
               }
-              unit={passage ? "nmi" : undefined}
+              unit={passage ? "mn" : undefined}
               hint={passage ? xteSideLabel(passage.xteSide) : "fora da derrota"}
             />
             <Stat
@@ -279,7 +279,7 @@ export function PainelScreen() {
               }
               hint={
                 plan.targetKn != null
-                  ? `${plan.targetKn.toFixed(1)} kn`
+                  ? `${plan.targetKn.toFixed(1)} nós`
                   : undefined
               }
             />

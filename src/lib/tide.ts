@@ -129,9 +129,9 @@ export function planFloodArrival(
     const delta = targetKn - sogKn;
     advice =
       delta > 0.6
-        ? `Para pegar a enchente, suba para ~${targetKn.toFixed(1)} kn.`
+        ? `Para pegar a enchente, suba para ~${targetKn.toFixed(1)} nós.`
         : delta < -0.6
-          ? `Para pegar a enchente, reduza para ~${targetKn.toFixed(1)} kn.`
+          ? `Para pegar a enchente, reduza para ~${targetKn.toFixed(1)} nós.`
           : `Regime atual chega na janela de enchente.`;
   } else if (atEta?.phase === "vazante") {
     advice = "ETA na vazante. Ajuste o SOG para a próxima enchente.";

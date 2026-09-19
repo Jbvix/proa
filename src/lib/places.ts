@@ -146,3 +146,24 @@ export function routeMapMarks(
   }
   return out;
 }
+
+export function shouldLabelMark(
+  m: MapMark,
+  all: MapMark[],
+  lat?: number | null,
+  lon?: number | null,
+) {
+  if (m.kind === "origin" || m.kind === "dest") return true;
+  if (lat == null || lon == null) return false;
+  let best: MapMark | null = null;
+  let bestNm = 48;
+  for (const x of all) {
+    if (x.kind === "origin" || x.kind === "dest") continue;
+    const nm = haversineNm(lat, lon, x.lat, x.lon);
+    if (nm < bestNm) {
+      best = x;
+      bestNm = nm;
+    }
+  }
+  return !!best && best.lat === m.lat && best.lon === m.lon && best.title === m.title;
+}
