@@ -34,6 +34,7 @@ import { greetLine, byeLine, withHold, askedForName } from "@/lib/alana-presence
 import { matchVoice, upsertVoice } from "@/lib/voice-print";
 import { passageOf } from "@/lib/passage";
 import { tickWatch, WATCH_IDLE, type WatchKind, type WatchState } from "@/lib/voice-watch";
+import { PASS_IDLE, tickWaypointPass, waypointMarks, waypointReport, type PassState } from "@/lib/waypoint-pass";
 import { cn } from "@/lib/utils";
 
 type Mode = "off" | "wake" | "session";
@@ -117,7 +118,10 @@ export function AlanaRadio() {
   const modeRef = useRef<Mode>("off");
   const lastLineRef = useRef<string | null>(null);
   const watchRef = useRef<WatchState>(WATCH_IDLE);
+  const passRef = useRef<PassState>(PASS_IDLE);
+  const passRoute = useRef("");
   const lastAlertAt = useRef(0);
+  const lastWpAt = useRef(0);
   const pendingHear = useRef<{ text: string; ptt: boolean; miss?: boolean; print?: number[] } | null>(null);
   const lastPrint = useRef<number[] | null>(null);
   const introEchoUntil = useRef(0);
@@ -369,18 +373,20 @@ export function AlanaRadio() {
 
   async function speakAlert(kind: WatchKind) {
     if (kind !== "xte") return false;
-    if (muted || speaking.current || asking.current || locking.current) return false;
-    if (performance.now() - lastAlertAt.current < 45_000) return false;
-    lastAlertAt.current = performance.now();
+    return speakLine(ALANA_XTE, "xte");
+  }
+
+  async function speakLine(text: string, canned?: CannedKind) {
+    if (!text || muted || speaking.current || asking.current || locking.current) return false;
     locking.current = true;
     void unlockVoice();
-    const text = ALANA_XTE;
     rememberLine(text);
     setTurns((t) => [...t, { role: "assistant", content: text }]);
+    setOpen(true);
     setBusy(true);
     setThinking(true);
     try {
-      const audio = await fetchCanned("xte");
+      const audio = canned ? await fetchCanned(canned) : await fetchSay(text);
       await playReply(text, audio);
     } finally {
       setBusy(false);
@@ -609,6 +615,7 @@ export function AlanaRadio() {
   useEffect(() => {
     if (muted) {
       watchRef.current = WATCH_IDLE;
+      passRef.current = PASS_IDLE;
       return;
     }
     const id = window.setInterval(() => {
@@ -626,7 +633,13 @@ export function AlanaRadio() {
         setCrewWatches(watches);
       }
       const engine = engineRef.current;
-      const p = passageOf(routeRef.current, engine);
+      const route = routeRef.current;
+      const src = route?.source ?? "";
+      if (src !== passRoute.current) {
+        passRoute.current = src;
+        passRef.current = PASS_IDLE;
+      }
+      const p = passageOf(route, engine);
       const hit = tickWatch(watchRef.current, {
         xteNm: p?.xteNm ?? null,
         sogKn: p?.sogKn ?? engine?.fix?.sogKn ?? 0,
@@ -634,13 +647,52 @@ export function AlanaRadio() {
         remainNm: p?.remainNm ?? 0,
         capturing: !!engine?.capturing,
       });
+      watchRef.current = hit.state;
       if (hit.alert) {
         if (performance.now() - lastAlertAt.current < 45_000) return;
-        watchRef.current = hit.state;
+        lastAlertAt.current = performance.now();
         void speakAlert(hit.alert);
         return;
       }
-      watchRef.current = hit.state;
+      const marks = waypointMarks(route);
+      const cross = tickWaypointPass(passRef.current, {
+        alongNm: p?.alongNm ?? 0,
+        sogKn: p?.sogKn ?? engine?.fix?.sogKn ?? 0,
+        capturing: !!engine?.capturing,
+        marks,
+      });
+      passRef.current = cross.state;
+      if (!cross.passed) return;
+      if (performance.now() - lastWpAt.current < 18_000) return;
+      lastWpAt.current = performance.now();
+      const ctx = buildVoiceContext({
+        engine,
+        meteo: meteoRef.current,
+        route,
+        rpm: rpmRef.current,
+        profile: profileRef.current,
+        tab: tabRef.current,
+        crewNames: crewRef.current,
+        crewWatches: watchesRef.current,
+      });
+      const next = marks.find((m) => m.nm > cross.passed!.nm + 0.35) ?? null;
+      const text = waypointReport(cross.passed, {
+        name: crewRef.current[0],
+        sogKn: ctx.posicao.sogKn,
+        hsM: ctx.mar.hsCasco,
+        estado: ctx.mar.estado,
+        ondasMin: ctx.mar.ondasMin,
+        ventoKn: ctx.meteo.ventoKn,
+        ventoCard: ctx.meteo.ventoCard ?? undefined,
+        remainNm: ctx.viagem.faltaNm,
+        eta: ctx.mare.etaDia ?? ctx.mare.eta,
+        nextNome: next?.nome ?? ctx.waypoints.find((w) => (w.faltaNm ?? 0) > 0.4)?.nome,
+        nextFaltaNm: next ? Math.max(0, next.nm - (p?.alongNm ?? 0)) : null,
+        mare: ctx.mare.fase,
+        xteNm: ctx.posicao.xteNm,
+        xteLado: ctx.posicao.xteLado,
+      }, marks[marks.length - 1]?.nm ?? Infinity);
+      void speakLine(text);
     }, 1_100);
     return () => window.clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -807,7 +859,7 @@ export function AlanaRadio() {
                 <p className="text-sm text-muted">
                   Chama <span className="text-fg">Alana</span> pelo nome.
                   Ela pede o seu, grava a voz e consulta a derrota.
-                  Só o XTE fala sozinho.
+                  Só o XTE e a passagem de waypoint falam sozinhos.
                 </p>
               ) : (
                 turns.map((t, i) => (

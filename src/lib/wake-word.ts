@@ -114,7 +114,8 @@ export function isAlanaEcho(raw: string, lastLine?: string | null) {
   if (/na escuta/.test(t)) return true;
   if (/to no radio/.test(t)) return true;
   if (/manda ai/.test(t) && t.length < 64) return true;
-  if (/abriu demais da derrota/.test(t)) return true;
+  if (/passando /.test(t) && t.length < 180) return true;
+  if (/chegando em /.test(t) && t.length < 180) return true;
   if (/volta pra linha/.test(t) && t.length < 96) return true;
   if (/um momento/.test(t) && t.length < 80) return true;
   if (/deixa eu verificar/.test(t)) return true;
