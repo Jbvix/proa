@@ -1,17 +1,21 @@
 export type VadCfg = {
   hangMs: number;
+  hangShortMs: number;
+  shortMs: number;
   startMs: number;
   preRollMs: number;
   minMs: number;
   maxMs: number;
 };
 
-/** Passadiço: pausas curtas não encerram o turno. */
+/** Passadiço: nome curto fecha rápido; pergunta longa aguenta pausa. */
 export const BRIDGE_VAD: VadCfg = {
-  hangMs: 950,
-  startMs: 140,
-  preRollMs: 320,
-  minMs: 480,
+  hangMs: 720,
+  hangShortMs: 360,
+  shortMs: 900,
+  startMs: 90,
+  preRollMs: 280,
+  minMs: 380,
   maxMs: 4_000,
 };
 
@@ -70,7 +74,9 @@ export function tickVad(
 
   if (speaking) {
     speechMs += dtMs;
-    if (silentMs >= cfg.hangMs && speechMs >= cfg.minMs) {
+    const voiced = Math.max(0, speechMs - silentMs);
+    const hang = voiced < cfg.shortMs ? cfg.hangShortMs : cfg.hangMs;
+    if (silentMs >= hang && speechMs >= cfg.minMs) {
       speaking = false;
       aboveMs = 0;
       speechMs = 0;

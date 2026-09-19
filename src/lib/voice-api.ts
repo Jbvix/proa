@@ -1,12 +1,21 @@
 import { Buffer } from "node:buffer";
 import type { VoiceContext, VoiceTurn } from "./voice-context";
-import { ALANA_BYE, ALANA_GREET, ALANA_ROLL, ALANA_XTE, isCannedKind, type CannedKind } from "./voice-copy";
+import {
+  ALANA_BYE,
+  ALANA_GREET,
+  ALANA_MISS,
+  ALANA_ROLL,
+  ALANA_XTE,
+  isCannedKind,
+  type CannedKind,
+} from "./voice-copy";
 
-export { ALANA_BYE, ALANA_GREET, isCannedKind, type CannedKind };
+export { ALANA_BYE, ALANA_GREET, ALANA_MISS, isCannedKind, type CannedKind };
 
 const CANNED: Record<CannedKind, string> = {
   greet: ALANA_GREET,
   bye: ALANA_BYE,
+  miss: ALANA_MISS,
   xte: ALANA_XTE,
   roll: ALANA_ROLL,
 };
@@ -161,9 +170,11 @@ export async function hearGrok(
             ? "audio/mpeg"
             : "audio/webm";
   const form = new FormData();
-  form.append("file", new Blob([new Uint8Array(raw)], { type }), `clip.${kind}`);
   form.append("model", "grok-voice-transcribe-2.0");
   form.append("language", "pt");
+  form.append("vad_threshold", "0.18");
+  form.append("keyterm", "Alana");
+  form.append("file", new Blob([new Uint8Array(raw)], { type }), `clip.${kind}`);
   const res = await fetch("https://api.x.ai/v1/stt", {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}` },

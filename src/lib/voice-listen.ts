@@ -10,7 +10,7 @@ import {
   type VadState,
 } from "./voice-pcm";
 
-export type HearMeta = { ptt?: boolean };
+export type HearMeta = { ptt?: boolean; miss?: boolean };
 
 type HearFn = (text: string, meta?: HearMeta) => void;
 
@@ -37,6 +37,7 @@ export type VoiceSnap = {
   ptt: boolean;
   visibility: "visible" | "hidden";
   clipping: boolean;
+  lastClip: "ok" | "empty" | "short" | "fail" | "none";
 };
 
 const PCM_HZ = 16_000;
@@ -65,6 +66,7 @@ let clipsSent = 0;
 let speechStartedAt = 0;
 let level = 0;
 let clipping = false;
+let lastClip: VoiceSnap["lastClip"] = "none";
 let pipeState: VoiceSnap["state"] = "idle";
 let trackState: VoiceSnap["track"] = "off";
 let vis: "visible" | "hidden" = "visible";
@@ -129,10 +131,11 @@ export function getVoiceSnap(): VoiceSnap {
     framesIn,
     clipsSent,
     lastFrameAgeMs: lastFrameAt ? Math.round(performance.now() - lastFrameAt) : 0,
-    hangMs: BRIDGE_VAD.hangMs,
+    hangMs: BRIDGE_VAD.hangShortMs,
     ptt: pttMode,
     visibility: vis,
     clipping,
+    lastClip,
   };
 }
 
@@ -436,14 +439,16 @@ async function sendClip(fromPtt: boolean) {
   const raw = ring.sliceLast(samples);
   pipeState = "waiting";
   emit();
-  if (raw.length < inputHz * 0.28) {
+  if (raw.length < inputHz * 0.18) {
+    lastClip = "short";
     pipeState = "listening";
     emit();
     return;
   }
   const pcm = floatTo16(downsample(raw, inputHz, PCM_HZ));
   const wav = encodeWavPcm16(pcm, PCM_HZ);
-  if (wav.byteLength < 800 || wav.byteLength > 480_000) {
+  if (wav.byteLength < 600 || wav.byteLength > 480_000) {
+    lastClip = "short";
     pipeState = "listening";
     emit();
     return;
@@ -454,14 +459,20 @@ async function sendClip(fromPtt: boolean) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ hear: bufB64(wav), mime: "audio/wav" }),
-      signal: AbortSignal.timeout(20_000),
+      signal: AbortSignal.timeout(8_000),
     });
     const data = (await res.json()) as { ok?: boolean; text?: string };
     const text = String(data.text ?? "").trim();
     clipsSent += 1;
-    if (data.ok && text && onHear && wanted && !paused) onHear(text, { ptt: fromPtt });
+    lastClip = data.ok && text ? "ok" : "empty";
+    if (data.ok && text && onHear && wanted) onHear(text, { ptt: fromPtt });
+    else if (onHear && wanted && (fromPtt || !data.ok)) {
+      lastClip = data.ok ? "empty" : "fail";
+      onHear("", { ptt: fromPtt, miss: true });
+    }
   } catch {
-    /* silêncio — o debug mostra lastFrame / clips */
+    lastClip = "fail";
+    if (onHear && wanted) onHear("", { ptt: fromPtt, miss: true });
   } finally {
     hearing = false;
     vad = { ...VAD_IDLE };

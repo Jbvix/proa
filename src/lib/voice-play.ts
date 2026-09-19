@@ -12,8 +12,8 @@ export function isAndroidVoice() {
 }
 
 export function voiceCool() {
-  if (isAndroidVoice()) return { cool: 900, tail: 280, flush: 200 };
-  return { cool: 1_500, tail: 350, flush: 350 };
+  if (isAndroidVoice()) return { cool: 420, tail: 160, flush: 120 };
+  return { cool: 700, tail: 220, flush: 180 };
 }
 
 export function voicePlaybackCtx(): AudioContext {
@@ -150,16 +150,28 @@ function b64buf(b64: string): ArrayBuffer {
   return raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength);
 }
 
+const decoded = new Map<string, AudioBuffer>();
+
+function decodeKey(b64: string) {
+  return `${b64.length}:${b64.slice(0, 40)}:${b64.slice(-20)}`;
+}
+
 async function decodeMp3(c: AudioContext, b64: string): Promise<AudioBuffer> {
+  const hit = decoded.get(decodeKey(b64));
+  if (hit) return hit;
   const copy = b64buf(b64);
+  let buf: AudioBuffer;
   try {
-    return await c.decodeAudioData(copy.slice(0));
+    buf = await c.decodeAudioData(copy.slice(0));
   } catch {
-    return await new Promise((resolve, reject) => {
+    buf = await new Promise((resolve, reject) => {
       const again = b64buf(b64);
       void c.decodeAudioData(again, resolve, reject);
     });
   }
+  if (decoded.size > 8) decoded.clear();
+  decoded.set(decodeKey(b64), buf);
+  return buf;
 }
 
 async function playWebAudio(b64: string): Promise<number> {

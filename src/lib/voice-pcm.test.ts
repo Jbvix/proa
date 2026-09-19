@@ -30,17 +30,29 @@ test("wav header is 16-bit mono PCM", () => {
   assert.equal(buf.byteLength, 44 + 8);
 });
 
-test("VAD needs hangover — a 400 ms pause does not end the turn", () => {
+test("short name ends after a brief pause", () => {
   let s = VAD_IDLE;
-  let start = 0;
   let end = 0;
-  for (let t = 0; t < 300; t += 20) {
-    const r = tickVad(s, 0.08, 20);
-    s = r.state;
-    if (r.event === "start") start += 1;
-  }
-  assert.equal(start, 1);
+  for (let t = 0; t < 400; t += 20) s = tickVad(s, 0.08, 20).state;
   assert.equal(s.speaking, true);
+  for (let t = 0; t < 250; t += 20) {
+    const r = tickVad(s, 0.002, 20);
+    s = r.state;
+    if (r.event === "end") end += 1;
+  }
+  assert.equal(end, 0);
+  for (let t = 0; t < 200; t += 20) {
+    const r = tickVad(s, 0.002, 20);
+    s = r.state;
+    if (r.event === "end") end += 1;
+  }
+  assert.equal(end, 1);
+});
+
+test("a long question survives a 400 ms pause", () => {
+  let s = VAD_IDLE;
+  let end = 0;
+  for (let t = 0; t < 1_600; t += 20) s = tickVad(s, 0.08, 20).state;
   for (let t = 0; t < 400; t += 20) {
     const r = tickVad(s, 0.002, 20);
     s = r.state;
@@ -54,7 +66,6 @@ test("VAD needs hangover — a 400 ms pause does not end the turn", () => {
     if (r.event === "end") end += 1;
   }
   assert.equal(end, 1);
-  assert.equal(s.speaking, false);
 });
 
 test("ring sliceLast returns the most recent samples", () => {

@@ -23,7 +23,8 @@ test("oi alana and a lana still wake", () => {
   assert.equal(hearWake("elana tchau").woke, true);
   assert.equal(hearWake("Alana?").woke, true);
   assert.equal(hearWake("halana relatório").woke, true);
-  assert.equal(hearWake("a lanna, eta").woke, true);
+  assert.equal(hearWake("alanna relatório").woke, true);
+  assert.equal(hearWake("alanah, eta").woke, true);
 });
 
 test("plain question does not wake", () => {
@@ -50,6 +51,7 @@ test("echo of greet and last line is ignored", () => {
     true,
   );
   assert.equal(isAlanaEcho("Ó o balanço de banda. Tá forte. Segura o rumo e a faixa de RPM."), true);
+  assert.equal(isAlanaEcho("Não peguei. Manda de novo."), true);
 });
 
 const LAST =

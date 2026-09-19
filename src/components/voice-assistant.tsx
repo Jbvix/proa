@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Mic, Send, X } from "lucide-react";
 import { useLiveBridge } from "@/components/bridge-provider";
 import { useBridge, useSettings } from "@/lib/store";
-import { ALANA_BYE, ALANA_GREET, ALANA_ROLL, ALANA_XTE, type CannedKind } from "@/lib/voice-copy";
+import { ALANA_BYE, ALANA_GREET, ALANA_MISS, ALANA_ROLL, ALANA_XTE, type CannedKind } from "@/lib/voice-copy";
 import {
   holdEchoCanceller,
   playVoiceMp3,
@@ -36,6 +36,7 @@ const SESSION_MS = 90_000;
 const TTS_CACHE = {
   greet: "proa-alana-tts-greet-v2",
   bye: "proa-alana-tts-bye-v2",
+  miss: "proa-alana-tts-miss-v1",
   xte: "proa-alana-tts-xte-v1",
   roll: "proa-alana-tts-roll-v1",
 } as const;
@@ -105,6 +106,8 @@ export function AlanaRadio() {
   const lastLineRef = useRef<string | null>(null);
   const watchRef = useRef<WatchState>(WATCH_IDLE);
   const lastAlertAt = useRef(0);
+  const pendingHear = useRef<{ text: string; ptt: boolean; miss?: boolean } | null>(null);
+  const pendingTimer = useRef(0);
   const engineRef = useRef(engine);
   const meteoRef = useRef(meteo);
   const routeRef = useRef(route);
@@ -127,6 +130,7 @@ export function AlanaRadio() {
       speaking.current ||
       asking.current ||
       cooling.current ||
+      locking.current ||
       performance.now() < deafUntil.current
     );
   }
@@ -153,11 +157,20 @@ export function AlanaRadio() {
     pauseBridgeListen();
   }
 
-  function handleHeard(heard: string, isFinal: boolean, fromPtt = false) {
-    if (blocked()) return;
-    if (performance.now() < liveAt.current) return;
+  function handleHeard(heard: string, isFinal: boolean, fromPtt = false, miss = false) {
     const text = heard.trim();
-    if (!text) return;
+    if (blocked() || performance.now() < liveAt.current) {
+      if (text || miss) {
+        pendingHear.current = { text, ptt: fromPtt, miss };
+        const until = Math.max(deafUntil.current, liveAt.current);
+        scheduleFlush(until - performance.now());
+      }
+      return;
+    }
+    if (!text) {
+      if (miss && modeRef.current === "session") void speakMiss();
+      return;
+    }
     if (heardEcho(text)) return;
     const parse = hearWake(text);
     if (fromPtt) {
@@ -170,7 +183,11 @@ export function AlanaRadio() {
         void wake(q, false);
         return;
       }
-      if (q && !heardEcho(q)) void ask(q);
+      if (!q) {
+        void wake("", false);
+        return;
+      }
+      if (!heardEcho(q)) void ask(q);
       return;
     }
     if (modeRef.current !== "session") {
@@ -184,8 +201,34 @@ export function AlanaRadio() {
       void sleep();
       return;
     }
-    const q = parse.rest;
-    if (q && !heardEcho(q)) void ask(q);
+    const q = parse.woke ? parse.rest : text;
+    if (!q) {
+      void wake("", false);
+      return;
+    }
+    if (!heardEcho(q)) void ask(q);
+  }
+
+  function scheduleFlush(wait: number) {
+    window.clearTimeout(pendingTimer.current);
+    pendingTimer.current = window.setTimeout(() => {
+      if (speaking.current || asking.current || locking.current) {
+        scheduleFlush(180);
+        return;
+      }
+      const until = Math.max(deafUntil.current, liveAt.current);
+      if (cooling.current || performance.now() < until) {
+        scheduleFlush(Math.max(40, until - performance.now()));
+        return;
+      }
+      flushPending();
+    }, Math.max(40, wait));
+  }
+
+  function flushPending() {
+    const p = pendingHear.current;
+    pendingHear.current = null;
+    if (p) handleHeard(p.text, true, p.ptt, !!p.miss);
   }
 
   function arm() {
@@ -199,6 +242,7 @@ export function AlanaRadio() {
       );
       return;
     }
+    flushPending();
     releaseEchoCanceller();
     const { flush } = voiceCool();
     liveAt.current = performance.now() + flush;
@@ -207,7 +251,7 @@ export function AlanaRadio() {
     void resumeListenCtx();
     void startBridgeListen((heard, meta) => {
       if (!wanted.current) return;
-      handleHeard(heard, true, !!meta?.ptt);
+      handleHeard(heard, true, !!meta?.ptt, !!meta?.miss);
     })
       .then(() => {
         if (modeRef.current === "off") {
@@ -251,6 +295,7 @@ export function AlanaRadio() {
       await new Promise((r) => window.setTimeout(r, tail));
     } finally {
       speaking.current = false;
+      resumeBridgeListen();
       coolThenArm(extra);
     }
     void text;
@@ -275,6 +320,7 @@ export function AlanaRadio() {
 
   function prefetchCanned() {
     void fetchCanned("greet");
+    void fetchCanned("miss");
     void fetchCanned("xte");
     void fetchCanned("roll");
   }
@@ -346,6 +392,23 @@ export function AlanaRadio() {
       setBusy(false);
     }
     window.setTimeout(() => setOpen(false), 1800);
+  }
+
+  async function speakMiss() {
+    if (muted || speaking.current || asking.current || locking.current) return;
+    if (lastLineRef.current === ALANA_MISS) return;
+    locking.current = true;
+    rememberLine(ALANA_MISS);
+    setTurns((t) => [...t, { role: "assistant", content: ALANA_MISS }]);
+    bumpSession();
+    setBusy(true);
+    try {
+      const audio = await fetchCanned("miss");
+      await playReply(ALANA_MISS, audio);
+    } finally {
+      setBusy(false);
+      locking.current = false;
+    }
   }
 
   async function ask(text: string) {
@@ -451,6 +514,7 @@ export function AlanaRadio() {
       window.clearTimeout(holdTimer.current);
       window.clearTimeout(coolTimer.current);
       window.clearTimeout(armDelay.current);
+      window.clearTimeout(pendingTimer.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [muted]);
@@ -578,17 +642,21 @@ export function AlanaRadio() {
               <p className="text-[11px] uppercase tracking-[0.12em] text-subtle">
                 {muted
                   ? "desligada"
-                  : busy
-                    ? "falando"
-                    : snap?.state === "mic_lost" || snap?.state === "suspended"
-                      ? "toca pra retomar"
-                      : ptt
-                        ? "aperte pra falar"
-                        : mode === "session"
-                          ? "à disposição"
-                          : listening
-                            ? "escuta o nome"
-                            : "parada"}
+                  : snap?.state === "user_speaking" || pttHeld
+                    ? "escutando"
+                    : snap?.state === "waiting"
+                      ? "um segundo"
+                      : busy
+                        ? "falando"
+                        : snap?.state === "mic_lost" || snap?.state === "suspended"
+                          ? "toca pra retomar"
+                          : ptt
+                            ? "aperte pra falar"
+                            : mode === "session"
+                              ? "à disposição"
+                              : listening
+                                ? "escuta o nome"
+                                : "parada"}
               </p>
               <button
                 type="button"
@@ -635,7 +703,7 @@ export function AlanaRadio() {
                   VAD {snap.vad} · hang {snap.hangMs} ms · frames {snap.framesIn} ·
                   clips {snap.clipsSent}
                   <br />
-                  last {snap.lastFrameAgeMs} ms · {snap.visibility}
+                  last {snap.lastFrameAgeMs} ms · clip {snap.lastClip} · {snap.visibility}
                   {snap.ptt ? " · PTT" : ""}
                 </p>
               ) : null}
