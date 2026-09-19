@@ -1,5 +1,6 @@
 import { foldPt } from "./wake-word.ts";
 import type { VoiceContext } from "./voice-context.ts";
+import { consultReply } from "./bridge-knowledge.ts";
 
 function tag(ctx: VoiceContext) {
   const n = ctx.tripulacao[0];
@@ -33,6 +34,15 @@ export function quickReply(raw: string, ctx: VoiceContext): string | null {
   if (/relatorio|situacao|resumo|tudo ai|me conta|historia|futebol|piada|como vai|tudo bem/.test(t)) {
     return null;
   }
+  const consult = consultReply(raw, {
+    name: ctx.tripulacao[0],
+    xteNm: ctx.posicao.xteNm,
+    xteLado: ctx.posicao.xteLado,
+    hsM: ctx.mar.hsCasco,
+    rollDeg: ctx.mar.balancoDeg,
+    costaNm: ctx.posicao.costaNm,
+  });
+  if (consult) return consult;
   const hi = tag(ctx);
   const city = cityHit(t, ctx);
   if (city && /passa|passagem|eta|hora|quando|cheg|cidade|porto|praia/.test(t)) {

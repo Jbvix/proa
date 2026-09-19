@@ -86,6 +86,7 @@ function ctx(over: Partial<VoiceContext> = {}): VoiceContext {
     consulta: {
       papel: "Colega presencial no passadiço.",
       navegacao: "",
+      colreg: "",
       estabilidade: "",
       norman: "",
       marpol: "",
@@ -111,7 +112,9 @@ test("sea wind sog use the live numbers", () => {
   assert.match(quickReply("qual o sog", ctx()) ?? "", /7\.2 nós/);
 });
 
-test("small talk stays on grok", () => {
+test("consulting hits without grok and skips small talk", () => {
+  assert.match(quickReply("o que é superfície livre", ctx()) ?? "", /Superfície livre/);
+  assert.match(quickReply("o que a COLREG pede", ctx()) ?? "", /vigia/);
   assert.equal(quickReply("e o futebol ontem", ctx()), null);
   assert.equal(quickReply("me dá o relatório", ctx()), null);
 });
