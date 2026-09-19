@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Send, X } from "lucide-react";
+import { X } from "lucide-react";
 import { AlanaMark, ALANA_FACE_LABEL, type AlanaFace } from "@/components/alana-mark";
 import { useLiveBridge } from "@/components/bridge-provider";
 import { useBridge, useSettings } from "@/lib/store";
@@ -287,6 +287,7 @@ export function AlanaRadio() {
     cooling.current = true;
     setThinking(false);
     setSaying(true);
+    bumpSession();
     stopRec();
     stopVoice();
     void holdEchoCanceller();
@@ -295,7 +296,7 @@ export function AlanaRadio() {
     try {
       if (audio) {
         const dur = await playVoiceMp3(audio);
-        extra = Math.min(1_600, Math.max(0, dur * 0.14));
+        extra = Math.min(1_600, Math.max(0, dur * 0.08));
       }
       await new Promise((r) => window.setTimeout(r, tail));
     } finally {
@@ -725,12 +726,11 @@ export function AlanaRadio() {
             <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 pb-3">
               {turns.length === 0 ? (
                 <p className="text-sm text-muted">
-                  Chama <span className="text-fg">Alana</span> pelo nome. O
-                  microfone fica aberto — não reabre a cada frase. No
-                  passadiço, pausa curta não corta o turno. Se o ruído apertar,
-                  usa <span className="text-fg">Aperta pra falar</span>. Se o
-                  rebocador abrir da derrota ou o balanço de banda apertar, ela
-                  fala sozinha.
+                  Chama <span className="text-fg">Alana</span> pelo nome. Só
+                  voz — não tem teclado. O microfone fica aberto. Se o ruído
+                  apertar, usa <span className="text-fg">Aperta pra falar</span>.
+                  Se o rebocador abrir da derrota ou o balanço de banda apertar,
+                  ela fala sozinha.
                 </p>
               ) : (
                 turns.map((t, i) => (
@@ -765,7 +765,7 @@ export function AlanaRadio() {
                 </p>
               ) : null}
             </div>
-            <div className="flex gap-2 overflow-x-auto px-3 pb-1">
+            <div className="flex gap-2 overflow-x-auto px-3 pb-3">
               {ASK_CHIPS.map((c) => (
                 <button
                   key={c.label}
@@ -825,35 +825,6 @@ export function AlanaRadio() {
                 {pttHeld ? "Solta pra enviar" : "Aperta pra falar"}
               </button>
             ) : null}
-            <form
-              className="flex items-center gap-2 border-t border-border px-3 py-3"
-              onSubmit={(e) => {
-                e.preventDefault();
-                const input = e.currentTarget.elements.namedItem("q") as HTMLInputElement;
-                const v = input.value;
-                input.value = "";
-                modeRef.current = "session";
-                setMode("session");
-                bumpSession();
-                void ask(v);
-              }}
-            >
-              <input
-                name="q"
-                className="h-12 min-w-0 flex-1 rounded-md bg-bg px-3 text-sm text-fg outline-none shadow-[var(--shadow-border)] placeholder:text-subtle"
-                placeholder="Ou escreve aqui…"
-                autoComplete="off"
-                disabled={busy}
-              />
-              <button
-                type="submit"
-                aria-label="Enviar"
-                disabled={busy}
-                className="flex size-11 shrink-0 items-center justify-center rounded-md text-accent hover:bg-surface-2 disabled:opacity-40"
-              >
-                <Send className="size-5" />
-              </button>
-            </form>
           </div>
         </div>
       ) : null}

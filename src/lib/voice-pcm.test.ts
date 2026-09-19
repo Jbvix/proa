@@ -35,7 +35,7 @@ test("short name ends after a brief pause", () => {
   let end = 0;
   for (let t = 0; t < 400; t += 20) s = tickVad(s, 0.08, 20).state;
   assert.equal(s.speaking, true);
-  for (let t = 0; t < 250; t += 20) {
+  for (let t = 0; t < 400; t += 20) {
     const r = tickVad(s, 0.002, 20);
     s = r.state;
     if (r.event === "end") end += 1;
@@ -66,6 +66,21 @@ test("a long question survives a 400 ms pause", () => {
     if (r.event === "end") end += 1;
   }
   assert.equal(end, 1);
+});
+
+test("a quiet syllable in the middle does not end the turn", () => {
+  let s = VAD_IDLE;
+  let end = 0;
+  for (let t = 0; t < 1_200; t += 20) s = tickVad(s, 0.08, 20).state;
+  for (let t = 0; t < 180; t += 20) {
+    const r = tickVad(s, 0.02, 20);
+    s = r.state;
+    if (r.event === "end") end += 1;
+  }
+  assert.equal(end, 0);
+  assert.equal(s.speaking, true);
+  for (let t = 0; t < 800; t += 20) s = tickVad(s, 0.08, 20).state;
+  assert.equal(s.speaking, true);
 });
 
 test("ring sliceLast returns the most recent samples", () => {

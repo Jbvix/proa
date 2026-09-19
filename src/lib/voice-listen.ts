@@ -41,7 +41,7 @@ export type VoiceSnap = {
 };
 
 const PCM_HZ = 16_000;
-const RING_S = 4.5;
+const RING_S = 11;
 
 let stream: MediaStream | null = null;
 let cap: AudioContext | null = null;
@@ -459,7 +459,7 @@ async function sendClip(fromPtt: boolean) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ hear: bufB64(wav), mime: "audio/wav" }),
-      signal: AbortSignal.timeout(8_000),
+      signal: AbortSignal.timeout(14_000),
     });
     const data = (await res.json()) as { ok?: boolean; text?: string };
     const text = String(data.text ?? "").trim();

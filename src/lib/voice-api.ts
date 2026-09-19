@@ -74,13 +74,13 @@ export async function askGrokVoice(
   context: VoiceContext,
   history: VoiceTurn[] = [],
 ): Promise<{ text: string; audio: string | null }> {
-  const user = clip(message, 480);
+  const user = clip(message, 720);
   if (!user) return { text: "Manda de novo, não peguei o áudio.", audio: null };
 
   const res = await grokFetch("https://api.x.ai/v1/chat/completions", apiKey, {
     model: "grok-4.5",
     temperature: 0.85,
-    max_tokens: 480,
+    max_tokens: 700,
     messages: [
       { role: "system", content: SYSTEM },
       {
@@ -101,7 +101,7 @@ export async function askGrokVoice(
   const body = (await res.json()) as {
     choices?: { message?: { content?: string } }[];
   };
-  const text = clip(body.choices?.[0]?.message?.content ?? "", 1100);
+  const text = clip(body.choices?.[0]?.message?.content ?? "", 2_200);
   if (!text) throw new Error("Grok vazio");
 
   const audio = await speakGrok(apiKey, text);
@@ -125,7 +125,7 @@ export async function speakCanned(
 async function speakGrok(apiKey: string, text: string): Promise<string | null> {
   try {
     const res = await grokFetch("https://api.x.ai/v1/tts", apiKey, {
-      text: clip(text, 850),
+      text: clip(text, 2_400),
       voice_id: "ara",
       language: "pt-BR",
       output_format: {

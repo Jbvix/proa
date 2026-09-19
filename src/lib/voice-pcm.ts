@@ -8,15 +8,15 @@ export type VadCfg = {
   maxMs: number;
 };
 
-/** Passadiço: nome curto fecha rápido; pergunta longa aguenta pausa. */
+/** Passadiço: nome curto fecha rápido; pergunta longa aguenta pausa e sílaba fraca. */
 export const BRIDGE_VAD: VadCfg = {
-  hangMs: 720,
-  hangShortMs: 360,
-  shortMs: 900,
+  hangMs: 1_100,
+  hangShortMs: 520,
+  shortMs: 800,
   startMs: 90,
-  preRollMs: 280,
+  preRollMs: 320,
   minMs: 380,
-  maxMs: 4_000,
+  maxMs: 10_000,
 };
 
 export type VadState = {
@@ -52,6 +52,7 @@ export function tickVad(
   let floor = prev.floor;
   if (rms < floor * 1.35) floor = floor * 0.97 + Math.max(0.003, rms) * 0.03;
   const trig = Math.max(0.012, floor * 3.2);
+  const hold = Math.max(0.007, trig * 0.42);
   let aboveMs = prev.aboveMs;
   let silentMs = prev.silentMs;
   let speaking = prev.speaking;
@@ -61,6 +62,9 @@ export function tickVad(
   if (rms > trig) {
     aboveMs += dtMs;
     silentMs = 0;
+  } else if (speaking && rms > hold) {
+    aboveMs += dtMs * 0.35;
+    silentMs = Math.max(0, silentMs - dtMs * 0.3);
   } else {
     aboveMs = Math.max(0, aboveMs - dtMs * 0.4);
     silentMs += dtMs;

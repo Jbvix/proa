@@ -187,7 +187,11 @@ async function playWebAudio(b64: string): Promise<number> {
   gain.connect(c.destination);
   node = src;
   await new Promise<void>((resolve) => {
-    const t = window.setTimeout(resolve, Math.min(20_000, buf.duration * 1000 + 120));
+    const ms = Math.min(90_000, Math.max(500, buf.duration * 1000 + 280));
+    const t = window.setTimeout(() => {
+      if (node === src) node = null;
+      resolve();
+    }, ms);
     src.onended = () => {
       window.clearTimeout(t);
       if (node === src) node = null;
@@ -226,8 +230,8 @@ async function playHtmlAudio(b64: string): Promise<number> {
   }
   hushMediaSession();
   await new Promise<void>((resolve) => {
-    const wait = Number.isFinite(a.duration) ? a.duration * 1000 + 200 : 8_000;
-    const t = window.setTimeout(resolve, Math.min(20_000, wait));
+    const wait = Number.isFinite(a.duration) ? a.duration * 1000 + 280 : 12_000;
+    const t = window.setTimeout(resolve, Math.min(90_000, Math.max(500, wait)));
     a.onended = () => {
       window.clearTimeout(t);
       resolve();
