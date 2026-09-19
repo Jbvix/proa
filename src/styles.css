@@ -208,6 +208,14 @@ html[data-theme="day"] {
   opacity: 0.42;
 }
 
+.alana-mark-espera {
+  opacity: 0.78;
+}
+
+.alana-mark-espera .alana-arc {
+  opacity: 0.32;
+}
+
 .alana-mark-ouvindo .alana-arc-in {
   animation: alana-listen-in 1.15s ease-in-out infinite;
 }

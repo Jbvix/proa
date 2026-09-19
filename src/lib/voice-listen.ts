@@ -417,10 +417,11 @@ function onFrame(chunk: Float32Array) {
   if (hit.event === "start") {
     speechStartedAt = now - BRIDGE_VAD.preRollMs;
     pipeState = "user_speaking";
+    emit();
   } else if (hit.event === "end") {
     void sendClip(false);
   }
-  if (framesIn % 8 === 0) emit();
+  if (vad.speaking || framesIn % 4 === 0) emit();
 }
 
 function pumpMeter() {

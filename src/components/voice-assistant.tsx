@@ -659,6 +659,8 @@ export function AlanaRadio() {
 
   const listening = mode === "wake" || mode === "session";
   const lost = snap?.state === "mic_lost" || snap?.state === "suspended";
+  const userTalking =
+    snap?.state === "user_speaking" || pttHeld || snap?.vad === "speech";
   const face: AlanaFace = muted
     ? "off"
     : saying
@@ -667,22 +669,19 @@ export function AlanaRadio() {
         ? "processando"
         : lost
           ? "off"
-          : listening || pttHeld || snap?.state === "user_speaking"
+          : userTalking
             ? "ouvindo"
-            : "off";
+            : listening
+              ? "espera"
+              : "off";
   const faceLabel = muted
     ? "desligada"
     : lost
       ? "toca pra retomar"
-      : ptt && face === "ouvindo" && !pttHeld
+      : ptt && face === "espera" && !pttHeld
         ? "aperte pra falar"
         : ALANA_FACE_LABEL[face];
-  const hearLevel =
-    face === "ouvindo" && (snap?.state === "user_speaking" || pttHeld)
-      ? (snap?.level ?? 0)
-      : face === "ouvindo"
-        ? 0.08
-        : 0;
+  const hearLevel = face === "ouvindo" ? Math.max(0.12, snap?.level ?? 0.12) : 0;
 
   function beginHold() {
     held.current = false;
@@ -736,7 +735,7 @@ export function AlanaRadio() {
         }}
         className={cn(
           "flex size-11 items-center justify-center rounded-md transition-[background-color,color] duration-150 active:scale-[0.96]",
-          muted || face === "off"
+          muted || face === "off" || face === "espera"
             ? "text-subtle hover:bg-surface-2 hover:text-fg"
             : face === "falando"
               ? "voice-pulse bg-accent text-accent-fg"
@@ -763,7 +762,9 @@ export function AlanaRadio() {
                 ? "text-accent"
                 : face === "processando"
                   ? "text-warn"
-                  : "text-ok",
+                  : face === "ouvindo"
+                    ? "text-ok"
+                    : "text-subtle",
             )}
           />
           <span className="mr-1 font-display italic text-accent">Alana</span>
@@ -786,7 +787,7 @@ export function AlanaRadio() {
                 level={hearLevel}
                 className={cn(
                   "size-6 shrink-0",
-                  muted || face === "off"
+                  muted || face === "off" || face === "espera"
                     ? "text-subtle"
                     : face === "falando"
                       ? "text-accent"

@@ -1,9 +1,10 @@
 import { cn } from "@/lib/utils";
 
-export type AlanaFace = "off" | "ouvindo" | "processando" | "falando";
+export type AlanaFace = "off" | "espera" | "ouvindo" | "processando" | "falando";
 
 export const ALANA_FACE_LABEL: Record<AlanaFace, string> = {
   off: "desligada",
+  espera: "à espera",
   ouvindo: "ouvindo",
   processando: "processando",
   falando: "falando",

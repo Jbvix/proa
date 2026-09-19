@@ -22,7 +22,7 @@ const CANNED: Record<CannedKind, string> = {
 
 const SYSTEM = `Você é a rádio do passadiço do app Proa, da TugLife. Colega de bordo: português do Brasil, solta, amigável, como quem conversa no rádio no meio da vigia. Não é boletim, ATC nem atendente. Sem emoji. Não se apresente em toda resposta e NUNCA fale a palavra "Alana" nem "a lana", senão o microfone acorda. Se perguntarem quem você é: "Sou a rádio do passadiço. Pode mandar."
 
-Tom: contrações (tá, tô, pra, a gente). Chame a tripulação pelo nome quando tripulacao[] tiver alguém. Não use "senhor" nem "comandante". Não encerre com "posso ajudar em mais alguma coisa". Sem lista numerada.
+Tom: contrações (tá, tô, pra, a gente). Chame a tripulação pelo nome quando tripulacao[] tiver alguém. Não use "senhor" nem "comandante". Não encerre com "posso ajudar em mais alguma coisa". Sem lista numerada. Sempre português do Brasil — nunca inglês.
 
 Papo do passadiço: pode distrair, zoar leve, café, cansaço da vigia, um futebol curto, uma história boba — 2 a 5 frases, no clima de bordo. Se a conversa escorrer demais, um gancho curto de volta pra derrota ("e o Hs tá de boa"). Não recuse papo fiado.
 
@@ -167,6 +167,30 @@ async function speakGrok(apiKey: string, text: string): Promise<string | null> {
   }
 }
 
+async function postStt(
+  apiKey: string,
+  raw: Buffer,
+  type: string,
+  kind: string,
+  language: string,
+): Promise<Response> {
+  const form = new FormData();
+  form.append("model", "grok-voice-transcribe-2.0");
+  form.append("language", language);
+  form.append("format", "true");
+  form.append("vad_threshold", "0.08");
+  form.append("keyterm", "Alana");
+  form.append("keyterm", "a Lana");
+  form.append("keyterm", "Olana");
+  form.append("file", new Blob([new Uint8Array(raw)], { type }), `clip.${kind}`);
+  return fetch("https://api.x.ai/v1/stt", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${apiKey}` },
+    body: form,
+    ignoreResponseError: true,
+  } as FetchOpts);
+}
+
 export async function hearGrok(
   apiKey: string,
   audioB64: string,
@@ -193,22 +217,11 @@ export async function hearGrok(
           : kind === "mp3"
             ? "audio/mpeg"
             : "audio/webm";
-  const form = new FormData();
-  form.append("model", "grok-voice-transcribe-2.0");
-  form.append("language", "pt");
-  form.append("vad_threshold", "0.08");
-  form.append("keyterm", "Alana");
-  form.append("keyterm", "a Lana");
-  form.append("keyterm", "Olana");
-  form.append("file", new Blob([new Uint8Array(raw)], { type }), `clip.${kind}`);
-  const res = await fetch("https://api.x.ai/v1/stt", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${apiKey}` },
-    body: form,
-    ignoreResponseError: true,
-  } as FetchOpts);
+  let res = await postStt(apiKey, raw, type, kind, "pt-BR");
+  if (!res.ok) res = await postStt(apiKey, raw, type, kind, "pt");
   if (!res.ok) return "";
   const body = (await res.json()) as { text?: string; words?: { text?: string }[] };
   const fromWords = (body.words ?? []).map((w) => String(w.text ?? "").trim()).filter(Boolean).join(" ");
   return clip(String(body.text || fromWords || "").trim(), 480);
 }
+
