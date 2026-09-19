@@ -1,0 +1,130 @@
+import { foldPt } from "./wake-word.ts";
+import type { VoiceContext } from "./voice-context.ts";
+
+function tag(ctx: VoiceContext) {
+  const n = ctx.tripulacao[0];
+  return n ? `${n}. ` : "";
+}
+
+function kn(n: number | null | undefined) {
+  if (n == null || !Number.isFinite(n)) return null;
+  return n.toFixed(n >= 10 ? 0 : 1);
+}
+
+function nm(n: number | null | undefined) {
+  if (n == null || !Number.isFinite(n)) return null;
+  return n.toFixed(n >= 10 ? 0 : 1);
+}
+
+function cityHit(t: string, ctx: VoiceContext) {
+  let best: VoiceContext["cidades"][number] | null = null;
+  for (const c of ctx.cidades) {
+    const f = foldPt(c.nome);
+    if (f.length < 3 || !t.includes(f)) continue;
+    if (!best || c.nome.length > best.nome.length) best = c;
+  }
+  return best;
+}
+
+/** Instant bridge facts — skip Grok when the numbers are already on the radio. */
+export function quickReply(raw: string, ctx: VoiceContext): string | null {
+  const t = foldPt(raw);
+  if (!t || t.length < 4) return null;
+  if (/relatorio|situacao|resumo|tudo ai|me conta|historia|futebol|piada|como vai|tudo bem/.test(t)) {
+    return null;
+  }
+  const hi = tag(ctx);
+  const city = cityHit(t, ctx);
+  if (city && /passa|passagem|eta|hora|quando|cheg|cidade|porto|praia/.test(t)) {
+    if (city.passou) return `${hi}${city.nome} já ficou pra trás.`;
+    const eta = city.eta ?? "sem hora ainda";
+    return `${hi}${city.nome}, ${eta}. Faltam ${nm(city.faltaNm) ?? "—"} milhas.`;
+  }
+
+  if (/\beta\b|chegad|quando (a gente )?chega|que horas (chega|e a chegada)|falta quanto/.test(t)) {
+    const eta = ctx.mare.etaDia ?? ctx.mare.eta;
+    if (!eta) return `${hi}Ainda não tenho ETA. Precisa da derrota e SOG.`;
+    const falta = ctx.mare.etaFalta ?? (nm(ctx.viagem.faltaNm) ? `${nm(ctx.viagem.faltaNm)} milhas` : null);
+    return falta ? `${hi}ETA ${eta}. Faltam ${falta}.` : `${hi}ETA ${eta}.`;
+  }
+
+  if (/\bhs\b|altura (d[aeo]s? )?ondas?|ondas? (por minuto|ta|como)|como (ta )?o mar|estado do mar/.test(t)) {
+    const hs = ctx.mar.hsCasco.toFixed(1);
+    const extra = ctx.mar.hsPrev != null ? ` Previsão ${ctx.mar.hsPrev.toFixed(1)}.` : "";
+    return `${hi}Hs ${hs} m, ${ctx.mar.estado}. ${ctx.mar.ondasMin.toFixed(0)} por minuto.${extra}`;
+  }
+
+  if (/vento|rajada/.test(t)) {
+    const v = kn(ctx.meteo.ventoKn);
+    if (!v) return `${hi}Vento ainda não chegou.`;
+    const dir = ctx.meteo.ventoCard ? ` ${ctx.meteo.ventoCard}` : "";
+    const g = kn(ctx.meteo.rajadaKn);
+    return g ? `${hi}Vento ${v} nós${dir}, rajada ${g}.` : `${hi}Vento ${v} nós${dir}.`;
+  }
+
+  if (/corrente/.test(t)) {
+    const v = kn(ctx.meteo.correnteKn);
+    if (!v) return `${hi}Corrente ainda não chegou.`;
+    const dir = ctx.meteo.correnteCard ? ` ${ctx.meteo.correnteCard}` : "";
+    return `${hi}Corrente ${v} nós${dir}.`;
+  }
+
+  if (/mare|enchente|preamar|vazante/.test(t)) {
+    const fase = ctx.mare.fase ?? "sem fase";
+    const eta = ctx.mare.enchenteIdeal ? ` Enchente boa ${ctx.mare.enchenteIdeal}.` : "";
+    const tip = ctx.mare.conselho ? ` ${ctx.mare.conselho}` : "";
+    return `${hi}Maré ${fase}.${eta}${tip}`.trim();
+  }
+
+  if (/\bsog\b|velocidade|quantos nos|como (ta )?a velocidade/.test(t)) {
+    const v = kn(ctx.posicao.sogKn);
+    if (!v) return `${hi}SOG ainda não firmou.`;
+    return `${hi}${v} nós.`;
+  }
+
+  if (/\brumo\b|proa|heading/.test(t)) {
+    const r = ctx.posicao.rumo;
+    if (!r) return `${hi}Rumo ainda não firmou.`;
+    return `${hi}Rumo ${r}.`;
+  }
+
+  if (/\bxte\b|fora da (linha|derrota)|afast/.test(t)) {
+    const x = ctx.posicao.xteNm;
+    if (x == null) return `${hi}Sem XTE — falta a derrota.`;
+    const lado = ctx.posicao.xteLado ?? "";
+    return `${hi}XTE ${x.toFixed(2)} milhas ${lado}.`.trim();
+  }
+
+  if (/costa|longe da terra|distancia da costa/.test(t)) {
+    const d = nm(ctx.posicao.costaNm);
+    if (!d) return `${hi}Costa ainda não calculou.`;
+    const nome = ctx.posicao.costaNome ? ` ${ctx.posicao.costaNome}` : "";
+    return `${hi}${d} milhas da costa${nome}.`;
+  }
+
+  if (/posicao|onde (a gente |estamos|tamo)|lat|long/.test(t)) {
+    if (!ctx.posicao.latLon) return `${hi}GPS ainda não pegou.`;
+    const sog = kn(ctx.posicao.sogKn);
+    return sog
+      ? `${hi}${ctx.posicao.latLon}. ${sog} nós.`
+      : `${hi}${ctx.posicao.latLon}.`;
+  }
+
+  if (/turno|vigia/.test(t) && ctx.turnos.length) {
+    const named = ctx.turnos.find((w) => t.includes(foldPt(w.nome)));
+    const w = named ?? (ctx.turnos.length === 1 ? ctx.turnos[0] : null);
+    if (w) {
+      return `${hi}${w.nome}, fim ${w.fim}. Faltam ${w.faltaMin} min.`;
+    }
+  }
+
+  if (/\brpm\b|rotacao|máquina|maquina/.test(t)) {
+    return `${hi}${ctx.rpm.atual} RPM, faixa ${ctx.rpm.min} a ${ctx.rpm.max}. ${ctx.rpm.situacao}.`;
+  }
+
+  if (/combustivel|diesel|consumo/.test(t)) {
+    return `${hi}${ctx.combustivel.conselho}`;
+  }
+
+  return null;
+}

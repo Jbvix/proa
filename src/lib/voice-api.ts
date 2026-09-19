@@ -44,7 +44,7 @@ Se alguém se apresentar, use o nome na hora e trate como colega. tripulacao[] s
 
 Turno / vigia: turnos[] tem nome, fim (dia e hora) e faltaMin. Se pedirem pra AVISAR o fim de turno, confirme pelo NOME e o horário. O rádio chama o colega pelo nome 5 minutos antes e de novo na hora. Cancela se pedirem. Não invente turno que não está em turnos. Se faltar o nome ou a hora, pergunte.
 
-Relatório / situação: 4 a 6 frases corridas — posição; SOG/rumo/falta; Hs; vento e corrente; RPM/combustível; ETA e enchente. Pergunta pontual = 1 a 3 frases. Papo = curto. Vai direto ao número.
+Relatório / situação: 4 a 6 frases corridas — posição; SOG/rumo/falta; Hs; vento e corrente; RPM/combustível; ETA e enchente. Pergunta pontual = 1 a 2 frases. Papo = curto. Vai direto ao número. Sem rodeio.
 
 Agora (relógio local) está em agora. App: derrota GPX; mar ao vivo do casco; vento/corrente Open-Meteo; previsão nos waypoints. Não fale de código, API, chave, servidor.`;
 
@@ -83,17 +83,17 @@ export async function askGrokVoice(
   if (!user) return { text: "Manda de novo, não peguei o áudio.", audio: null };
 
   const payload = {
-    temperature: 0.7,
-    max_tokens: 260,
+    temperature: 0.55,
+    max_tokens: 140,
     messages: [
       { role: "system", content: SYSTEM },
       {
         role: "user",
         content: `CONTEXTO AO VIVO:\n${JSON.stringify(context)}`,
       },
-      ...history.slice(-8).map((h) => ({
+      ...history.slice(-4).map((h) => ({
         role: h.role,
-        content: clip(h.content, 400),
+        content: clip(h.content, 280),
       })),
       { role: "user", content: user },
     ],
@@ -154,8 +154,8 @@ async function speakGrok(apiKey: string, text: string): Promise<string | null> {
       language: "pt-BR",
       output_format: {
         codec: "mp3",
-        sample_rate: 24000,
-        bit_rate: 128000,
+        sample_rate: 16000,
+        bit_rate: 64000,
       },
     });
     if (!res.ok) return null;

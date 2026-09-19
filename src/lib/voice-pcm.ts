@@ -10,12 +10,12 @@ export type VadCfg = {
 
 /** Passadiço: nome curto fecha rápido; pergunta longa aguenta pausa e sílaba fraca. */
 export const BRIDGE_VAD: VadCfg = {
-  hangMs: 1_100,
-  hangShortMs: 520,
-  shortMs: 800,
-  startMs: 90,
-  preRollMs: 320,
-  minMs: 380,
+  hangMs: 820,
+  hangShortMs: 460,
+  shortMs: 2_000,
+  startMs: 80,
+  preRollMs: 280,
+  minMs: 320,
   maxMs: 10_000,
 };
 

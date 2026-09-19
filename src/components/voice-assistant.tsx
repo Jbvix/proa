@@ -29,6 +29,7 @@ import { buildVoiceContext, type VoiceTurn } from "@/lib/voice-context";
 import { hearWake, isAlanaEcho } from "@/lib/wake-word";
 import { extractCrewNames, mergeCrew, parseWatchAsk, parseWatchCancel, pruneWatches, dueWarn, dueWatch, dropWatch, upsertWatch, watchLine, watchWarnLine } from "@/lib/crew";
 import { formatEtaClock } from "@/lib/utils";
+import { quickReply } from "@/lib/voice-quick";
 import { passageOf } from "@/lib/passage";
 import { tickWatch, WATCH_IDLE, type WatchKind, type WatchState } from "@/lib/voice-watch";
 import { cn } from "@/lib/utils";
@@ -323,6 +324,17 @@ export function AlanaRadio() {
     void text;
   }
 
+  async function fetchSay(text: string): Promise<string | null> {
+    const res = await fetch("/api/voice", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ say: text }),
+      signal: AbortSignal.timeout(16_000),
+    });
+    const data = (await res.json()) as { ok?: boolean; audio?: string | null };
+    return data.ok && data.audio ? data.audio : null;
+  }
+
   async function fetchCanned(kind: CannedKind): Promise<string | null> {
     const cached = readTtsCache(kind);
     if (cached) return cached;
@@ -390,14 +402,8 @@ export function AlanaRadio() {
     setBusy(true);
     setThinking(true);
     try {
-      const res = await fetch("/api/voice", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ say: text }),
-        signal: AbortSignal.timeout(20_000),
-      });
-      const data = (await res.json()) as { ok?: boolean; audio?: string | null; text?: string };
-      await playReply(data.text ?? text, data.audio ?? null);
+      const audio = await fetchSay(text);
+      await playReply(text, audio);
     } finally {
       setBusy(false);
       setThinking(false);
@@ -484,7 +490,7 @@ export function AlanaRadio() {
     setError(null);
     setInterim("");
     bumpSession();
-    const history = turnsRef.current.slice(-8);
+    const history = turnsRef.current.slice(-4);
     setTurns((t) => [...t, { role: "user", content: q }]);
     stopRec();
     stopVoice();
@@ -504,10 +510,8 @@ export function AlanaRadio() {
       const watch = parseWatchAsk(q, crewRef.current, Date.now());
       if (watch) {
         const nextNames = mergeCrew(crewRef.current, [watch.name]);
-        if (nextNames !== crewRef.current) {
-          crewRef.current = nextNames;
-          setCrewNames(nextNames);
-        }
+        crewRef.current = nextNames;
+        setCrewNames(nextNames);
         const nextWatches = upsertWatch(pruneWatches(watchesRef.current, Date.now()), watch);
         watchesRef.current = nextWatches;
         setCrewWatches(nextWatches);
@@ -522,11 +526,25 @@ export function AlanaRadio() {
         crewNames: crewRef.current,
         crewWatches: watchesRef.current,
       });
+      const local =
+        watch && q.length < 90
+          ? `Fechou. Aviso o ${watch.name} às ${formatEtaClock(watch.endMs)}.`
+          : cancel && !watch && q.length < 70
+            ? `Beleza. Cancelei o aviso do ${cancel}.`
+            : quickReply(q, ctx);
+      if (local) {
+        rememberLine(local);
+        setTurns((t) => [...t, { role: "assistant", content: local }]);
+        const audio = await fetchSay(local);
+        await playReply(local, audio);
+        bumpSession();
+        return;
+      }
       const res = await fetch("/api/voice", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: q, context: ctx, history }),
-        signal: AbortSignal.timeout(45_000),
+        signal: AbortSignal.timeout(28_000),
       });
       const data = (await res.json()) as {
         ok?: boolean;

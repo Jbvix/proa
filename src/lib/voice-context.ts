@@ -180,7 +180,7 @@ export function buildVoiceContext(opts: {
     });
   }
   for (const w of route?.waypoints ?? []) {
-    if (wpts.length >= 8) break;
+    if (wpts.length >= 5) break;
     const st = stations.find((s) => Math.abs(s.lat - w.lat) < 0.02 && Math.abs(s.lon - w.lon) < 0.02);
     const nm = Number((st?.distNm ?? 0).toFixed(1));
     const pass = etaOf(nm);
@@ -210,24 +210,25 @@ export function buildVoiceContext(opts: {
 
   const hs = engine?.wave.hsM ?? 0;
   const sea = seaStateFromHs(hs);
-  const cidades = route
-    ? cityPassages(route.points, along, sog, nowMs).map((c) => ({
-        nome: c.nome,
-        faltaNm: c.faltaNm,
-        eta: c.eta,
-        passou: c.passou,
-      }))
-    : [];
+  const allCities = route ? cityPassages(route.points, along, sog, nowMs) : [];
+  const cidades = [
+    ...allCities.filter((c) => c.passou).slice(-2),
+    ...allCities.filter((c) => !c.passou).slice(0, 6),
+  ].map((c) => ({
+    nome: c.nome,
+    faltaNm: c.faltaNm,
+    eta: c.eta,
+    passou: c.passou,
+  }));
 
   return {
     telaAberta: tab,
-    aviso:
-      "Viagem + papo do passadiço. Velocidade em nós, distância em milhas náuticas. Cidades em cidades[].eta. Turnos em turnos[]. Relógio em agora. Fatos só do contexto.",
+    aviso: "Nós e milhas. Fatos só daqui.",
     agora: formatNowStamp(nowMs),
     tripulacao: crewNames.slice(0, 6),
     turnos: crewWatches
       .filter((w) => !w.fired && w.endMs > nowMs - 60_000)
-      .slice(0, 6)
+      .slice(0, 4)
       .map((w) => ({
         nome: w.name,
         fim: formatEtaDay(w.endMs, nowMs),
@@ -257,7 +258,7 @@ export function buildVoiceContext(opts: {
       xteNm: passage ? Number(passage.xteNm.toFixed(2)) : null,
       xteLado: passage ? xteSideLabel(passage.xteSide) : null,
     },
-    waypoints: wpts.slice(0, 8),
+    waypoints: wpts.slice(0, 5),
     cidades,
     mar: {
       hsCasco: Number(hs.toFixed(2)),
