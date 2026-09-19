@@ -188,8 +188,111 @@ html[data-theme="day"] {
   }
 }
 
+.alana-mark {
+  display: block;
+  overflow: visible;
+}
+
+.alana-mark .alana-waves,
+.alana-mark .alana-arc {
+  transform-box: view-box;
+  transform-origin: 12px 12px;
+}
+
+.alana-mark .alana-core {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.alana-mark-off {
+  opacity: 0.42;
+}
+
+.alana-mark-ouvindo .alana-arc-in {
+  animation: alana-listen-in 1.15s ease-in-out infinite;
+}
+
+.alana-mark-ouvindo .alana-arc-out {
+  animation: alana-listen-out 1.15s ease-in-out infinite 0.12s;
+}
+
+@keyframes alana-listen-in {
+  0%,
+  100% {
+    opacity: 0.4;
+    transform: scale(calc(0.9 + var(--alana-level, 0) * 0.08));
+  }
+  50% {
+    opacity: 1;
+    transform: scale(calc(1 + var(--alana-level, 0) * 0.12));
+  }
+}
+
+@keyframes alana-listen-out {
+  0%,
+  100% {
+    opacity: 0.28;
+    transform: scale(calc(0.88 + var(--alana-level, 0) * 0.1));
+  }
+  50% {
+    opacity: 0.9;
+    transform: scale(calc(1.04 + var(--alana-level, 0) * 0.16));
+  }
+}
+
+.alana-mark-processando .alana-waves {
+  animation: alana-think 1.05s linear infinite;
+}
+
+.alana-mark-processando .alana-core {
+  animation: alana-think-core 1.05s ease-in-out infinite;
+}
+
+@keyframes alana-think {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes alana-think-core {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(0.78);
+    opacity: 0.7;
+  }
+}
+
+.alana-mark-falando .alana-arc-in {
+  animation: alana-talk 0.85s ease-out infinite;
+}
+
+.alana-mark-falando .alana-arc-out {
+  animation: alana-talk 0.85s ease-out infinite 0.14s;
+}
+
+@keyframes alana-talk {
+  0% {
+    opacity: 0.95;
+    transform: scale(0.88);
+  }
+  100% {
+    opacity: 0.12;
+    transform: scale(1.22);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .voice-pulse {
+    animation: none;
+  }
+  .alana-mark-ouvindo .alana-arc,
+  .alana-mark-processando .alana-waves,
+  .alana-mark-processando .alana-core,
+  .alana-mark-falando .alana-arc {
     animation: none;
   }
 }

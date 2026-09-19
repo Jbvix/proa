@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { Mic, Send, X } from "lucide-react";
+import { Send, X } from "lucide-react";
+import { AlanaMark, ALANA_FACE_LABEL, type AlanaFace } from "@/components/alana-mark";
 import { useLiveBridge } from "@/components/bridge-provider";
 import { useBridge, useSettings } from "@/lib/store";
 import { ALANA_BYE, ALANA_GREET, ALANA_MISS, ALANA_ROLL, ALANA_XTE, type CannedKind } from "@/lib/voice-copy";
@@ -88,6 +89,8 @@ export function AlanaRadio() {
   const [debug, setDebug] = useState(false);
   const [snap, setSnap] = useState<VoiceSnap | null>(null);
   const [pttHeld, setPttHeld] = useState(false);
+  const [saying, setSaying] = useState(false);
+  const [thinking, setThinking] = useState(false);
 
   const asking = useRef(false);
   const locking = useRef(false);
@@ -282,6 +285,8 @@ export function AlanaRadio() {
   async function playReply(text: string, audio: string | null) {
     speaking.current = true;
     cooling.current = true;
+    setThinking(false);
+    setSaying(true);
     stopRec();
     stopVoice();
     void holdEchoCanceller();
@@ -295,6 +300,7 @@ export function AlanaRadio() {
       await new Promise((r) => window.setTimeout(r, tail));
     } finally {
       speaking.current = false;
+      setSaying(false);
       resumeBridgeListen();
       coolThenArm(extra);
     }
@@ -338,11 +344,13 @@ export function AlanaRadio() {
     setMode("session");
     bumpSession();
     setBusy(true);
+    setThinking(true);
     try {
       const audio = await fetchCanned(kind);
       await playReply(text, audio);
     } finally {
       setBusy(false);
+      setThinking(false);
       locking.current = false;
     }
     return true;
@@ -364,11 +372,13 @@ export function AlanaRadio() {
         rememberLine(ALANA_GREET);
         setTurns((t) => [...t, { role: "assistant", content: ALANA_GREET }]);
         setBusy(true);
+        setThinking(true);
         try {
           const audio = await fetchCanned("greet");
           await playReply(ALANA_GREET, audio);
         } finally {
           setBusy(false);
+          setThinking(false);
         }
         return;
       }
@@ -385,11 +395,13 @@ export function AlanaRadio() {
     rememberLine(ALANA_BYE);
     setTurns((t) => [...t, { role: "assistant", content: ALANA_BYE }]);
     setBusy(true);
+    setThinking(true);
     try {
       const audio = await fetchCanned("bye");
       await playReply(ALANA_BYE, audio);
     } finally {
       setBusy(false);
+      setThinking(false);
     }
     window.setTimeout(() => setOpen(false), 1800);
   }
@@ -402,11 +414,13 @@ export function AlanaRadio() {
     setTurns((t) => [...t, { role: "assistant", content: ALANA_MISS }]);
     bumpSession();
     setBusy(true);
+    setThinking(true);
     try {
       const audio = await fetchCanned("miss");
       await playReply(ALANA_MISS, audio);
     } finally {
       setBusy(false);
+      setThinking(false);
       locking.current = false;
     }
   }
@@ -416,6 +430,7 @@ export function AlanaRadio() {
     if (!q || asking.current) return;
     asking.current = true;
     setBusy(true);
+    setThinking(true);
     setError(null);
     setInterim("");
     bumpSession();
@@ -457,6 +472,7 @@ export function AlanaRadio() {
     } finally {
       setBusy(false);
       asking.current = false;
+      setThinking(false);
       if (!speaking.current && !cooling.current && wanted.current && !muted) {
         coolThenArm();
       }
@@ -479,6 +495,8 @@ export function AlanaRadio() {
       stopBridgeListen();
       releaseEchoCanceller();
       setMode("off");
+      setSaying(false);
+      setThinking(false);
       return;
     }
     wanted.current = true;
@@ -562,6 +580,31 @@ export function AlanaRadio() {
   }, [muted]);
 
   const listening = mode === "wake" || mode === "session";
+  const lost = snap?.state === "mic_lost" || snap?.state === "suspended";
+  const face: AlanaFace = muted
+    ? "off"
+    : saying
+      ? "falando"
+      : thinking || snap?.state === "waiting"
+        ? "processando"
+        : lost
+          ? "off"
+          : listening || pttHeld || snap?.state === "user_speaking"
+            ? "ouvindo"
+            : "off";
+  const faceLabel = muted
+    ? "desligada"
+    : lost
+      ? "toca pra retomar"
+      : ptt && face === "ouvindo" && !pttHeld
+        ? "aperte pra falar"
+        : ALANA_FACE_LABEL[face];
+  const hearLevel =
+    face === "ouvindo" && (snap?.state === "user_speaking" || pttHeld)
+      ? (snap?.level ?? 0)
+      : face === "ouvindo"
+        ? 0.08
+        : 0;
 
   function beginHold() {
     held.current = false;
@@ -584,8 +627,12 @@ export function AlanaRadio() {
     <>
       <button
         type="button"
-        aria-label={muted ? "Ligar Alana" : "Alana"}
-        title={muted ? "Alana desligada — toca pra ligar" : "Alana escuta o nome. Segura pra desligar."}
+        aria-label={muted ? "Ligar Alana" : `Alana ${faceLabel}`}
+        title={
+          muted
+            ? "Alana desligada — toca pra ligar"
+            : `Alana ${faceLabel}. Segura pra desligar.`
+        }
         onPointerDown={beginHold}
         onPointerUp={endHold}
         onPointerCancel={endHold}
@@ -611,26 +658,38 @@ export function AlanaRadio() {
         }}
         className={cn(
           "flex size-11 items-center justify-center rounded-md transition-[background-color,color] duration-150 active:scale-[0.96]",
-          muted
+          muted || face === "off"
             ? "text-subtle hover:bg-surface-2 hover:text-fg"
-            : mode === "session"
+            : face === "falando"
               ? "voice-pulse bg-accent text-accent-fg"
-              : listening
-                ? "text-accent hover:bg-surface-2"
-                : "text-muted hover:bg-surface-2 hover:text-fg",
+              : face === "processando"
+                ? "text-warn hover:bg-surface-2"
+                : "text-ok hover:bg-surface-2",
         )}
       >
-        <Mic className="size-5" />
+        <AlanaMark face={face} level={hearLevel} className="size-5" />
       </button>
 
       {!open && mode === "session" && lastLine ? (
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className="fixed inset-x-3 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-30 truncate rounded-md bg-surface/95 px-3 py-2 text-left text-sm text-fg shadow-[var(--shadow-border)] backdrop-blur-sm"
+          className="fixed inset-x-3 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-30 flex items-center gap-2 truncate rounded-md bg-surface/95 px-3 py-2 text-left text-sm text-fg shadow-[var(--shadow-border)] backdrop-blur-sm"
         >
-          <span className="mr-2 font-display italic text-accent">Alana</span>
-          {lastLine}
+          <AlanaMark
+            face={face}
+            level={hearLevel}
+            className={cn(
+              "size-4 shrink-0",
+              face === "falando"
+                ? "text-accent"
+                : face === "processando"
+                  ? "text-warn"
+                  : "text-ok",
+            )}
+          />
+          <span className="mr-1 font-display italic text-accent">Alana</span>
+          <span className="min-w-0 truncate">{lastLine}</span>
         </button>
       ) : null}
 
@@ -638,26 +697,22 @@ export function AlanaRadio() {
         <div className="fixed inset-0 z-40 flex items-end justify-center bg-bg/55 p-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] backdrop-blur-[2px]">
           <div className="flex max-h-[min(78dvh,36rem)] w-full max-w-lg flex-col rounded-2xl bg-surface shadow-[var(--shadow-border)]">
             <div className="flex items-center gap-2 px-4 py-3">
+              <AlanaMark
+                face={face}
+                level={hearLevel}
+                className={cn(
+                  "size-6 shrink-0",
+                  muted || face === "off"
+                    ? "text-subtle"
+                    : face === "falando"
+                      ? "text-accent"
+                      : face === "processando"
+                        ? "text-warn"
+                        : "text-ok",
+                )}
+              />
               <p className="flex-1 font-display text-2xl italic text-fg">Alana</p>
-              <p className="text-[11px] uppercase tracking-[0.12em] text-subtle">
-                {muted
-                  ? "desligada"
-                  : snap?.state === "user_speaking" || pttHeld
-                    ? "escutando"
-                    : snap?.state === "waiting"
-                      ? "um segundo"
-                      : busy
-                        ? "falando"
-                        : snap?.state === "mic_lost" || snap?.state === "suspended"
-                          ? "toca pra retomar"
-                          : ptt
-                            ? "aperte pra falar"
-                            : mode === "session"
-                              ? "à disposição"
-                              : listening
-                                ? "escuta o nome"
-                                : "parada"}
-              </p>
+              <p className="text-[11px] uppercase tracking-[0.12em] text-subtle">{faceLabel}</p>
               <button
                 type="button"
                 aria-label="Fechar"
@@ -692,7 +747,9 @@ export function AlanaRadio() {
               )}
               {interim ? <p className="text-sm text-subtle">{interim}</p> : null}
               {error ? <p className="text-sm text-danger">{error}</p> : null}
-              {busy ? <p className="text-sm text-subtle">Espera um segundo…</p> : null}
+              {face === "processando" ? (
+                <p className="text-sm text-subtle">Processando…</p>
+              ) : null}
               {debug && snap ? (
                 <p className="font-mono text-xs leading-relaxed text-subtle">
                   MIC {snap.track} · ctx {snap.ctx} · {snap.state}
