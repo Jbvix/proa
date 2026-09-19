@@ -5,7 +5,6 @@ import { useBridge, useSettings } from "@/lib/store";
 import { ALANA_BYE, ALANA_GREET, ALANA_ROLL, ALANA_XTE, type CannedKind } from "@/lib/voice-copy";
 import {
   holdEchoCanceller,
-  isAndroidVoice,
   playVoiceMp3,
   releaseEchoCanceller,
   stopVoice,
@@ -13,32 +12,23 @@ import {
   voiceCool,
 } from "@/lib/voice-play";
 import {
+  beginBridgePtt,
+  endBridgePtt,
+  getVoiceSnap,
   pauseBridgeListen,
   resumeBridgeListen,
+  resumeListenCtx,
+  setBridgePtt,
   startBridgeListen,
   stopBridgeListen,
+  subscribeVoiceSnap,
+  type VoiceSnap,
 } from "@/lib/voice-listen";
 import { buildVoiceContext, type VoiceTurn } from "@/lib/voice-context";
 import { hearWake, isAlanaEcho } from "@/lib/wake-word";
 import { passageOf } from "@/lib/passage";
 import { tickWatch, WATCH_IDLE, type WatchKind, type WatchState } from "@/lib/voice-watch";
 import { cn } from "@/lib/utils";
-
-type Recog = {
-  lang: string;
-  interimResults: boolean;
-  continuous: boolean;
-  maxAlternatives: number;
-  start: () => void;
-  stop: () => void;
-  abort: () => void;
-  onresult: ((ev: {
-    resultIndex: number;
-    results: ArrayLike<{ 0: { transcript: string }; isFinal: boolean }>;
-  }) => void) | null;
-  onerror: ((ev: { error?: string }) => void) | null;
-  onend: (() => void) | null;
-};
 
 type Mode = "off" | "wake" | "session";
 
@@ -58,14 +48,6 @@ const ASK_CHIPS: { q: string; label: string }[] = [
     label: "Combustível",
   },
 ];
-
-function getCtor() {
-  const w = window as unknown as {
-    SpeechRecognition?: new () => Recog;
-    webkitSpeechRecognition?: new () => Recog;
-  };
-  return w.SpeechRecognition || w.webkitSpeechRecognition || null;
-}
 
 function readTtsCache(kind: CannedKind): string | null {
   try {
@@ -91,6 +73,8 @@ export function AlanaRadio() {
   const profile = useSettings((s) => s.profile);
   const muted = useSettings((s) => s.alanaMuted);
   const setMuted = useSettings((s) => s.setAlanaMuted);
+  const ptt = useSettings((s) => s.alanaPtt);
+  const setPtt = useSettings((s) => s.setAlanaPtt);
   const tab = useBridge((s) => s.tab);
 
   const [open, setOpen] = useState(false);
@@ -100,8 +84,10 @@ export function AlanaRadio() {
   const [turns, setTurns] = useState<VoiceTurn[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [lastLine, setLastLine] = useState<string | null>(null);
+  const [debug, setDebug] = useState(false);
+  const [snap, setSnap] = useState<VoiceSnap | null>(null);
+  const [pttHeld, setPttHeld] = useState(false);
 
-  const recRef = useRef<Recog | null>(null);
   const asking = useRef(false);
   const locking = useRef(false);
   const speaking = useRef(false);
@@ -111,7 +97,6 @@ export function AlanaRadio() {
   const holdTimer = useRef(0);
   const coolTimer = useRef(0);
   const armDelay = useRef(0);
-  const genRef = useRef(0);
   const deafUntil = useRef(0);
   const liveAt = useRef(0);
   const prevLineRef = useRef<string | null>(null);
@@ -165,33 +150,29 @@ export function AlanaRadio() {
   }
 
   function stopRec() {
-    genRef.current += 1;
     pauseBridgeListen();
-    const rec = recRef.current;
-    recRef.current = null;
-    if (!rec) return;
-    rec.onresult = null;
-    rec.onend = null;
-    rec.onerror = null;
-    try {
-      rec.stop();
-    } catch {
-      /* ok */
-    }
-    try {
-      rec.abort();
-    } catch {
-      /* already dead */
-    }
   }
 
-  function handleHeard(heard: string, isFinal: boolean) {
+  function handleHeard(heard: string, isFinal: boolean, fromPtt = false) {
     if (blocked()) return;
     if (performance.now() < liveAt.current) return;
     const text = heard.trim();
     if (!text) return;
     if (heardEcho(text)) return;
     const parse = hearWake(text);
+    if (fromPtt) {
+      if (parse.sleep) {
+        void sleep();
+        return;
+      }
+      const q = parse.woke ? parse.rest : text;
+      if (modeRef.current !== "session") {
+        void wake(q, false);
+        return;
+      }
+      if (q && !heardEcho(q)) void ask(q);
+      return;
+    }
     if (modeRef.current !== "session") {
       if (!parse.woke || !isFinal) return;
       if (parse.rest && heardEcho(parse.rest)) return;
@@ -218,97 +199,28 @@ export function AlanaRadio() {
       );
       return;
     }
-    stopRec();
     releaseEchoCanceller();
-    const my = genRef.current;
     const { flush } = voiceCool();
     liveAt.current = performance.now() + flush;
     wanted.current = true;
-    if (isAndroidVoice()) {
-      resumeBridgeListen();
-      void startBridgeListen((heard) => {
-        if (my !== genRef.current) return;
-        handleHeard(heard, true);
-      }).then(() => {
-        if (my !== genRef.current) return;
+    resumeBridgeListen();
+    void resumeListenCtx();
+    void startBridgeListen((heard, meta) => {
+      if (!wanted.current) return;
+      handleHeard(heard, true, !!meta?.ptt);
+    })
+      .then(() => {
         if (modeRef.current === "off") {
           modeRef.current = "wake";
           setMode("wake");
         }
         setError(null);
-      }).catch(() => {
-        if (my !== genRef.current) return;
+      })
+      .catch(() => {
         wanted.current = false;
         setMode("off");
         setError("Microfone bloqueado — toca no ícone da Alana pra liberar.");
       });
-      return;
-    }
-    const Ctor = getCtor();
-    if (!Ctor) {
-      setError("Este aparelho não captura voz. Escreve no rádio.");
-      return;
-    }
-    const rec = new Ctor();
-    rec.lang = "pt-BR";
-    rec.interimResults = true;
-    rec.continuous = true;
-    rec.maxAlternatives = 1;
-    rec.onresult = (ev) => {
-      if (my !== genRef.current) return;
-      if (blocked()) return;
-      if (performance.now() < liveAt.current) return;
-      let final = "";
-      let mid = "";
-      for (let i = ev.resultIndex; i < ev.results.length; i++) {
-        const r = ev.results[i]!;
-        if (r.isFinal) final += r[0]!.transcript;
-        else mid += r[0]!.transcript;
-      }
-      setInterim(mid);
-      const heard = (final || mid).trim();
-      if (!heard) return;
-      handleHeard(heard, Boolean(final));
-    };
-    rec.onerror = (ev) => {
-      if (my !== genRef.current) return;
-      const err = ev.error ?? "";
-      if (err === "not-allowed") {
-        wanted.current = false;
-        setMode("off");
-        setError("Microfone bloqueado — toca no ícone da Alana pra liberar.");
-        return;
-      }
-      if (err === "aborted") return;
-      if (err === "audio-capture") {
-        releaseEchoCanceller();
-        window.setTimeout(() => {
-          if (my === genRef.current && wanted.current && !muted && !blocked()) arm();
-        }, 700);
-      }
-    };
-    rec.onend = () => {
-      if (my !== genRef.current) return;
-      if (recRef.current === rec) recRef.current = null;
-      if (wanted.current && !muted && !blocked()) {
-        window.setTimeout(() => {
-          if (my === genRef.current && wanted.current && !muted && !blocked()) arm();
-        }, 400);
-      }
-    };
-    recRef.current = rec;
-    try {
-      rec.start();
-      if (modeRef.current === "off") {
-        modeRef.current = "wake";
-        setMode("wake");
-      }
-      setError(null);
-    } catch {
-      window.setTimeout(() => {
-        if (wanted.current && my === genRef.current) arm();
-      }, 600);
-    }
   }
 
   function coolThenArm(extra = 0) {
@@ -518,6 +430,7 @@ export function AlanaRadio() {
     };
     const onPtr = () => {
       void unlockVoice();
+      void resumeListenCtx();
       prefetchCanned();
       if (!wanted.current || modeRef.current === "off") {
         wanted.current = true;
@@ -540,6 +453,19 @@ export function AlanaRadio() {
       window.clearTimeout(armDelay.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [muted]);
+
+  useEffect(() => {
+    setBridgePtt(ptt);
+  }, [ptt]);
+
+  useEffect(() => {
+    if (muted) {
+      setSnap(null);
+      return;
+    }
+    setSnap(getVoiceSnap());
+    return subscribeVoiceSnap(setSnap);
   }, [muted]);
 
   useEffect(() => {
@@ -654,11 +580,15 @@ export function AlanaRadio() {
                   ? "desligada"
                   : busy
                     ? "falando"
-                    : mode === "session"
-                      ? "à disposição"
-                      : listening
-                        ? "escuta o nome"
-                        : "parada"}
+                    : snap?.state === "mic_lost" || snap?.state === "suspended"
+                      ? "toca pra retomar"
+                      : ptt
+                        ? "aperte pra falar"
+                        : mode === "session"
+                          ? "à disposição"
+                          : listening
+                            ? "escuta o nome"
+                            : "parada"}
               </p>
               <button
                 type="button"
@@ -672,11 +602,12 @@ export function AlanaRadio() {
             <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 pb-3">
               {turns.length === 0 ? (
                 <p className="text-sm text-muted">
-                  Chama <span className="text-fg">Alana</span> pelo nome. Conversa
-                  solta, mas ela fica no apoio da viagem — posição, mar, rota,
-                  RPM — sem mudar de tela. Se o rebocador abrir da derrota ou o
-                  balanço de banda apertar, ela fala sozinha. Pede relatório,
-                  posição ou como economizar combustível.
+                  Chama <span className="text-fg">Alana</span> pelo nome. O
+                  microfone fica aberto — não reabre a cada frase. No
+                  passadiço, pausa curta não corta o turno. Se o ruído apertar,
+                  usa <span className="text-fg">Aperta pra falar</span>. Se o
+                  rebocador abrir da derrota ou o balanço de banda apertar, ela
+                  fala sozinha.
                 </p>
               ) : (
                 turns.map((t, i) => (
@@ -694,6 +625,20 @@ export function AlanaRadio() {
               {interim ? <p className="text-sm text-subtle">{interim}</p> : null}
               {error ? <p className="text-sm text-danger">{error}</p> : null}
               {busy ? <p className="text-sm text-subtle">Espera um segundo…</p> : null}
+              {debug && snap ? (
+                <p className="font-mono text-xs leading-relaxed text-subtle">
+                  MIC {snap.track} · ctx {snap.ctx} · {snap.state}
+                  <br />
+                  in {snap.inputHz} Hz → pcm {snap.pcmHz} · nível {snap.level}
+                  {snap.clipping ? " · CLIP" : ""}
+                  <br />
+                  VAD {snap.vad} · hang {snap.hangMs} ms · frames {snap.framesIn} ·
+                  clips {snap.clipsSent}
+                  <br />
+                  last {snap.lastFrameAgeMs} ms · {snap.visibility}
+                  {snap.ptt ? " · PTT" : ""}
+                </p>
+              ) : null}
             </div>
             <div className="flex gap-2 overflow-x-auto px-3 pb-1">
               {ASK_CHIPS.map((c) => (
@@ -707,7 +652,54 @@ export function AlanaRadio() {
                   {c.label}
                 </button>
               ))}
+              <button
+                type="button"
+                onClick={() => setPtt(!ptt)}
+                className={cn(
+                  "h-11 shrink-0 rounded-md px-3 text-xs font-medium uppercase tracking-[0.12em] transition-[background-color,color] duration-150",
+                  ptt ? "bg-accent text-accent-fg" : "bg-surface-2 text-muted hover:text-fg",
+                )}
+              >
+                {ptt ? "Mãos livres" : "Aperta pra falar"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setDebug((v) => !v)}
+                className={cn(
+                  "h-11 shrink-0 rounded-md px-3 text-xs font-medium uppercase tracking-[0.12em] transition-[background-color,color] duration-150",
+                  debug ? "bg-accent text-accent-fg" : "bg-surface-2 text-muted hover:text-fg",
+                )}
+              >
+                Diagnóstico
+              </button>
             </div>
+            {ptt && !muted ? (
+              <button
+                type="button"
+                disabled={busy}
+                onPointerDown={(e) => {
+                  e.preventDefault();
+                  void unlockVoice();
+                  void resumeListenCtx();
+                  setPttHeld(true);
+                  beginBridgePtt();
+                }}
+                onPointerUp={() => {
+                  setPttHeld(false);
+                  endBridgePtt();
+                }}
+                onPointerCancel={() => {
+                  setPttHeld(false);
+                  endBridgePtt();
+                }}
+                className={cn(
+                  "mx-3 mb-2 h-12 rounded-md text-sm font-medium uppercase tracking-[0.12em] transition-[background-color,color] duration-150 disabled:opacity-40",
+                  pttHeld ? "bg-accent text-accent-fg" : "bg-surface-2 text-fg",
+                )}
+              >
+                {pttHeld ? "Solta pra enviar" : "Aperta pra falar"}
+              </button>
+            ) : null}
             <form
               className="flex items-center gap-2 border-t border-border px-3 py-3"
               onSubmit={(e) => {

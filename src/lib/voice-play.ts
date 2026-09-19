@@ -12,7 +12,7 @@ export function isAndroidVoice() {
 }
 
 export function voiceCool() {
-  if (isAndroidVoice()) return { cool: 1_400, tail: 400, flush: 250 };
+  if (isAndroidVoice()) return { cool: 900, tail: 280, flush: 200 };
   return { cool: 1_500, tail: 350, flush: 350 };
 }
 

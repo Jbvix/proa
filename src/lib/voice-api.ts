@@ -140,7 +140,7 @@ export async function hearGrok(
   mime = "audio/webm",
 ): Promise<string> {
   const raw = Buffer.from(String(audioB64).replace(/^data:.*?;base64,/, ""), "base64");
-  if (raw.byteLength < 400 || raw.byteLength > 350_000) return "";
+  if (raw.byteLength < 400 || raw.byteLength > 480_000) return "";
   const kind = mime.includes("ogg")
     ? "ogg"
     : mime.includes("mp4") || mime.includes("m4a")

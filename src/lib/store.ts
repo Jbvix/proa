@@ -13,6 +13,7 @@ type SettingsState = {
   onboarded: boolean;
   theme: ThemeId;
   alanaMuted: boolean;
+  alanaPtt: boolean;
   rpm: number;
   profile: EngineProfile;
   route: ParsedRoute | null;
@@ -20,6 +21,7 @@ type SettingsState = {
   setOnboarded: (v: boolean) => void;
   setTheme: (t: ThemeId) => void;
   setAlanaMuted: (v: boolean) => void;
+  setAlanaPtt: (v: boolean) => void;
   setRpm: (n: number) => void;
   setProfile: (p: Partial<EngineProfile>) => void;
   setRoute: (r: ParsedRoute | null) => void;
@@ -33,6 +35,7 @@ export const useSettings = create<SettingsState>()(
       onboarded: false,
       theme: "night",
       alanaMuted: false,
+      alanaPtt: false,
       rpm: 920,
       profile: DEFAULT_PROFILE,
       route: null,
@@ -43,6 +46,7 @@ export const useSettings = create<SettingsState>()(
         set({ theme: t });
       },
       setAlanaMuted: (v) => set({ alanaMuted: v }),
+      setAlanaPtt: (v) => set({ alanaPtt: v }),
       setRpm: (n) => set({ rpm: n }),
       setProfile: (p) => set({ profile: { ...get().profile, ...p } }),
       setRoute: (r) => set({ route: r }),
@@ -78,6 +82,7 @@ export const useSettings = create<SettingsState>()(
         onboarded: s.onboarded,
         theme: s.theme,
         alanaMuted: s.alanaMuted,
+        alanaPtt: s.alanaPtt,
         rpm: s.rpm,
         profile: s.profile,
         route: s.route,
