@@ -9,8 +9,9 @@ import {
   tickVad,
   type VadState,
 } from "./voice-pcm";
+import { voicePrint } from "./voice-print";
 
-export type HearMeta = { ptt?: boolean; miss?: boolean };
+export type HearMeta = { ptt?: boolean; miss?: boolean; print?: number[] };
 
 type HearFn = (text: string, meta?: HearMeta) => void;
 
@@ -450,6 +451,7 @@ async function sendClip(fromPtt: boolean) {
     return;
   }
   const pcm = floatTo16(downsample(raw, inputHz, PCM_HZ));
+  const print = voicePrint(pcm) ?? undefined;
   const wav = encodeWavPcm16(pcm, PCM_HZ);
   if (wav.byteLength < 600 || wav.byteLength > 480_000) {
     lastClip = "short";
@@ -470,10 +472,10 @@ async function sendClip(fromPtt: boolean) {
     const text = String(data.text ?? "").trim();
     clipsSent += 1;
     lastClip = data.ok && text ? "ok" : "empty";
-    if (data.ok && text && onHear && wanted) onHear(text, { ptt: fromPtt });
+    if (data.ok && text && onHear && wanted) onHear(text, { ptt: fromPtt, print });
     else if (onHear && wanted && (fromPtt || !data.ok)) {
       lastClip = data.ok ? "empty" : "fail";
-      onHear("", { ptt: fromPtt, miss: true });
+      onHear("", { ptt: fromPtt, miss: true, print });
     }
   } catch {
     lastClip = "fail";

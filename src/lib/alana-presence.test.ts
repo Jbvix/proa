@@ -25,6 +25,12 @@ test("later greet uses the known name", () => {
   const t = greetLine(["Jossian"], new Date(2026, 8, 19, 21, 0, 0).getTime());
   assert.match(t, /Boa noite, Jossian/);
   assert.doesNotMatch(t, /Qual o seu nome/);
+  const u = greetLine(
+    ["Jossian", "Pedro"],
+    new Date(2026, 8, 19, 21, 0, 0).getTime(),
+    "Pedro",
+  );
+  assert.match(u, /Pedro/);
 });
 
 test("hold prefixes a fact", () => {

@@ -31,6 +31,7 @@ import { extractCrewNames, extractNameAnswer, mergeCrew, parseWatchAsk, parseWat
 import { formatEtaClock } from "@/lib/utils";
 import { quickReply } from "@/lib/voice-quick";
 import { greetLine, byeLine, withHold, askedForName } from "@/lib/alana-presence";
+import { matchVoice, upsertVoice } from "@/lib/voice-print";
 import { passageOf } from "@/lib/passage";
 import { tickWatch, WATCH_IDLE, type WatchKind, type WatchState } from "@/lib/voice-watch";
 import { cn } from "@/lib/utils";
@@ -84,6 +85,8 @@ export function AlanaRadio() {
   const setCrewNames = useSettings((s) => s.setCrewNames);
   const crewWatches = useSettings((s) => s.crewWatches);
   const setCrewWatches = useSettings((s) => s.setCrewWatches);
+  const crewVoices = useSettings((s) => s.crewVoices);
+  const setCrewVoices = useSettings((s) => s.setCrewVoices);
   const tab = useBridge((s) => s.tab);
 
   const [open, setOpen] = useState(false);
@@ -115,7 +118,11 @@ export function AlanaRadio() {
   const lastLineRef = useRef<string | null>(null);
   const watchRef = useRef<WatchState>(WATCH_IDLE);
   const lastAlertAt = useRef(0);
-  const pendingHear = useRef<{ text: string; ptt: boolean; miss?: boolean } | null>(null);
+  const pendingHear = useRef<{ text: string; ptt: boolean; miss?: boolean; print?: number[] } | null>(null);
+  const lastPrint = useRef<number[] | null>(null);
+  const introEchoUntil = useRef(0);
+  const voicesRef = useRef(crewVoices);
+  const lastHeardName = useRef<string | null>(null);
   const pendingTimer = useRef(0);
   const engineRef = useRef(engine);
   const meteoRef = useRef(meteo);
@@ -134,6 +141,7 @@ export function AlanaRadio() {
   tabRef.current = tab;
   crewRef.current = crewNames;
   watchesRef.current = crewWatches;
+  voicesRef.current = crewVoices;
   turnsRef.current = turns;
   modeRef.current = mode;
   lastLineRef.current = lastLine;
@@ -167,13 +175,14 @@ export function AlanaRadio() {
     pauseBridgeListen();
   }
 
-  function handleHeard(heard: string, isFinal: boolean, fromPtt = false, miss = false) {
+  function handleHeard(heard: string, isFinal: boolean, fromPtt = false, miss = false, print?: number[]) {
     const text = heard.trim();
     const parse = hearWake(text);
     const gated = fromPtt || parse.woke;
+    if (print?.length) lastPrint.current = print;
     if (blocked() || performance.now() < liveAt.current) {
       if (gated && (text || miss)) {
-        pendingHear.current = { text, ptt: fromPtt, miss };
+        pendingHear.current = { text, ptt: fromPtt, miss, print };
         const until = Math.max(deafUntil.current, liveAt.current);
         scheduleFlush(until - performance.now());
       }
@@ -208,11 +217,17 @@ export function AlanaRadio() {
       setThinking(false);
       return;
     }
+    if (!parse.rest && performance.now() < introEchoUntil.current) {
+      setThinking(false);
+      return;
+    }
     if (parse.rest && heardEcho(parse.rest)) {
       setThinking(false);
       return;
     }
-    void wake(parse.rest, parse.sleep);
+    const heardName = matchVoice(voicesRef.current, lastPrint.current)?.name ?? lastHeardName.current;
+    if (heardName) lastHeardName.current = heardName;
+    void wake(parse.rest, parse.sleep, heardName);
   }
 
   function scheduleFlush(wait: number) {
@@ -234,7 +249,7 @@ export function AlanaRadio() {
   function flushPending() {
     const p = pendingHear.current;
     pendingHear.current = null;
-    if (p) handleHeard(p.text, true, p.ptt, !!p.miss);
+    if (p) handleHeard(p.text, true, p.ptt, !!p.miss, p.print);
   }
 
   function arm() {
@@ -258,7 +273,7 @@ export function AlanaRadio() {
     void startBridgeListen(
       (heard, meta) => {
         if (!wanted.current) return;
-        handleHeard(heard, true, !!meta?.ptt, !!meta?.miss);
+        handleHeard(heard, true, !!meta?.ptt, !!meta?.miss, meta?.print);
       },
     )
       .then(() => {
@@ -304,7 +319,10 @@ export function AlanaRadio() {
         const dur = await playVoiceMp3(audio);
         extra = Math.min(1_600, Math.max(0, dur * 0.08));
       }
-      if (/sou a alana/i.test(text)) extra = Math.max(extra, 900);
+      if (/sou a alana/i.test(text)) {
+        extra = Math.max(extra, 1_400);
+        introEchoUntil.current = performance.now() + 2_800;
+      }
       await new Promise((r) => window.setTimeout(r, tail));
     } finally {
       speaking.current = false;
@@ -373,7 +391,7 @@ export function AlanaRadio() {
     return true;
   }
 
-  async function wake(rest: string, goingSleep: boolean) {
+  async function wake(rest: string, goingSleep: boolean, heardName?: string | null) {
     if (asking.current || locking.current) return;
     locking.current = true;
     setOpen(true);
@@ -383,7 +401,7 @@ export function AlanaRadio() {
         return;
       }
       if (!rest) {
-        const line = greetLine(crewRef.current);
+        const line = greetLine(crewRef.current, Date.now(), heardName ?? lastHeardName.current);
         rememberLine(line);
         setTurns((t) => [...t, { role: "assistant", content: line }]);
         setBusy(true);
@@ -441,6 +459,13 @@ export function AlanaRadio() {
         const next = mergeCrew(crewRef.current, named ? [named, ...found] : found);
         crewRef.current = next;
         setCrewNames(next);
+      }
+      const whoEnroll = named ?? found[0];
+      if (whoEnroll && lastPrint.current) {
+        const nextV = upsertVoice(voicesRef.current, whoEnroll, lastPrint.current);
+        voicesRef.current = nextV;
+        setCrewVoices(nextV);
+        lastHeardName.current = whoEnroll;
       }
       const cancel = parseWatchCancel(q, crewRef.current, watchesRef.current);
       if (cancel) {
@@ -791,7 +816,7 @@ export function AlanaRadio() {
               {turns.length === 0 ? (
                 <p className="text-sm text-muted">
                   Chama <span className="text-fg">Alana</span> pelo nome.
-                  Ela se apresenta, pede o seu nome e consulta a derrota.
+                  Ela pede o seu, grava a voz e consulta a derrota.
                   Só o XTE fala sozinho.
                 </p>
               ) : (

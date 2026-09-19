@@ -17,9 +17,10 @@ export function helloWord(ms = Date.now()) {
 }
 
 /** First wake: introduce and ask the name. Later: greet the known colleague. */
-export function greetLine(names: string[], ms = Date.now()) {
+export function greetLine(names: string[], ms = Date.now(), heard?: string | null) {
   const hi = helloWord(ms);
-  const who = names[0];
+  const who =
+    heard && names.some((n) => n.toLowerCase() === heard.toLowerCase()) ? heard : names[0];
   if (!who) return `${hi}. Sou a Alana, do passadiço. Qual o seu nome?`;
   return `${hi}, ${who}. Tô aqui. Pode mandar.`;
 }
