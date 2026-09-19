@@ -15,16 +15,17 @@ test("Alana plus question keeps the rest", () => {
   assert.match(h.rest, /qual o hs agora/);
 });
 
-test("oi alana and a lana still wake", () => {
+test("only the word Alana wakes", () => {
+  assert.equal(hearWake("Alana").woke, true);
   assert.equal(hearWake("oi Alana").woke, true);
-  assert.equal(hearWake("a lana").woke, true);
-  assert.equal(hearWake("Allana me fala o eta").woke, true);
-  assert.equal(hearWake("olana, qual o hs").woke, true);
-  assert.equal(hearWake("elana tchau").woke, true);
   assert.equal(hearWake("Alana?").woke, true);
-  assert.equal(hearWake("halana relatório").woke, true);
-  assert.equal(hearWake("alanna relatório").woke, true);
-  assert.equal(hearWake("alanah, eta").woke, true);
+  assert.equal(hearWake("a lana").woke, false);
+  assert.equal(hearWake("Allana me fala o eta").woke, false);
+  assert.equal(hearWake("olana, qual o hs").woke, false);
+  assert.equal(hearWake("elana tchau").woke, false);
+  assert.equal(hearWake("halana relatório").woke, false);
+  assert.equal(hearWake("alanna relatório").woke, false);
+  assert.equal(hearWake("alanah, eta").woke, false);
 });
 
 test("plain question does not wake", () => {

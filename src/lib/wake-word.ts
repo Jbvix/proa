@@ -1,5 +1,4 @@
-const WAKE_RE =
-  /\b(?:oi|ola|eai|e ai|eae|fala|hey|ei|boa\s+tarde|bom\s+dia|boa\s+noite)?\s*(?:h?a[\s.-]*l+a+n+a+h?s?|olana|elana|alanna|alanah)\b/;
+const WAKE_RE = /\balana\b/;
 
 const SLEEP_RE =
   /^(tchau|xau|flw|desliga|pode parar|silencio|cala a boca|ate ja|ate logo|valeu|obrigad[ao]|depois a gente se fala)(?:\s+alana)?\.?$/;
