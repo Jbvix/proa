@@ -175,7 +175,7 @@ function pump() {
   const trig = Math.max(0.048, floor * 2.8);
   if (s > trig) aboveMs += dt;
   else aboveMs = Math.max(0, aboveMs - dt * 1.8);
-  if (aboveMs > 180 && now - lastHear > 1_600) {
+  if (aboveMs > 110 && now - lastHear > 500) {
     aboveMs = 0;
     void captureClip();
   }
@@ -212,11 +212,11 @@ async function captureClip() {
   const t0 = performance.now();
   await new Promise<void>((resolve) => {
     const tick = () => {
-      if (!wanted || paused || performance.now() - t0 > 2_800) {
+      if (!wanted || paused || performance.now() - t0 > 2_200) {
         resolve();
         return;
       }
-      if (performance.now() - t0 > 700 && speechScore() < Math.max(0.03, floor * 1.55)) {
+      if (performance.now() - t0 > 520 && speechScore() < Math.max(0.03, floor * 1.55)) {
         resolve();
         return;
       }

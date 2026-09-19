@@ -113,6 +113,81 @@ export function distToPolylineNm(lat: number, lon: number, line: Array<[number, 
   return best;
 }
 
+export type XteFix = {
+  nm: number;
+  side: "BB" | "EB" | "linha";
+  alongNm: number;
+};
+
+/** Perpendicular distance to the GPX, with port/starboard of the course. */
+export function crossTrackOf(points: LatLon[], lat: number, lon: number): XteFix {
+  if (points.length === 0) return { nm: 0, side: "linha", alongNm: 0 };
+  if (points.length === 1) {
+    return {
+      nm: haversineNm(lat, lon, points[0]!.lat, points[0]!.lon),
+      side: "linha",
+      alongNm: 0,
+    };
+  }
+  let best = Infinity;
+  let along = 0;
+  let acc = 0;
+  let side: XteFix["side"] = "linha";
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1]!;
+    const b = points[i]!;
+    const seg = haversineNm(a.lat, a.lon, b.lat, b.lon);
+    const d = distToSegmentNm(lat, lon, a.lat, a.lon, b.lat, b.lon);
+    if (d < best) {
+      best = d;
+      along = acc + projectAlongNm(a, b, lat, lon, seg);
+      side = signedSide(a, b, lat, lon);
+    }
+    acc += seg;
+  }
+  if (best < 0.04) side = "linha";
+  return { nm: best, side, alongNm: along };
+}
+
+function projectAlongNm(
+  a: LatLon,
+  b: LatLon,
+  lat: number,
+  lon: number,
+  segNm: number,
+) {
+  if (segNm < 1e-4) return 0;
+  const mid = toRad((a.lat + b.lat) / 2);
+  const k = Math.cos(mid);
+  const dx = (b.lon - a.lon) * k;
+  const dy = b.lat - a.lat;
+  const len2 = dx * dx + dy * dy;
+  if (len2 < 1e-16) return 0;
+  const t = ((lon - a.lon) * k * dx + (lat - a.lat) * dy) / len2;
+  const u = t < 0 ? 0 : t > 1 ? 1 : t;
+  return segNm * u;
+}
+
+/** Facing the course: left = bombordo, right = estibordo. */
+function signedSide(a: LatLon, b: LatLon, lat: number, lon: number): XteFix["side"] {
+  const mid = toRad((a.lat + b.lat) / 2);
+  const k = Math.cos(mid);
+  const dx = (b.lon - a.lon) * k;
+  const dy = b.lat - a.lat;
+  const px = (lon - a.lon) * k;
+  const py = lat - a.lat;
+  const cross = dx * py - dy * px;
+  if (cross > 0) return "BB";
+  if (cross < 0) return "EB";
+  return "linha";
+}
+
+export function xteSideLabel(side: XteFix["side"]) {
+  if (side === "BB") return "bombordo";
+  if (side === "EB") return "estibordo";
+  return "na linha";
+}
+
 export function pathLengthNm(points: LatLon[]) {
   let d = 0;
   for (let i = 1; i < points.length; i++) {

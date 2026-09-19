@@ -53,6 +53,7 @@ const BOOT_ENGINE: EngineSnapshot = {
     windowS: 0,
     trusted: true,
   },
+  rollP2P: 0,
   hz: 0,
   simNm: 0,
   lastHourKey: 0,

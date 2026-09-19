@@ -1,5 +1,5 @@
 const WAKE_RE =
-  /\b(?:oi|ola|eai|e ai|eae|fala|hey|ei|boa\s+tarde|bom\s+dia|boa\s+noite)?\s*h?a[\s.-]*l+a+n+a+h?s?\b/;
+  /\b(?:oi|ola|eai|e ai|eae|fala|hey|ei|boa\s+tarde|bom\s+dia|boa\s+noite)?\s*(?:h?a[\s.-]*l+a+n+a+h?s?|olana|elana)\b/;
 
 const SLEEP_RE =
   /^(tchau|xau|flw|desliga|pode parar|silencio|cala a boca|ate ja|ate logo|valeu|obrigad[ao]|depois a gente se fala)(?:\s+alana)?\.?$/;
@@ -96,6 +96,10 @@ export function isAlanaEcho(raw: string, lastLine?: string | null) {
   if (/na escuta/.test(t)) return true;
   if (/to no radio/.test(t)) return true;
   if (/manda ai/.test(t) && t.length < 64) return true;
+  if (/abriu demais da derrota/.test(t)) return true;
+  if (/volta pra linha/.test(t) && t.length < 96) return true;
+  if (/balanco de banda/.test(t)) return true;
+  if (/segura o rumo/.test(t) && t.length < 96) return true;
   if (/me chama (quando|se) precisar/.test(t)) return true;
   if (/^(fechou|beleza|tranquilo|olha so)\b/.test(t) && t.length < 64) return true;
   const last = foldPt(lastLine ?? "");

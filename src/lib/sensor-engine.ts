@@ -5,6 +5,7 @@ import {
   WAVE_STATS_S,
   highpass1,
   hullWaveFromHeave,
+  sustainedRollP2P,
   type HpState,
 } from "./waves";
 
@@ -45,6 +46,7 @@ export type EngineSnapshot = {
   fix: Fix | null;
   attitude: Attitude | null;
   wave: WaveLive;
+  rollP2P: number;
   hz: number;
   simNm: number;
   lastHourKey: number;
@@ -65,6 +67,8 @@ const HEAVE_HZ = 10;
 const HEAVE_CAP = HEAVE_HZ * WAVE_STATS_S;
 const SCOPE_S = 24;
 const SCOPE_CAP = HEAVE_HZ * SCOPE_S;
+const ROLL_S = 16;
+const ROLL_CAP = HEAVE_HZ * ROLL_S;
 const HP_FC = 0.055;
 const ACC_SPIKE = 2.8;
 const VEL_LEAK = 0.988;
@@ -113,6 +117,9 @@ export class SensorEngine {
   private heaveI = 0;
   private scope = new Float32Array(SCOPE_CAP);
   private scopeI = 0;
+  private rollBuf = new Float32Array(ROLL_CAP);
+  private rollN = 0;
+  private rollI = 0;
   private ticks = 0;
   private hz = 0;
   private hzStamp = 0;
@@ -141,6 +148,7 @@ export class SensorEngine {
       fix: this.fix,
       attitude: this.attitude,
       wave: this.waveStats(),
+      rollP2P: this.rollSwing(),
       hz: this.hz,
       simNm: this.simNm,
       lastHourKey: this.lastHourKey,
@@ -234,6 +242,8 @@ export class SensorEngine {
     this.heaveN = 0;
     this.heaveI = 0;
     this.scopeI = 0;
+    this.rollN = 0;
+    this.rollI = 0;
     this.handlingUntil = 0;
   }
 
@@ -376,6 +386,7 @@ export class SensorEngine {
           ? (360 - ev.alpha) % 360
           : null;
     this.attitude = { pitch, roll, heading };
+    this.pushRoll(roll);
   };
 
   private ingestMotion(m: MotionEvt) {
@@ -473,6 +484,7 @@ export class SensorEngine {
             roll: Math.sin(tSec * 0.7) * this.seaHs * 2.2,
             heading: p.cog,
           };
+          this.pushRoll(this.attitude.roll);
         }
       } else if (!this.fix) {
         this.seedFix();
@@ -484,6 +496,22 @@ export class SensorEngine {
     }
 
     this.emit();
+  }
+
+  private pushRoll(deg: number) {
+    if (!Number.isFinite(deg)) return;
+    this.rollBuf[this.rollI] = deg;
+    this.rollI = (this.rollI + 1) % ROLL_CAP;
+    this.rollN = Math.min(this.rollN + 1, ROLL_CAP);
+  }
+
+  private rollSwing() {
+    const n = this.rollN;
+    if (n < 80) return 0;
+    const linear = new Float32Array(n);
+    const start = (this.rollI - n + ROLL_CAP) % ROLL_CAP;
+    for (let i = 0; i < n; i++) linear[i] = this.rollBuf[(start + i) % ROLL_CAP]!;
+    return sustainedRollP2P(linear);
   }
 
   private waveStats(): WaveLive {

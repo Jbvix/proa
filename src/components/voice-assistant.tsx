@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Mic, Send, X } from "lucide-react";
 import { useLiveBridge } from "@/components/bridge-provider";
 import { useBridge, useSettings } from "@/lib/store";
-import { ALANA_BYE, ALANA_GREET, type CannedKind } from "@/lib/voice-copy";
+import { ALANA_BYE, ALANA_GREET, ALANA_ROLL, ALANA_XTE, type CannedKind } from "@/lib/voice-copy";
 import {
   holdEchoCanceller,
   isAndroidVoice,
@@ -20,6 +20,8 @@ import {
 } from "@/lib/voice-listen";
 import { buildVoiceContext, type VoiceTurn } from "@/lib/voice-context";
 import { hearWake, isAlanaEcho } from "@/lib/wake-word";
+import { passageOf } from "@/lib/passage";
+import { tickWatch, WATCH_IDLE, type WatchKind, type WatchState } from "@/lib/voice-watch";
 import { cn } from "@/lib/utils";
 
 type Recog = {
@@ -44,6 +46,8 @@ const SESSION_MS = 90_000;
 const TTS_CACHE = {
   greet: "proa-alana-tts-greet-v2",
   bye: "proa-alana-tts-bye-v2",
+  xte: "proa-alana-tts-xte-v1",
+  roll: "proa-alana-tts-roll-v1",
 } as const;
 
 const ASK_CHIPS: { q: string; label: string }[] = [
@@ -114,6 +118,8 @@ export function AlanaRadio() {
   const modeRef = useRef<Mode>("off");
   const sessionTimer = useRef<number>(0);
   const lastLineRef = useRef<string | null>(null);
+  const watchRef = useRef<WatchState>(WATCH_IDLE);
+  const lastAlertAt = useRef(0);
   const engineRef = useRef(engine);
   const meteoRef = useRef(meteo);
   const routeRef = useRef(route);
@@ -355,6 +361,35 @@ export function AlanaRadio() {
     return null;
   }
 
+  function prefetchCanned() {
+    void fetchCanned("greet");
+    void fetchCanned("xte");
+    void fetchCanned("roll");
+  }
+
+  async function speakAlert(kind: WatchKind) {
+    if (muted || speaking.current || asking.current || locking.current) return false;
+    if (performance.now() - lastAlertAt.current < 12_000) return false;
+    lastAlertAt.current = performance.now();
+    locking.current = true;
+    void unlockVoice();
+    const text = kind === "roll" ? ALANA_ROLL : ALANA_XTE;
+    rememberLine(text);
+    setTurns((t) => [...t, { role: "assistant", content: text }]);
+    modeRef.current = "session";
+    setMode("session");
+    bumpSession();
+    setBusy(true);
+    try {
+      const audio = await fetchCanned(kind);
+      await playReply(text, audio);
+    } finally {
+      setBusy(false);
+      locking.current = false;
+    }
+    return true;
+  }
+
   async function wake(rest: string, goingSleep: boolean) {
     if (asking.current || locking.current) return;
     locking.current = true;
@@ -483,6 +518,7 @@ export function AlanaRadio() {
     };
     const onPtr = () => {
       void unlockVoice();
+      prefetchCanned();
       if (!wanted.current || modeRef.current === "off") {
         wanted.current = true;
         arm();
@@ -503,6 +539,35 @@ export function AlanaRadio() {
       window.clearTimeout(coolTimer.current);
       window.clearTimeout(armDelay.current);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [muted]);
+
+  useEffect(() => {
+    if (muted) {
+      watchRef.current = WATCH_IDLE;
+      return;
+    }
+    const id = window.setInterval(() => {
+      if (muted || speaking.current || asking.current || cooling.current || locking.current) return;
+      const engine = engineRef.current;
+      const p = passageOf(routeRef.current, engine);
+      const hit = tickWatch(watchRef.current, {
+        xteNm: p?.xteNm ?? null,
+        rollP2P: engine?.rollP2P ?? null,
+        sogKn: p?.sogKn ?? engine?.fix?.sogKn ?? 0,
+        alongNm: p?.alongNm ?? 0,
+        remainNm: p?.remainNm ?? 0,
+        capturing: !!engine?.capturing,
+      });
+      if (hit.alert) {
+        if (performance.now() - lastAlertAt.current < 12_000) return;
+        watchRef.current = hit.state;
+        void speakAlert(hit.alert);
+        return;
+      }
+      watchRef.current = hit.state;
+    }, 1_100);
+    return () => window.clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [muted]);
 
@@ -609,8 +674,9 @@ export function AlanaRadio() {
                 <p className="text-sm text-muted">
                   Chama <span className="text-fg">Alana</span> pelo nome. Conversa
                   solta, mas ela fica no apoio da viagem — posição, mar, rota,
-                  RPM — sem mudar de tela. Pede relatório, posição ou como
-                  economizar combustível.
+                  RPM — sem mudar de tela. Se o rebocador abrir da derrota ou o
+                  balanço de banda apertar, ela fala sozinha. Pede relatório,
+                  posição ou como economizar combustível.
                 </p>
               ) : (
                 turns.map((t, i) => (

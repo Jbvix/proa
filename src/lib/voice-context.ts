@@ -6,6 +6,7 @@ import { coastFix } from "./coastline";
 import { weatherLabel } from "./meteo";
 import { seaStateFromHs } from "./waves";
 import { cardinal, formatDurationMin, formatEtaClock, formatLatLon } from "./utils";
+import { xteSideLabel } from "./geo";
 import type { EngineSnapshot } from "./sensor-engine";
 import type { MeteoBundle } from "./meteo";
 import type { ParsedRoute } from "./gpx";
@@ -37,6 +38,8 @@ export type VoiceContext = {
     rumo: string | null;
     sogKn: number | null;
     sogValidacao: string | null;
+    xteNm: number | null;
+    xteLado: string | null;
   };
   waypoints: { nome: string; nm: number; hsPrev: number | null }[];
   mar: {
@@ -49,6 +52,7 @@ export type VoiceContext = {
     hsPrev: number | null;
     tzPrev: number | null;
     swellPrev: number | null;
+    balancoDeg: number | null;
   };
   meteo: {
     tempo: string;
@@ -203,6 +207,8 @@ export function buildVoiceContext(opts: {
       rumo: heading != null ? `${String(Math.round(heading)).padStart(3, "0")}° ${cardinal(heading)}` : null,
       sogKn: passage?.sogKn ?? fix?.sogKn ?? null,
       sogValidacao: passage ? speedHint(passage) : null,
+      xteNm: passage ? Number(passage.xteNm.toFixed(2)) : null,
+      xteLado: passage ? xteSideLabel(passage.xteSide) : null,
     },
     waypoints: wpts.slice(0, 8),
     mar: {
@@ -215,6 +221,7 @@ export function buildVoiceContext(opts: {
       hsPrev: meteo?.now.waveHs ?? nextWp?.waveHs ?? null,
       tzPrev: meteo?.now.wavePeriod ?? nextWp?.wavePeriod ?? null,
       swellPrev: meteo?.now.swellHs ?? nextWp?.swellHs ?? null,
+      balancoDeg: engine ? Number(engine.rollP2P.toFixed(1)) : null,
     },
     meteo: {
       tempo: weatherLabel(meteo?.now.weatherCode ?? null),

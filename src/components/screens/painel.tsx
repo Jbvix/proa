@@ -10,10 +10,11 @@ import { weatherLabel } from "@/lib/meteo";
 import { recommendRpm } from "@/lib/rpm";
 import { seaStateFromHs } from "@/lib/waves";
 import { useSettings } from "@/lib/store";
-import { nearestProgress, pathLengthNm } from "@/lib/geo";
+import { nearestProgress, pathLengthNm, xteSideLabel } from "@/lib/geo";
 import { coastFix } from "@/lib/coastline";
 import { passageOf, speedHint } from "@/lib/passage";
 import { phaseLabel, planFloodArrival } from "@/lib/tide";
+import { ROLL_ON_DEG, XTE_ON_NM } from "@/lib/voice-watch";
 
 export function PainelScreen() {
   const rpm = useSettings((s) => s.rpm);
@@ -55,6 +56,7 @@ export function PainelScreen() {
     waveDirDeg: nextWp?.waveDir ?? meteo?.now.waveDir ?? null,
   });
   const coast = engine?.fix ? coastFix(engine.fix.lat, engine.fix.lon) : null;
+  const rollP2P = engine?.rollP2P ?? 0;
 
   return (
     <div className="space-y-4">
@@ -87,6 +89,14 @@ export function PainelScreen() {
           >
             {phaseLabel(plan.atEta.phase)}
           </Badge>
+        ) : null}
+        {passage && passage.xteNm >= XTE_ON_NM ? (
+          <Badge tone="danger">
+            XTE {passage.xteNm.toFixed(2)} nmi {passage.xteSide}
+          </Badge>
+        ) : null}
+        {rollP2P >= ROLL_ON_DEG ? (
+          <Badge tone="danger">Balanço {rollP2P.toFixed(0)}°</Badge>
         ) : null}
       </div>
 
@@ -239,7 +249,7 @@ export function PainelScreen() {
         <Card className="rounded-2xl p-4">
           <CardTitle>Derrota</CardTitle>
           <p className="mt-3 text-sm text-fg">{route?.name ?? "Nenhum GPX"}</p>
-          <div className="mt-4 grid grid-cols-3 gap-3">
+          <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
             <Stat
               label="Extensão"
               value={route ? pathLengthNm(route.points).toFixed(1) : "—"}
@@ -249,6 +259,18 @@ export function PainelScreen() {
               label="Falta"
               value={passage ? passage.remainNm.toFixed(1) : "—"}
               unit="nmi"
+            />
+            <Stat
+              label="XTE"
+              value={
+                passage
+                  ? passage.xteSide === "linha"
+                    ? passage.xteNm.toFixed(2)
+                    : `${passage.xteNm.toFixed(2)} ${passage.xteSide}`
+                  : "—"
+              }
+              unit={passage ? "nmi" : undefined}
+              hint={passage ? xteSideLabel(passage.xteSide) : "fora da derrota"}
             />
             <Stat
               label="Enchente"

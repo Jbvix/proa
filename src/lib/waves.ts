@@ -126,6 +126,32 @@ export function blendHs(observed: number | null, forecast: number | null) {
   return observed ?? forecast ?? 0;
 }
 
+/** Peak-to-peak roll only if it stays lively — a single tablet tilt does not count. */
+export function sustainedRollP2P(values: ArrayLike<number>): number {
+  const n = values.length;
+  if (n < 80) return 0;
+  let min = 90;
+  let max = -90;
+  const BIN = 20;
+  let hot = 0;
+  let bins = 0;
+  for (let b = 0; b + BIN <= n; b += BIN) {
+    let bmin = 90;
+    let bmax = -90;
+    for (let i = 0; i < BIN; i++) {
+      const v = values[b + i]!;
+      if (v < min) min = v;
+      if (v > max) max = v;
+      if (v < bmin) bmin = v;
+      if (v > bmax) bmax = v;
+    }
+    bins += 1;
+    if (bmax - bmin >= 4) hot += 1;
+  }
+  if (bins < 4 || hot < Math.ceil(bins * 0.45)) return 0;
+  return Math.max(0, max - min);
+}
+
 export type HourlyWave = {
   t: number;
   hsObs: number | null;

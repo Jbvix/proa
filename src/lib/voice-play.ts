@@ -12,8 +12,8 @@ export function isAndroidVoice() {
 }
 
 export function voiceCool() {
-  if (isAndroidVoice()) return { cool: 3_200, tail: 800, flush: 1_000 };
-  return { cool: 2_200, tail: 450, flush: 650 };
+  if (isAndroidVoice()) return { cool: 1_400, tail: 400, flush: 250 };
+  return { cool: 1_500, tail: 350, flush: 350 };
 }
 
 export function voicePlaybackCtx(): AudioContext {

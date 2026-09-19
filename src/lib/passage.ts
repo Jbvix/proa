@@ -1,4 +1,4 @@
-import { alongTrack, nearestProgress, pathLengthNm } from "./geo";
+import { alongTrack, crossTrackOf, nearestProgress, pathLengthNm, type XteFix } from "./geo";
 import type { ParsedRoute } from "./gpx";
 import type { EngineSnapshot } from "./sensor-engine";
 
@@ -13,6 +13,8 @@ export type Passage = {
   valid: boolean;
   etaMs: number | null;
   etaMin: number | null;
+  xteNm: number;
+  xteSide: XteFix["side"];
 };
 
 export function passageOf(
@@ -31,6 +33,10 @@ export function passageOf(
   const etaMin =
     sogKn > 0.4 && remainNm >= 0 ? (remainNm / sogKn) * 60 : null;
   const etaMs = etaMin != null ? Date.now() + etaMin * 60_000 : null;
+  const xte =
+    engine.mode === "sim"
+      ? { nm: 0, side: "linha" as const, alongNm }
+      : crossTrackOf(route.points, engine.fix.lat, engine.fix.lon);
   return {
     alongNm,
     remainNm,
@@ -42,6 +48,8 @@ export function passageOf(
     valid: engine.fix.valid,
     etaMs,
     etaMin,
+    xteNm: xte.nm,
+    xteSide: xte.side,
   };
 }
 
