@@ -11,8 +11,7 @@ import {
   TTS_CACHE_KEYS,
   TTS_MIN_B64,
   readTtsCache,
-  writeTtsCache,
-} from "./voice-tts.ts";
+  writeTtsCache, WARM_EVERY_MS, warmDue } from "./voice-tts.ts";
 
 const AUDIO = "Q".repeat(TTS_MIN_B64 + 40);
 
@@ -71,4 +70,13 @@ test("cota cheia é silenciosa — perder cache não é falha", () => {
 test("sem localStorage nenhum, a leitura devolve nulo em vez de explodir", () => {
   delete (globalThis as { localStorage?: unknown }).localStorage;
   assert.equal(readTtsCache("greet"), null);
+});
+
+test("aquecimento: nunca aqueceu → sim; dentro de 45 s → não; depois → sim", () => {
+  // Aquecer a cada frase gastaria invocação à toa: a instância fica viva por
+  // minutos. 45 s cobre a pausa entre perguntas e pega a primeira frase depois
+  // de um silêncio longo.
+  assert.equal(warmDue(Number.NEGATIVE_INFINITY, 0), true);
+  assert.equal(warmDue(1000, 1000 + WARM_EVERY_MS - 1), false);
+  assert.equal(warmDue(1000, 1000 + WARM_EVERY_MS), true);
 });

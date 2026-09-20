@@ -2,7 +2,7 @@
 
 **Para a tripulação do passadiço**
 **Autor:** Jossian Brito · TugLife Systems
-**Versão:** 1.10.0 · 2026-09-20 12:00 UTC (ano 2026)
+**Versão:** 1.11.0 · 2026-09-20 12:00 UTC (ano 2026)
 
 ---
 
@@ -185,6 +185,19 @@ limite e passagem de waypoint.
 > chamar e não chama é pior que um app que não promete nada**. Para render a
 > vigia, use o despertador do aparelho.
 
+> **Duas vozes, de propósito (desde a 1.11.0).** Perguntas de número —
+> "qual o SOG", "e o vento", "como tá o Hs", "quanto falta" — são respondidas
+> pelo próprio tablet e saem **na voz do Android**, na hora, sem passar pela
+> rede. Consultoria, relatório e conversa saem na voz da Lara, que vem do
+> servidor e demora um pouco mais. Se a voz do Android não estiver instalada
+> em português, tudo sai na voz da Lara, como antes. Para instalar:
+> *Configurações → Gerenciamento geral → Conversão de texto em voz → Google →
+> Instalar dados de voz → Português (Brasil)*.
+
+> **Respostas mais curtas.** A Lara agora responde como se fala no
+> passadiço: uma a duas frases numa pergunta direta, no máximo quatro num
+> relatório. Se quiser mais, pergunte de novo.
+
 > **A Lara orienta, não ordena.** É suporte de consultoria. Não substitui o
 > oficial de serviço nem o texto oficial da norma. Se ela não tiver o dado no
 > contexto, ela diz que não tem — e isso é de propósito.
@@ -223,6 +236,7 @@ atrás, feche e reabra o app; se insistir, limpe o cache do navegador.
 | Período em branco | Mar fora da faixa de 3 a 16 s, ou captura com menos de 90 s. |
 | A Lara não ouve | No Samsung, toque uma vez na tela. Confira a permissão de microfone. |
 | A Lara parou de responder sem chamar pelo nome | A conversa expirou (90 s de silêncio) — veja a linha "Fechei a conversa" na gaveta. Diga **"Lara"** ou toque em **Conversar**. |
+| Resposta de número sai numa voz diferente da Lara | É a voz do Android, escolhida de propósito para responder na hora. Veja a nota "Duas vozes" na seção 5. |
 | A Lara responde a conversa que não era com ela | Confira se o anel do ícone está aceso: a conversa está aberta. Toque em **Conversar** para encerrar, ou espere os 90 s. |
 | "Open-Meteo indisponível" | Sem rede. Vento e corrente passam a ser locais e aproximados; o mar do casco continua real. |
 | "Muitos pedidos deste aparelho" | Proteção contra uso descontrolado dos serviços pagos. Aguarde o tempo indicado; o uso normal de bordo nunca chega perto do limite. |

@@ -3,7 +3,7 @@
 **Projeto:** Proa · PWA de passadiço para rebocador
 **Organização:** TugLife Systems
 **Autor:** Jossian Brito
-**Versão do documento:** 1.10.0
+**Versão do documento:** 1.11.0
 **Data:** 2026-09-20 12:00 UTC (ano 2026)
 
 ---
@@ -81,6 +81,8 @@ PWA. Funções serverless em Netlify. Sem banco de dados.
 | `voice-alerts.ts` | Decide QUANDO a Lara fala sem ser chamada (puro, testado) |
 | `voice-turn.ts` | Decide o que fazer com cada transcrição do microfone (puro, testado) |
 | `voice-idle.ts` | Prazo da conversa aberta: 90 s sem atividade e ela fecha sozinha (puro, testado) |
+| `voice-local.ts` | Escolha da voz pt-BR do aparelho para respostas locais (puro, testado) |
+| `voice-text.ts` | Apara resposta cortada pelo teto de tokens na última frase inteira (puro, testado) |
 | `settings-migrate.ts` | Apaga do aparelho o que versões antigas gravaram e o app não usa mais |
 | `version.ts` | Versão publicada, amarrada ao `package.json` por teste |
 | `voice-echo.ts` | Memória das duas últimas falas, contra realimentação acústica |
@@ -315,6 +317,52 @@ aprovados): usar a impressão vocal já existente como filtro de quem pode
 perguntar em conversa aberta, e subir a régua de 4 caracteres com um filtro de
 fraseologia de ponte.
 
+### 7.2 Latência — as três primeiras medidas (desde a 1.11.0)
+
+**A cadeia medida na 1.10.0.** Uma pergunta à Lara atravessa sete etapas em
+série: VAD (460–820 ms de espera pelo silêncio) → WAV+base64 → upload →
+STT → **segunda viagem** ao servidor → chat e **depois** TTS → download e
+reprodução. Total típico de 3,5 a 9 s; em link costeiro fraco, 12 a 28 s.
+Nenhuma etapa começa antes da anterior acabar — comboio em fila indiana.
+
+O P11 propôs seis medidas. A 1.11.0 executa as três de menor risco, que não
+tocam no caminho de captura:
+
+**11.1 — Resposta local fala pela voz do aparelho.** `quickReply()` responde
+no próprio tablet a "qual o SOG", "e o vento", "como tá o Hs" — e até a
+1.10.0 esse texto pronto ainda pagava `fetchSay()` (1 a 3 s) pra virar voz.
+Agora sai por `speechSynthesis`, sem rede. A escolha da voz (`voice-local.ts`)
+prefere pt-BR a pt-PT e a voz baixada à compacta de fábrica; sem nenhuma voz
+em português devolve `null`, e `playReply` volta à rede sozinho. Há dois
+tetos: 1,5 s pra o motor começar (senão cancela e vai à rede) e
+`1,5 s + 70 ms/caractere` pra terminar (senão solta a linha). **A espera fica
+limitada por construção:** o pior caso custa 1,5 s a mais; o melhor poupa 1 a
+3 s. O preço é de identidade: essas frases não saem na voz "ara" da Lara, e
+sim na voz pt-BR do Android. Consultoria, relatório e conversa continuam com
+a voz dela.
+
+**11.2 — Aquecimento da function.** `GET /api/voice` devolve 204 vazio antes
+do porteiro de taxa e sem tocar na chave: o único efeito é a instância
+acordar. O tablet dispara ao tocar em Conversar e — o que importa — **no
+instante em que o VAD vê a pessoa começar a falar.** O cold start do Netlify
+(0,3 a 1,5 s) acontece em paralelo com a fala, em vez de em série depois
+dela. Corte de 45 s entre aquecimentos. Aquece a instância, não o Grok.
+
+**11.6 — Resposta mais curta.** `max_tokens` 220 → 130 (≈ 450 caracteres em
+pt-BR ≈ três frases), e o prompt pede fala de passadiço: relatório 3 a 4
+frases, pergunta pontual 1 a 2, consultoria 2 a 4, nunca mais de 4. Menos
+tokens é menos chat **e** menos síntese, porque a fala é proporcional ao
+texto. Guarda contra o efeito colateral: quando o modelo bate no teto
+(`finish_reason: "length"`), `trimToSentence` apara na última frase inteira
+— falado, corte no meio da frase soa como linha caída. A regra não sacrifica
+a resposta pra salvar um cumprimento (a pontuação tem de estar a partir de
+40 % do texto).
+
+**O que fica para etapas seguintes** (propostos, não aprovados): 11.3 (uma
+viagem em vez de duas: áudio + contexto num POST só), 11.4 (Opus via
+`AudioEncoder` em vez de WAV+base64 — 125 kB → 9 kB por 3 s de fala, o
+maior ganho em mar aberto), 11.5 (TTS da primeira frase em paralelo).
+
 ## 8. Privacidade e segurança
 
 Nada de conta, nada de nuvem, nada de banco. O estado vive em `localStorage`.
@@ -443,7 +491,7 @@ um clique, e agora com histórico rastreável.
 | P8b | **Calibrar `AW_RPM_PER_KN` e `STEEPNESS_RPM` contra viagem real.** Bloqueado por dado, não por tempo: precisa de uma singradura instrumentada com a 1.1.0 ou posterior. Os campos `hsObs` e `hsForecast` já convivem hora a hora no store. | **Bloqueado** |
 | P9 | `voice-assistant.tsx` tem 1.025 linhas e 30+ refs; quebrar em hooks | 🟡 **Em 1.4.0 e 1.7.0** — quatro peças extraídas e testadas. Restam no componente a orquestração de áudio (`arm`, `coolThenArm`, `playReply`) e as chamadas de rede de `ask`, que são efeito puro e não decisão. |
 | P10 | A Lara entra em conversa onde não foi chamada: `talkOn` nunca expirava | 🟡 **10.1 e 10.2 em 1.10.0** (prazo de 90 s e indicador). Restam 10.3 (filtro por impressão vocal) e 10.4 (régua de 4 → 10 caracteres e fraseologia de ponte), propostos. |
-| P11 | Latência da Lara: sete etapas em série, duas viagens à function, WAV+base64 11× maior que Opus, TTS mesmo em resposta local | Proposto (11.1–11.6) |
+| P11 | Latência da Lara: sete etapas em série, duas viagens à function, WAV+base64 11× maior que Opus, TTS mesmo em resposta local | 🟡 **11.1, 11.2 e 11.6 em 1.11.0** (voz local, aquecimento, resposta curta). Restam 11.3 (uma viagem), 11.4 (Opus) e 11.5 (TTS da primeira frase), propostos. |
 | P12 | Relatório horário na hora cheia, com diário de travessia (alimenta o P8b) | Proposto |
 | ~~BUG~~ | ~~O aviso de fim de turno não dispara~~ | ✅ **Resolvido em 1.5.0 por remoção** — ver §10 |
 | — | Limite de taxa global (hoje é por instância quente): exige Netlify Blobs, Redis ou equivalente | Ideia |
@@ -451,6 +499,28 @@ um clique, e agora com histórico rastreável.
 | — | Assinatura hidrodinâmica: acumular (heave, roll) × (Hs, Tz, encontro) = RAO experimental do casco | Ideia |
 
 ## 10. Histórico de versões
+
+### 1.11.0 — 2026-09-20
+
+P11, itens 11.1, 11.2 e 11.6: as três medidas de latência de menor risco.
+Detalhe e números em §7.2.
+
+- **11.1 — `voice-local.ts` (novo, puro, 7 testes)** e `speakLocal()` em
+  `voice-play.ts`: resposta que nasce no tablet fala pela voz pt-BR do
+  aparelho, sem `fetchSay()`. Fallback à rede se não houver voz em português
+  ou o motor não começar em 1,5 s. Volume igual ao ganho do MP3.
+- **11.2 — `warmVoice()` em `voice-tts.ts`** e `GET /api/voice` → 204 antes
+  do porteiro, nas duas pontas (Netlify e Nitro). Disparo ao tocar em
+  Conversar e ao início da fala detectado pelo VAD; corte de 45 s.
+- **11.6 — `max_tokens` 220 → 130**, prompt com réguas de passadiço, e
+  **`voice-text.ts` (novo, puro, 6 testes)** aparando resposta cortada na
+  última frase inteira.
+- Cabeçalhos de módulo adicionados a `voice-play.ts` e `voice-api.ts`.
+- Cobertura: 208 → 222 testes.
+
+**Não mudou, de propósito:** o caminho de captura (anel PCM, VAD, WAV) e a
+estrutura de duas viagens. São 11.3 e 11.4, que mexem em áudio e ficaram para
+aprovação separada.
 
 ### 1.10.0 — 2026-09-20
 

@@ -1,6 +1,27 @@
+/**
+ * Proa · TugLife Systems — Lara no servidor: chat, fala e transcrição (xAI)
+ * ---------------------------------------------------------------------------
+ * @autor    Jossian Brito
+ * @versao   1.11.0
+ * @data     2026-09-20 12:00 UTC  (ano 2026)
+ *
+ * MODIFICAÇÕES NA 1.11.0 (P11, item 11.6)
+ *  - `max_tokens` 220 → 130. Menos tokens é menos tempo de chat E menos tempo
+ *    de síntese, porque a fala é proporcional ao texto. Em pt-BR o Grok gasta
+ *    ~3,5 caracteres por token: 130 tokens ≈ 450 caracteres ≈ três frases de
+ *    passadiço. É o que o prompt pede agora.
+ *  - Prompt: as réguas de tamanho caíram junto (relatório 3 a 4 frases,
+ *    pergunta pontual 1 a 2, consultoria 2 a 4, papo 1 a 3).
+ *  - Se o modelo bater no teto (`finish_reason: "length"`), a resposta é
+ *    aparada na última frase inteira por `trimToSentence` — falado, corte
+ *    no meio da frase soa como linha caída.
+ *  - Cabeçalho de módulo adicionado; o arquivo não tinha.
+ * ---------------------------------------------------------------------------
+ */
 import { Buffer } from "node:buffer";
 import type { VoiceContext, VoiceTurn } from "./voice-context";
 import { ALANA_BYE, ALANA_GREET, ALANA_MISS, ALANA_ROLL, ALANA_XTE, isCannedKind, type CannedKind } from "./voice-copy";
+import { trimToSentence } from "./voice-text";
 
 export { ALANA_BYE, ALANA_GREET, ALANA_MISS, isCannedKind, type CannedKind };
 
@@ -20,9 +41,9 @@ Tom: contrações (tá, tô, pra, a gente). Chame pelo nome em tripulacao[0]. N�
 
 Papel: suporte de orientação e consultoria de bordo — navegação, COLREG, estabilidade (GM, superfície livre, lastro), NORMAM (Norman/DPC), MARPOL e SOLAS. Use consulta{} no contexto. É orientação, não ordem e não substitui o oficial de serviço nem o texto oficial. Se pedirem artigo ou número de regra, fale o princípio em linguagem de passadiço e diga que o texto vigente prevalece. Nunca invente artigo, anexo nem número de regra.
 
-Consultoria: 3 a 6 frases. Comece pelo princípio, um exemplo de bordo, e feche lembrando que o oficial de serviço manda. Não comece com "Um momento" nem com "deixa eu verificar": responde direto.
+Consultoria: 2 a 4 frases curtas. Comece pelo princípio, um exemplo de bordo, e feche lembrando que o oficial de serviço manda. Não comece com "Um momento" nem com "deixa eu verificar": responde direto.
 
-Papo: pode distrair leve (café, vigia) em 2 a 4 frases, com gancho de volta à derrota. Não recuse papo.
+Papo: pode distrair leve (café, vigia) em 1 a 3 frases, com gancho de volta à derrota. Não recuse papo.
 
 Viagem: responde qualquer pergunta da derrota. Fatos só do CONTEXTO. Não invente posição, Hs, SOG, ETA, cidade, waypoint, litros, RPM. Se faltar, diga que não tem.
 
@@ -33,7 +54,7 @@ Unidades: nós e milhas náuticas. Nunca km nem km/h.
 Cidades: cidades[]. ETA destino: mare.etaDia. Enchente: mare. Mar: mar. Meteo: meteo.
 
 
-Relatório: 4 a 6 frases. Pergunta pontual: 1 a 3 frases. Consultoria (norma/estabilidade): 3 a 6 frases claras. Não comece com "Um momento" nem com "deixa eu verificar": responde direto.
+Tamanho: fala de passadiço, curta e direta, como se disse de pé ao lado de quem pergunta. Relatório: 3 a 4 frases. Pergunta pontual: 1 a 2 frases. Consultoria (norma/estabilidade): 2 a 4 frases claras. Nunca passe de 4 frases. Não comece com "Um momento" nem com "deixa eu verificar": responde direto.
 
 Agora está em agora. App: derrota GPX; mar do casco; Open-Meteo; WP do arquivo. Não fale de código, API, chave, servidor.`;
 
@@ -73,7 +94,9 @@ export async function askGrokVoice(
 
   const payload = {
     temperature: 0.55,
-    max_tokens: 220,
+    // 130 tokens ≈ 450 caracteres em pt-BR ≈ três frases de passadiço. Ver o
+    // cabeçalho: menos tokens é menos chat e menos síntese.
+    max_tokens: 130,
     messages: [
       { role: "system", content: SYSTEM },
       {
@@ -102,9 +125,15 @@ export async function askGrokVoice(
     throw new Error(`Grok ${res.status} ${err.slice(0, 80)}`);
   }
   const body = (await res.json()) as {
-    choices?: { message?: { content?: string } }[];
+    choices?: { message?: { content?: string }; finish_reason?: string }[];
   };
-  const text = clip(body.choices?.[0]?.message?.content ?? "", 900);
+  const choice = body.choices?.[0];
+  // Bateu no teto de tokens: apara na última frase inteira, que falada é o
+  // que soa como resposta e não como linha caída.
+  const text = clip(
+    trimToSentence(choice?.message?.content ?? "", choice?.finish_reason === "length"),
+    900,
+  );
   if (!text) throw new Error("Grok vazio");
 
   const audio = await speakGrok(apiKey, text);

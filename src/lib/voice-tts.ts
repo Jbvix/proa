@@ -2,8 +2,16 @@
  * Proa · TugLife Systems — Fala da Lara: cache e busca de áudio
  * ---------------------------------------------------------------------------
  * @autor    Jossian Brito
- * @versao   1.4.0  (módulo novo nesta versão)
- * @data     2026-09-20 02:14 UTC  (ano 2026)
+ * @versao   1.11.0  (módulo novo na 1.4.0)
+ * @data     2026-09-20 12:00 UTC  (ano 2026)
+ *
+ * MODIFICAÇÕES NA 1.11.0 (P11, item 11.2)
+ *  - `warmVoice()`: aquece a function de voz com um GET barato, disparado
+ *    ao tocar em Conversar e no instante em que o VAD detecta que a pessoa
+ *    começou a falar. O cold start da instância acontece em paralelo com a
+ *    fala, em vez de em série depois dela. Aquece a INSTÂNCIA (boot do Node
+ *    e carga do bundle), não o Grok — o que se poupa é o cold start do
+ *    Netlify, 0,3 a 1,5 s, e ele é pago em cada uma das duas viagens.
  *
  * POR QUE ISTO EXISTE
  * Extraído de `voice-assistant.tsx`. Cache de áudio e chamada de rede não têm
@@ -106,4 +114,49 @@ export function prefetchCanned() {
   void fetchCanned("greet");
   void fetchCanned("miss");
   void fetchCanned("xte");
+}
+
+/**
+ * Intervalo mínimo entre dois aquecimentos, em ms.
+ *
+ * A instância aquecida fica viva por vários minutos; aquecer a cada frase
+ * seria gastar invocação à toa. 45 s cobre a pausa entre duas perguntas numa
+ * conversa e ainda pega a primeira frase depois de um silêncio longo.
+ */
+export const WARM_EVERY_MS = 45_000;
+
+/**
+ * Já passou tempo bastante desde o último aquecimento?
+ *
+ * Comportamento conforme as variáveis:
+ *   nunca aqueceu (`lastAt` = -Infinity) → true
+ *   `now - lastAt` < 45 s                  → false
+ *   `now - lastAt` ≥ 45 s                  → true
+ */
+export function warmDue(lastAt: number, now: number): boolean {
+  return now - lastAt >= WARM_EVERY_MS;
+}
+
+let lastWarmAt = Number.NEGATIVE_INFINITY;
+
+/**
+ * Aquece a function de voz. Dispara e esquece: nunca lança, nunca espera.
+ * O GET passa ANTES do porteiro de taxa no servidor e não custa chave nenhuma
+ * — é um 204 vazio cujo único efeito é a instância acordar.
+ */
+export function warmVoice() {
+  if (typeof window === "undefined") return;
+  const now = performance.now();
+  if (!warmDue(lastWarmAt, now)) return;
+  lastWarmAt = now;
+  try {
+    void fetch("/api/voice?warm=1", {
+      method: "GET",
+      keepalive: true,
+      cache: "no-store",
+      signal: AbortSignal.timeout(4_000),
+    }).catch(() => {});
+  } catch {
+    /* sem fetch, sem aquecimento */
+  }
 }

@@ -7,6 +7,8 @@ export const Route = createFileRoute("/api/voice")({
   server: {
     handlers: {
       POST: ({ request }) => handleVoice(request),
+      // Aquecimento (1.11.0): o handler devolve 204 sem custo.
+      GET: ({ request }) => handleVoice(request),
     },
   },
 });

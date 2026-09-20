@@ -1,3 +1,22 @@
+/**
+ * Proa · TugLife Systems — Reprodução da fala da Lara
+ * ---------------------------------------------------------------------------
+ * @autor    Jossian Brito
+ * @versao   1.11.0
+ * @data     2026-09-20 12:00 UTC  (ano 2026)
+ *
+ * MODIFICAÇÕES NA 1.11.0 (P11, item 11.1)
+ *  - `speakLocal(text)`: fala pela voz do próprio aparelho (`speechSynthesis`),
+ *    sem rede, para as respostas que nascem no tablet. A escolha da voz é de
+ *    `voice-local.ts` (puro, testado). Devolve `null` quando não há voz em
+ *    português ou o motor não começa em 1,5 s — e aí o chamador volta à rede.
+ *    A espera fica limitada por construção: no pior caso custa 1,5 s a mais,
+ *    no melhor poupa 1 a 3 s.
+ *  - Cabeçalho de módulo adicionado; o arquivo não tinha.
+ * ---------------------------------------------------------------------------
+ */
+import { LOCAL_START_TIMEOUT_MS, localSpeechCapMs, pickLocalVoice } from "./voice-local";
+
 let ctx: AudioContext | null = null;
 let node: AudioBufferSourceNode | null = null;
 let html: HTMLAudioElement | null = null;
@@ -143,6 +162,103 @@ export function stopVoice() {
     /* ok */
   }
   hushMediaSession();
+}
+
+/** Utterance em curso, pra `stopVoice()` saber que a linha é nossa. */
+let localUtter: SpeechSynthesisUtterance | null = null;
+
+/**
+ * Lista de vozes do navegador. No Android ela chega vazia na primeira chamada
+ * e só se enche depois de `voiceschanged`; espera-se por isso um pouco, mas
+ * não muito — o objetivo é responder rápido, não esperar a lista perfeita.
+ */
+async function localVoices(): Promise<SpeechSynthesisVoice[]> {
+  const have = speechSynthesis.getVoices();
+  if (have.length) return have;
+  return new Promise((resolve) => {
+    const t = window.setTimeout(() => resolve(speechSynthesis.getVoices()), 400);
+    speechSynthesis.addEventListener(
+      "voiceschanged",
+      () => {
+        window.clearTimeout(t);
+        resolve(speechSynthesis.getVoices());
+      },
+      { once: true },
+    );
+  });
+}
+
+/**
+ * Fala `text` pela voz local do aparelho. Devolve a duração em ms, ou `null`
+ * se não deu — e `null` significa "vai pela rede", nunca "fica mudo".
+ *
+ * Comportamento conforme as variáveis:
+ *   sem `speechSynthesis`            → `null` imediato
+ *   sem voz em português             → `null` imediato (não lê pt-BR com voz
+ *                                       inglesa)
+ *   motor não começa em 1,5 s        → cancela, `null`
+ *   `onerror` antes de `onstart`     → `null`
+ *   `onerror` DEPOIS de começar      → resolve com o que tocou: repetir pela
+ *                                       rede seria dizer a frase duas vezes
+ *   `onend` não vem (motor travou)   → solta no teto de `localSpeechCapMs`
+ *
+ * O volume acompanha o ganho do MP3 (0,72 no Android, 0,86 fora) pra que a
+ * troca de voz não venha com troca de altura.
+ */
+export async function speakLocal(text: string): Promise<number | null> {
+  if (typeof window === "undefined" || !("speechSynthesis" in window)) return null;
+  const line = text.trim();
+  if (!line) return null;
+  let voices: SpeechSynthesisVoice[];
+  try {
+    voices = await localVoices();
+  } catch {
+    return null;
+  }
+  const voice = pickLocalVoice(voices);
+  if (!voice) return null;
+  stopVoice();
+  hushMediaSession();
+  const u = new SpeechSynthesisUtterance(line);
+  u.voice = voice;
+  u.lang = voice.lang;
+  u.rate = 1;
+  u.pitch = 1;
+  u.volume = isAndroidVoice() ? 0.72 : 0.86;
+  localUtter = u;
+  const t0 = performance.now();
+  return new Promise<number | null>((resolve) => {
+    let started = false;
+    let done = false;
+    const finish = (v: number | null) => {
+      if (done) return;
+      done = true;
+      window.clearTimeout(startT);
+      window.clearTimeout(capT);
+      if (localUtter === u) localUtter = null;
+      resolve(v);
+    };
+    const startT = window.setTimeout(() => {
+      if (started) return;
+      try {
+        speechSynthesis.cancel();
+      } catch {
+        /* ok */
+      }
+      finish(null);
+    }, LOCAL_START_TIMEOUT_MS);
+    const capT = window.setTimeout(() => finish(performance.now() - t0), localSpeechCapMs(line));
+    u.onstart = () => {
+      started = true;
+    };
+    u.onend = () => finish(performance.now() - t0);
+    u.onerror = () => finish(started ? performance.now() - t0 : null);
+    try {
+      speechSynthesis.speak(u);
+    } catch {
+      finish(null);
+    }
+  });
 }
 
 function b64buf(b64: string): ArrayBuffer {

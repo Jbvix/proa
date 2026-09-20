@@ -2,8 +2,18 @@
  * Proa · TugLife Systems — A Lara no passadiço (componente de voz)
  * ---------------------------------------------------------------------------
  * @autor    Jossian Brito
- * @versao   1.10.0
+ * @versao   1.11.0
  * @data     2026-09-20 12:00 UTC  (ano 2026)
+ *
+ * MODIFICAÇÕES NA 1.11.0 (P11 — 11.1 e 11.2)
+ *  - Resposta que nasce no tablet (`quickReply`, apresentação) sai pela voz
+ *    local do aparelho (`speakLocal`), sem `fetchSay()`: a pergunta mais comum
+ *    do passadiço deixou de atravessar a rede pra dizer um número que o
+ *    aparelho já tinha. Sem voz pt-BR ou motor parado, `playReply` volta à
+ *    rede sozinho — o pior caso custa 1,5 s, o melhor poupa 1 a 3 s.
+ *  - `warmVoice()` ao tocar em Conversar e no instante em que o VAD vê a
+ *    pessoa começar a falar: o cold start da function acontece em paralelo
+ *    com a fala, não em série depois dela.
  *
  * MODIFICAÇÕES NA 1.10.0 (P10 — 10.1 e 10.2)
  *  - A conversa aberta agora EXPIRA: 90 s sem pergunta e sem fala da Lara
@@ -26,6 +36,7 @@ import {
   holdEchoCanceller,
   playVoiceMp3,
   releaseEchoCanceller,
+  speakLocal,
   stopVoice,
   unlockVoice,
   voiceCool,
@@ -54,7 +65,7 @@ import { type WatchKind } from "@/lib/voice-watch";
 import { waypointMarks, waypointReport } from "@/lib/waypoint-pass";
 import { ALERTS_IDLE, tickAlerts, type AlertState } from "@/lib/voice-alerts";
 import { createEchoMemory } from "@/lib/voice-echo";
-import { fetchCanned, fetchSay, prefetchCanned } from "@/lib/voice-tts";
+import { fetchCanned, fetchSay, prefetchCanned, warmVoice } from "@/lib/voice-tts";
 import { TALK_IDLE_LINE, talkIdle } from "@/lib/voice-idle";
 import { cn } from "@/lib/utils";
 
@@ -323,7 +334,13 @@ export function AlanaRadio() {
     }, wait);
   }
 
-  async function playReply(text: string, audio: string | null) {
+  /**
+   * Toca a resposta e cuida da cadeia de eco. Com `opts.local`, tenta a voz
+   * do aparelho primeiro (1.11.0) e só vai à rede se ela não der — e nesse
+   * caso a cara volta a "pensando" durante a busca, pra não mentir "falando"
+   * com a boca fechada.
+   */
+  async function playReply(text: string, audio: string | null, opts?: { local?: boolean }) {
     speaking.current = true;
     cooling.current = true;
     setThinking(false);
@@ -336,8 +353,23 @@ export function AlanaRadio() {
     let extra = 0;
     const { tail } = voiceCool();
     try {
-      if (audio) {
-        const dur = await playVoiceMp3(audio);
+      let b64 = audio;
+      if (opts?.local) {
+        const dur = await speakLocal(text);
+        if (dur != null) {
+          extra = Math.min(1_600, Math.max(extra, dur * 0.08));
+          b64 = null;
+        } else {
+          // Sem voz local: rede, exatamente como antes da 1.11.0.
+          setSaying(false);
+          setThinking(true);
+          b64 = await fetchSay(text).catch(() => null);
+          setThinking(false);
+          setSaying(true);
+        }
+      }
+      if (b64) {
+        const dur = await playVoiceMp3(b64);
         extra = Math.min(1_600, Math.max(extra, dur * 0.08));
       }
       introEchoUntil.current = Math.max(
@@ -443,6 +475,7 @@ export function AlanaRadio() {
       return;
     }
     void unlockVoice();
+    warmVoice();
     talkOn.current = true;
     touchTalk();
     setTalking(true);
@@ -519,8 +552,8 @@ export function AlanaRadio() {
         const spoken = local;
         rememberLine(spoken);
         setTurns((t) => [...t, { role: "assistant", content: spoken }]);
-        const audio = await fetchSay(spoken);
-        await playReply(spoken, audio);
+        // Nasceu aqui, fala daqui: voz do aparelho, sem viagem à rede (11.1).
+        await playReply(spoken, null, { local: true });
         return;
       }
       const res = await fetch("/api/voice", {
@@ -625,7 +658,13 @@ export function AlanaRadio() {
       return;
     }
     setSnap(getVoiceSnap());
-    return subscribeVoiceSnap(setSnap);
+    return subscribeVoiceSnap((v) => {
+      setSnap(v);
+      // A pessoa começou a falar: a function acorda agora, em paralelo com a
+      // fala, e o clipe chega numa instância já quente (11.2). O corte de
+      // 45 s é de `warmVoice`; aqui custa uma comparação por snapshot.
+      if (v.state === "user_speaking") warmVoice();
+    });
   }, [muted]);
 
   useEffect(() => {
