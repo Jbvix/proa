@@ -26,26 +26,21 @@ import {
   type VoiceSnap,
 } from "@/lib/voice-listen";
 import { buildVoiceContext, type VoiceTurn } from "@/lib/voice-context";
-import { hearWake, isAlanaEcho } from "@/lib/wake-word";
+import { hearWake } from "@/lib/wake-word";
 import { extractCrewNames, extractNameAnswer, mergeCrew, parseWatchAsk, parseWatchCancel, pruneWatches, dropWatch, upsertWatch } from "@/lib/crew";
 import { formatEtaClock } from "@/lib/utils";
 import { quickReply } from "@/lib/voice-quick";
 import { greetLine, byeLine, withHold, askedForName } from "@/lib/alana-presence";
 import { matchVoice, upsertVoice } from "@/lib/voice-print";
 import { passageOf } from "@/lib/passage";
-import { tickWatch, WATCH_IDLE, type WatchKind, type WatchState } from "@/lib/voice-watch";
-import { PASS_IDLE, tickWaypointPass, waypointMarks, waypointReport, type PassState } from "@/lib/waypoint-pass";
+import { type WatchKind } from "@/lib/voice-watch";
+import { waypointMarks, waypointReport } from "@/lib/waypoint-pass";
+import { ALERTS_IDLE, tickAlerts, type AlertState } from "@/lib/voice-alerts";
+import { createEchoMemory } from "@/lib/voice-echo";
+import { fetchCanned, fetchSay, prefetchCanned } from "@/lib/voice-tts";
 import { cn } from "@/lib/utils";
 
 type Mode = "off" | "wake" | "session";
-
-const TTS_CACHE = {
-  greet: "proa-lara-tts-greet-v1",
-  bye: "proa-lara-tts-bye-v1",
-  miss: "proa-lara-tts-miss-v1",
-  xte: "proa-lara-tts-xte-v1",
-  roll: "proa-lara-tts-roll-v1",
-} as const;
 
 const ASK_CHIPS: { q: string; label: string }[] = [
   { q: "Como tá a viagem agora? Me dá um relatório.", label: "Relatório" },
@@ -55,23 +50,6 @@ const ASK_CHIPS: { q: string; label: string }[] = [
     label: "Combustível",
   },
 ];
-
-function readTtsCache(kind: CannedKind): string | null {
-  try {
-    const v = localStorage.getItem(TTS_CACHE[kind]);
-    return v && v.length > 80 ? v : null;
-  } catch {
-    return null;
-  }
-}
-
-function writeTtsCache(kind: CannedKind, audio: string) {
-  try {
-    localStorage.setItem(TTS_CACHE[kind], audio);
-  } catch {
-    /* quota */
-  }
-}
 
 export function AlanaRadio() {
   const { engine, meteo } = useLiveBridge();
@@ -115,14 +93,11 @@ export function AlanaRadio() {
   const armDelay = useRef(0);
   const deafUntil = useRef(0);
   const liveAt = useRef(0);
-  const prevLineRef = useRef<string | null>(null);
   const modeRef = useRef<Mode>("off");
-  const lastLineRef = useRef<string | null>(null);
-  const watchRef = useRef<WatchState>(WATCH_IDLE);
-  const passRef = useRef<PassState>(PASS_IDLE);
-  const passRoute = useRef("");
-  const lastAlertAt = useRef(0);
-  const lastWpAt = useRef(0);
+  /** Guarda as duas últimas falas da Lara pra não responder ao próprio eco. */
+  const echoRef = useRef(createEchoMemory());
+  /** Estado do vigia: XTE, travessia de waypoint e as travas de cadência. */
+  const alertsRef = useRef<AlertState>(ALERTS_IDLE);
   const pendingHear = useRef<{ text: string; ptt: boolean; miss?: boolean; print?: number[] } | null>(null);
   const lastPrint = useRef<number[] | null>(null);
   const introEchoUntil = useRef(0);
@@ -151,7 +126,6 @@ export function AlanaRadio() {
   voicesRef.current = crewVoices;
   turnsRef.current = turns;
   modeRef.current = mode;
-  lastLineRef.current = lastLine;
 
   function blocked() {
     return (
@@ -164,13 +138,12 @@ export function AlanaRadio() {
   }
 
   function rememberLine(text: string) {
-    prevLineRef.current = lastLineRef.current;
-    lastLineRef.current = text;
+    echoRef.current.remember(text);
     setLastLine(text);
   }
 
   function heardEcho(raw: string) {
-    return isAlanaEcho(raw, lastLineRef.current) || isAlanaEcho(raw, prevLineRef.current);
+    return echoRef.current.isEcho(raw);
   }
 
   function parkWake() {
@@ -344,40 +317,6 @@ export function AlanaRadio() {
       resumeBridgeListen();
       coolThenArm(extra);
     }
-  }
-
-  async function fetchSay(text: string): Promise<string | null> {
-    const res = await fetch("/api/voice", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ say: text }),
-      signal: AbortSignal.timeout(16_000),
-    });
-    const data = (await res.json()) as { ok?: boolean; audio?: string | null };
-    return data.ok && data.audio ? data.audio : null;
-  }
-
-  async function fetchCanned(kind: CannedKind): Promise<string | null> {
-    const cached = readTtsCache(kind);
-    if (cached) return cached;
-    const res = await fetch("/api/voice", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ canned: kind }),
-      signal: AbortSignal.timeout(20_000),
-    });
-    const data = (await res.json()) as { ok?: boolean; audio?: string | null };
-    if (data.ok && data.audio) {
-      writeTtsCache(kind, data.audio);
-      return data.audio;
-    }
-    return null;
-  }
-
-  function prefetchCanned() {
-    void fetchCanned("greet");
-    void fetchCanned("miss");
-    void fetchCanned("xte");
   }
 
   async function speakAlert(kind: WatchKind) {
@@ -665,8 +604,7 @@ export function AlanaRadio() {
 
   useEffect(() => {
     if (muted) {
-      watchRef.current = WATCH_IDLE;
-      passRef.current = PASS_IDLE;
+      alertsRef.current = ALERTS_IDLE;
       return;
     }
     const id = window.setInterval(() => {
@@ -683,39 +621,29 @@ export function AlanaRadio() {
         watchesRef.current = watches;
         setCrewWatches(watches);
       }
+      // Quem DECIDE se há aviso é `tickAlerts`, puro e testado. Aqui só se lê o
+      // que os sensores dizem e se executa o que ele mandar.
       const engine = engineRef.current;
       const route = routeRef.current;
-      const src = route?.source ?? "";
-      if (src !== passRoute.current) {
-        passRoute.current = src;
-        passRef.current = PASS_IDLE;
-      }
       const p = passageOf(route, engine);
-      const hit = tickWatch(watchRef.current, {
+      const marks = waypointMarks(route);
+      const step = tickAlerts(alertsRef.current, {
+        routeSource: route?.source ?? "",
         xteNm: p?.xteNm ?? null,
         sogKn: p?.sogKn ?? engine?.fix?.sogKn ?? 0,
         alongNm: p?.alongNm ?? 0,
         remainNm: p?.remainNm ?? 0,
         capturing: !!engine?.capturing,
+        marks,
+        nowMono: performance.now(),
       });
-      watchRef.current = hit.state;
-      if (hit.alert) {
-        if (performance.now() - lastAlertAt.current < 45_000) return;
-        lastAlertAt.current = performance.now();
-        void speakAlert(hit.alert);
+      alertsRef.current = step.state;
+      if (!step.action) return;
+      if (step.action.kind === "xte") {
+        void speakAlert(step.action.alert);
         return;
       }
-      const marks = waypointMarks(route);
-      const cross = tickWaypointPass(passRef.current, {
-        alongNm: p?.alongNm ?? 0,
-        sogKn: p?.sogKn ?? engine?.fix?.sogKn ?? 0,
-        capturing: !!engine?.capturing,
-        marks,
-      });
-      passRef.current = cross.state;
-      if (!cross.passed) return;
-      if (performance.now() - lastWpAt.current < 18_000) return;
-      lastWpAt.current = performance.now();
+      const { passed, next } = step.action;
       const ctx = buildVoiceContext({
         engine,
         meteo: meteoRef.current,
@@ -726,8 +654,7 @@ export function AlanaRadio() {
         crewNames: crewRef.current,
         crewWatches: watchesRef.current,
       });
-      const next = marks.find((m) => m.nm > cross.passed!.nm + 0.35) ?? null;
-      const text = waypointReport(cross.passed, {
+      const text = waypointReport(passed, {
         name: crewRef.current[0],
         sogKn: ctx.posicao.sogKn,
         hsM: ctx.mar.hsCasco,

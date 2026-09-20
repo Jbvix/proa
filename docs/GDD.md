@@ -3,7 +3,7 @@
 **Projeto:** Proa · PWA de passadiço para rebocador
 **Organização:** TugLife Systems
 **Autor:** Jossian Brito
-**Versão do documento:** 1.3.0
+**Versão do documento:** 1.4.0
 **Data:** 2026-09-20 02:14 UTC (ano 2026)
 
 ---
@@ -78,6 +78,9 @@ PWA. Funções serverless em Netlify. Sem banco de dados.
 | `meteo.ts` | Open-Meteo, previsão por waypoint, fallback sintético |
 | `api-guard.ts` | Limite de taxa e allowlist de origem dos endpoints |
 | `api/*-handler.ts` | Lógica de `/api/meteo` e `/api/voice`, partilhada pelas duas pontas |
+| `voice-alerts.ts` | Decide QUANDO a Lara fala sem ser chamada (puro, testado) |
+| `voice-echo.ts` | Memória das duas últimas falas, contra realimentação acústica |
+| `voice-tts.ts` | Cache e busca do áudio da fala |
 
 ## 5. O motor de onda — decisões de projeto
 
@@ -217,8 +220,9 @@ contrações naturais, sem emoji, sem lista numerada.
   NORMAM, MARPOL, SOLAS.
 - **Regra dura:** fatos só do contexto ao vivo. Não inventa posição, Hs, SOG,
   ETA, waypoint nem número de regra. Se faltar dado, diz que não tem.
-- **Alertas espontâneos:** só XTE acima do limite, passagem de waypoint e fim de
-  turno de tripulante.
+- **Alertas espontâneos:** XTE acima do limite e passagem de waypoint. A decisão
+  vive em `voice-alerts.ts`, pura e testada, com travas de cadência de 45 s
+  (XTE) e 18 s (waypoint). O fim de turno **não** dispara — ver §9.
 
 ## 8. Privacidade e segurança
 
@@ -283,12 +287,38 @@ de casca. Nenhum alvo foi removido: os dois continuam necessários.
 | P5 | `/api/voice` e `/api/meteo` públicos e sem limite de taxa sobre APIs pagas | ✅ **Feito em 1.2.0** |
 | P7 | Peso morto: `multiplayer/`, `app-data/`, `auth/`, endpoints duplicados, deps órfãs | ✅ **Feito em 1.3.0** |
 | P8 | Migrar `seaPenalty` para STAWAVE-1 (∝ Hs²), calibrado com dado de viagem real | **Pendente** |
-| P9 | `voice-assistant.tsx` tem 1.025 linhas e 30+ refs; quebrar em hooks | **Pendente** |
+| P9 | `voice-assistant.tsx` tem 1.025 linhas e 30+ refs; quebrar em hooks | 🟡 **Parcial em 1.4.0** — três peças extraídas, o laço de turno continua no componente |
+| **BUG** | **O aviso de fim de turno não dispara.** `dueWarn`, `dueWatch`, `watchLine` e `watchWarnLine` estão implementados em `crew.ts` e cobertos por teste, mas nenhum componente os chama. O fio foi cortado em `5e2c387` ("Sprint 1: … XTE-only alerts"), que estreitou o laço de avisos. Como as funções e os testes ficaram, a suíte segue verde e ninguém percebeu. Religar é acrescentar um ramo em `tickAlerts` e a fala correspondente. **Aguardando decisão:** o título do commit sugere corte deliberado, então não foi religado por conta própria. | **Aberto** |
 | — | Limite de taxa global (hoje é por instância quente): exige Netlify Blobs, Redis ou equivalente | Ideia |
 | — | Calibração assistida: regressão de `hsObs` contra `hsForecast` ao longo da viagem | Ideia |
 | — | Assinatura hidrodinâmica: acumular (heave, roll) × (Hs, Tz, encontro) = RAO experimental do casco | Ideia |
 
 ## 10. Histórico de versões
+
+### 1.4.0 — 2026-09-20
+
+Primeira etapa do P9. `voice-assistant.tsx` cai de 1.025 para 952 linhas, e o
+que saiu virou três módulos puros e testados, em vez de mudar de lugar:
+
+| Extraído | Linhas | O que ganhou |
+|---|---|---|
+| `voice-alerts.ts` | 156 | a decisão dos avisos espontâneos era um bloco de ~70 linhas dentro de um `setInterval`; agora é uma função pura com 12 testes |
+| `voice-tts.ts` | 109 | cache e busca do áudio, com 7 testes cobrindo storage bloqueado, cota cheia e sobra curta demais |
+| `voice-echo.ts` | 58 | memória das duas últimas falas contra realimentação acústica, com 8 testes |
+
+**Preservação de comportamento.** O tick de waypoint continua sem rodar no passo
+em que o XTE alerta — é como o laço original agia, e trocar isso durante uma
+extração seria mudar a conduta às cegas. Há teste amarrando essa regra.
+
+A única mudança de conduta é na memória de eco: antes o `lastLineRef` era
+re-sincronizado a partir do estado do React a cada render, o que podia
+sobrescrever a referência com um valor velho. Agora a memória é o dono do dado,
+e o estado serve só ao que aparece na tela.
+
+**Achado durante a leitura:** o aviso de fim de turno está implementado e
+testado, e não é chamado por ninguém desde `5e2c387`. Registrado em §9.
+
+Cobertura: 138 para 164 testes.
 
 ### 1.3.0 — 2026-09-20
 
