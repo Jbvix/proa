@@ -2,10 +2,10 @@
  * Proa · TugLife Systems — Onda e heave do casco
  * ---------------------------------------------------------------------------
  * @autor    Jossian Brito
- * @versao   1.1.0
+ * @versao   1.2.0
  * @data     2026-09-20 02:14 UTC  (ano 2026)
  *
- * MODIFICAÇÕES DESTA VERSÃO (1.1.0)
+ * MODIFICAÇÕES DA VERSÃO 1.1.0
  *  1. Novo `HeaveIntegrator` — a cadeia de dupla integração que antes vivia
  *     dentro de `sensor-engine.ts` foi extraída para cá, pura e sem DOM, pra
  *     poder ser testada com mar senoidal conhecido.
@@ -24,6 +24,15 @@
  *     12,84 s numa janela de 90 s. Agora mede entre o primeiro e o último
  *     cruzamento, com interpolação linear de cada um. Importa em dobro: além
  *     do Tz na tela, é nessa frequência que o ganho da cadeia é avaliado.
+ *
+ * MODIFICAÇÕES DA VERSÃO 1.2.0
+ *  6. Escala de estado do mar corrigida. A tabela usava as faixas certas mas
+ *     numerava a partir de 0 na faixa 0–0,1 m, deslocando TODO grau em 1 face
+ *     à Douglas / WMO 3700, e truncava em 7. Quem reportasse "mar estado 4" à
+ *     praticagem estava um grau abaixo do padrão. Agora a escala é dado
+ *     (`SEA_STATE_TABLE`), vai de 0 a 9, e ganhou `seaTone()` para que os
+ *     limiares de alarme fiquem num lugar só, presos à ALTURA e não ao número
+ *     do grau.
  * ---------------------------------------------------------------------------
  */
 
@@ -33,15 +42,60 @@ export type SeaState = {
   hint: string;
 };
 
+/**
+ * Escala de estado do mar — Douglas / WMO 3700.
+ *
+ * `maxHs` é o TETO EXCLUSIVO da faixa, em metros: vale o primeiro grau cujo
+ * teto o Hs ainda não alcançou.
+ *
+ * Até a versão 1.0.0 esta tabela usava as faixas certas mas numerava a partir
+ * de 0 na faixa 0–0,1 m, o que deslocava TODO grau em 1 face ao padrão
+ * internacional, e ainda truncava em 7. Um comandante que reportasse "mar
+ * estado 4" à praticagem, ou lançasse isso no diário de bordo, estaria
+ * reportando um grau abaixo do que a escala manda. A tabela está aqui como
+ * dado, e não como cadeia de `if`, justamente para poder ser conferida linha
+ * a linha contra a publicação.
+ */
+export const SEA_STATE_TABLE = [
+  { code: 0, maxHs: 0.01, label: "Calmo", hint: "Mar espelhado" },
+  { code: 1, maxHs: 0.1, label: "Calmo", hint: "Encrespado, sem cristas" },
+  { code: 2, maxHs: 0.5, label: "Bonançoso", hint: "Ondas pequenas, cristas sem quebrar" },
+  { code: 3, maxHs: 1.25, label: "Fraco", hint: "Cristas começam a quebrar" },
+  { code: 4, maxHs: 2.5, label: "Moderado", hint: "Cristas frequentes, alguma espuma" },
+  { code: 5, maxHs: 4, label: "Grosso", hint: "Espuma em faixas, borrifo" },
+  { code: 6, maxHs: 6, label: "Muito grosso", hint: "Vagas formadas, mar pesado" },
+  { code: 7, maxHs: 9, label: "Alto", hint: "Rebentação, visibilidade reduzida" },
+  { code: 8, maxHs: 14, label: "Muito alto", hint: "Vagalhões, condição severa" },
+  { code: 9, maxHs: Infinity, label: "Excepcional", hint: "Condição extrema" },
+] as const;
+
 export function seaStateFromHs(hs: number): SeaState {
-  if (hs < 0.1) return { code: 0, label: "Calmaria", hint: "Mar espelhado" };
-  if (hs < 0.5) return { code: 1, label: "Marulhada", hint: "Cristas sem quebrar" };
-  if (hs < 1.25) return { code: 2, label: "Fraca", hint: "Ondulação pequena" };
-  if (hs < 2.5) return { code: 3, label: "Moderada", hint: "Cristas ocasionais" };
-  if (hs < 4) return { code: 4, label: "Agitada", hint: "Espuma frequente" };
-  if (hs < 6) return { code: 5, label: "Muito agitada", hint: "Vagas formadas" };
-  if (hs < 9) return { code: 6, label: "Grossa", hint: "Mar pesado" };
-  return { code: 7, label: "Muito grossa", hint: "Condições severas" };
+  const h = Number.isFinite(hs) && hs > 0 ? hs : 0;
+  for (const grau of SEA_STATE_TABLE) {
+    if (h < grau.maxHs) {
+      return { code: grau.code, label: grau.label, hint: grau.hint };
+    }
+  }
+  const ultimo = SEA_STATE_TABLE[SEA_STATE_TABLE.length - 1]!;
+  return { code: ultimo.code, label: ultimo.label, hint: ultimo.hint };
+}
+
+export type SeaTone = "accent" | "warn" | "danger";
+
+/**
+ * Cor do selo de estado do mar no passadiço.
+ *
+ * Os limiares são fixados em ALTURA, não em número de grau, justamente porque
+ * o grau mudou na 1.2.0 e as telas não podem herdar o deslocamento:
+ *   Hs ≥ 2,5 m (grau 5, "Grosso")   → vermelho
+ *   Hs ≥ 1,25 m (grau 4, "Moderado") → âmbar
+ *   abaixo disso                     → normal
+ * São os mesmos pontos de disparo de antes; só o número que os nomeia mudou.
+ */
+export function seaTone(code: number): SeaTone {
+  if (code >= 5) return "danger";
+  if (code >= 4) return "warn";
+  return "accent";
 }
 
 /** Coastal tug sanity — Hs above this is IMU drift, not sea. */

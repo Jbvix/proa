@@ -2,7 +2,7 @@
 
 **Para a tripulação do passadiço**
 **Autor:** Jossian Brito · TugLife Systems
-**Versão:** 1.1.0 · 2026-09-20 02:14 UTC (ano 2026)
+**Versão:** 1.2.0 · 2026-09-20 02:14 UTC (ano 2026)
 
 ---
 
@@ -82,6 +82,29 @@ avisa. Isso acontece quando:
 A leitura precisa de cerca de **90 segundos** de captura para assentar. Nos
 primeiros instantes depois de ligar, ignore.
 
+**O grau do mar** ao lado do título segue a escala **Douglas / WMO 3700**, a
+mesma que se reporta à praticagem e se lança no diário:
+
+| Grau | Hs | Como se chama |
+|---|---|---|
+| 0 – 1 | até 0,1 m | Calmo |
+| 2 | 0,1 – 0,5 m | Bonançoso |
+| 3 | 0,5 – 1,25 m | Fraco |
+| 4 | 1,25 – 2,5 m | Moderado |
+| 5 | 2,5 – 4 m | Grosso |
+| 6 | 4 – 6 m | Muito grosso |
+| 7 | 6 – 9 m | Alto |
+| 8 | 9 – 14 m | Muito alto |
+| 9 | acima de 14 m | Excepcional |
+
+> **Atenção a quem usou versões anteriores.** Até a 1.1.0 o app numerava um grau
+> abaixo do padrão: o que ele chamava de 3 é o grau 4 da escala. A partir da
+> 1.2.0 o número na tela é o número da publicação. Se você vinha anotando o grau
+> do app no diário, some 1 aos registros antigos.
+
+O selo muda de cor por **altura**, não por grau: âmbar a partir de 1,25 m,
+vermelho a partir de 2,5 m.
+
 ### Rota
 
 O GPX importado no mapa, com os waypoints do arquivo, previsão marinha em cada
@@ -98,6 +121,11 @@ A faixa recomendada, com o porquê: Hs, período, vento e o encontro com a onda
 
 Abaixo, o conselho de combustível — se o tempo está a favor e dá para aliviar,
 ou se cortar RPM só vai alongar a viagem sem economizar.
+
+**O período pesa tanto quanto a altura.** Dois metros em 14 segundos embalam o
+rebocador; dois metros em 6 segundos martelam. A partir da 1.2.0 a faixa
+distingue os dois: em vaga curta ela desce mais, em swell longo ela alivia. Se
+você notou a recomendação mudar em relação a versões anteriores, é isto.
 
 ## 5. A Lara
 
@@ -144,6 +172,7 @@ firme? (b) o período aparece na tela ou está em branco?
 | Período em branco | Mar fora da faixa de 3 a 16 s, ou captura com menos de 90 s. |
 | A Lara não ouve | No Samsung, toque uma vez na tela. Confira a permissão de microfone. |
 | "Open-Meteo indisponível" | Sem rede. Vento e corrente passam a ser locais e aproximados; o mar do casco continua real. |
+| "Muitos pedidos deste aparelho" | Proteção contra uso descontrolado dos serviços pagos. Aguarde o tempo indicado; o uso normal de bordo nunca chega perto do limite. |
 | Tela clara demais à noite | Alterne o tema para `night`. |
 
 ## 8. Seus dados
@@ -167,6 +196,7 @@ Node 22 · comando `npm run build`
 | `VITE_AUTH_ENABLED=false` | O app não usa login nem banco |
 | `OPENMETEO_API_KEY` | Assinatura comercial Open-Meteo. Escopos: Functions + Runtime. Secret. |
 | `XAI_API_KEY` | Lara (Grok chat, STT e TTS). Functions + Runtime. Secret. |
+| `PROA_ALLOWED_ORIGINS` | Opcional. Hosts extras aceitos pelos endpoints, separados por vírgula. Mesma origem e localhost já passam sem configuração. |
 
 Nenhuma das chaves chega ao navegador.
 
@@ -174,7 +204,7 @@ Nenhuma das chaves chega ao navegador.
 
 ```bash
 npm run dev            # servidor em :8080
-npm test               # testes de domínio (165) — tem de ficar verde
+npm test               # testes de domínio (193) — tem de ficar verde
 npm run test:scaffold  # testes do andaime do template (precisa de .grok/)
 npm run test:all       # os dois
 npm run typecheck      # tsc --noEmit

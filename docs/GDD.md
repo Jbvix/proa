@@ -3,7 +3,7 @@
 **Projeto:** Proa · PWA de passadiço para rebocador
 **Organização:** TugLife Systems
 **Autor:** Jossian Brito
-**Versão do documento:** 1.1.0
+**Versão do documento:** 1.2.0
 **Data:** 2026-09-20 02:14 UTC (ano 2026)
 
 ---
@@ -144,6 +144,29 @@ número que permite confirmar, no aparelho, que a decimação está de pé.
 - **não há período confiável** — sem frequência onde avaliar o ganho, a leitura
   fica crua e subestimada, e o passadiço merece saber disso.
 
+### 5.5 Escala de estado do mar
+
+O grau exibido segue **Douglas / WMO 3700**, de 0 a 9, e vive em
+`SEA_STATE_TABLE` como dado — não como cadeia de `if` — justamente para poder
+ser conferido linha a linha contra a publicação.
+
+| Grau | Hs (m) | Rótulo |
+|---|---|---|
+| 0 | 0 | Calmo (espelhado) |
+| 1 | 0 – 0,1 | Calmo (encrespado) |
+| 2 | 0,1 – 0,5 | Bonançoso |
+| 3 | 0,5 – 1,25 | Fraco |
+| 4 | 1,25 – 2,5 | Moderado |
+| 5 | 2,5 – 4 | Grosso |
+| 6 | 4 – 6 | Muito grosso |
+| 7 | 6 – 9 | Alto |
+| 8 | 9 – 14 | Muito alto |
+| 9 | > 14 | Excepcional |
+
+Os limiares de alarme vivem em `seaTone()` e são fixados em **altura**, não em
+número de grau: âmbar a partir de 1,25 m, vermelho a partir de 2,5 m. Assim uma
+futura mexida na escala não desloca o alarme junto.
+
 ## 6. O modelo de RPM
 
 ```
@@ -155,12 +178,31 @@ O ângulo de encontro classifica o mar em **proa**, **través** ou **popa** pelo
 cosseno da diferença entre o rumo e a direção para onde a onda vai. Mar de popa
 devolve penalidade negativa — ajuda a andar.
 
-> **Limitação conhecida e documentada.** As constantes (78, 420, 55) são
-> empíricas e não têm procedência publicada. A resistência adicionada em ondas,
-> pela formulação padrão STAWAVE-1 (ISO 15016 / ITTC), escala com **Hs²**, não
-> linearmente com Hs. A declividade usada (`Hs/T`) tem unidade de m/s e não é
-> declividade de onda — a declividade real é `Hs/(1,56·T²)`, adimensional.
-> Ambos são itens de trabalho futuro (ver §9).
+A penalidade de mar tem dois termos, com efeitos físicos distintos: a
+**altura** cobra o trabalho de levantar o casco, a **declividade** cobra o
+castigo do impacto. Uma onda de 2 m em 14 s embala o rebocador; a mesma altura
+em 6 s martela.
+
+A declividade é `Hs/L`, adimensional, com `L = g·T²/(2π)` em águas profundas —
+escala com `1/T²`. Até a 1.1.0 usava-se `Hs/T`, que tem unidade de m/s e escala
+com `1/T`, de modo que o modelo mal distinguia swell longo de vaga curta. A
+constante foi recalibrada no ponto de referência Hs 1,5 m / T 8 s, de modo que
+só a resposta ao período mudou:
+
+| Hs · T | Penalidade de mar antes | Depois | Δ |
+|---|---|---|---|
+| 1,5 m · 5 s | 243 rpm | 319 rpm | **+76** |
+| 1,5 m · 8 s | 196 rpm | 196 rpm | 0 (calibração) |
+| 1,5 m · 12 s | 170 rpm | 152 rpm | **−17** |
+| 2,0 m · 6 s | 296 rpm | 343 rpm | **+47** |
+| 2,0 m · 14 s | 216 rpm | 190 rpm | **−26** |
+| 3,0 m · 7 s | 381 rpm | 440 rpm | **+59** |
+
+> **Limitação que permanece.** As constantes (78, 5250, 55) seguem empíricas e
+> sem procedência publicada. A resistência adicionada em ondas, pela formulação
+> padrão STAWAVE-1 (ISO 15016 / ITTC), escala com **Hs²**, não linearmente com
+> Hs. Corrigiu-se a dimensão da declividade, não a calibração absoluta do
+> modelo — esta continua sendo o item P8 do §9, e exige dado de viagem real.
 
 ## 7. A Lara
 
@@ -176,7 +218,7 @@ contrações naturais, sem emoji, sem lista numerada.
 - **Alertas espontâneos:** só XTE acima do limite, passagem de waypoint e fim de
   turno de tripulante.
 
-## 8. Privacidade
+## 8. Privacidade e segurança
 
 Nada de conta, nada de nuvem, nada de banco. O estado vive em `localStorage`.
 As chaves de API (`OPENMETEO_API_KEY`, `XAI_API_KEY`) ficam exclusivamente no
@@ -186,19 +228,66 @@ campo `plano: "comercial" | "gratuito"`.
 Sai do aparelho: coordenada (para a meteorologia) e áudio da fala (para o STT
 do Grok, quando a Lara está em conversa).
 
+### 8.1 Guarda dos endpoints públicos
+
+`/api/meteo` e `/api/voice` são abertos de propósito — o Proa não tem login, e
+a tripulação não vai digitar senha com o navio jogando. Mas os dois fazem proxy
+para serviços **pagos**. A exposição não é de dado, é de **fatura**.
+
+`src/lib/api-guard.ts` põe uma portaria antes de qualquer trabalho, nos quatro
+pontos de entrada (as duas rotas Nitro e as duas functions Netlify):
+
+| Endpoint | Por minuto | Por hora |
+|---|---|---|
+| `/api/meteo` | 60 | 600 |
+| `/api/voice` | 40 | 400 |
+
+Contagem por IP, em janela deslizante. Um pedido barrado **não** é contado —
+senão um script de terceiro trancaria o aparelho da tripulação para sempre.
+Resposta `429` com `Retry-After`.
+
+A allowlist de origem aceita mesma origem (o que já cobre produção, deploy
+preview e sandbox), localhost, e o que estiver em `PROA_ALLOWED_ORIGINS`.
+
+> **O que esta guarda não é.** O limite de taxa é o controle substantivo; a
+> allowlist de origem é defesa em profundidade, porque a ausência de cabeçalhos
+> CORS já impede o navegador de ler a resposta de outra origem. E a contagem
+> vive na memória da instância quente: vale por instância, não globalmente. É
+> um quebra-molas contra um laço, não um cofre contra um ataque distribuído.
+> Um limite global exige armazenamento compartilhado — ver §9.
+
 ## 9. Trabalho futuro
 
 | # | Item | Estado |
 |---|---|---|
-| P4 | Código de estado do mar está deslocado em 1 face à escala WMO; declividade com dimensão errada | **Pendente** |
-| P5 | `/api/voice` e `/api/meteo` são públicos e sem limite de taxa sobre APIs pagas | **Pendente** |
+| P4 | Código de estado do mar deslocado em 1 face à escala WMO; declividade com dimensão errada | ✅ **Feito em 1.2.0** |
+| P5 | `/api/voice` e `/api/meteo` públicos e sem limite de taxa sobre APIs pagas | ✅ **Feito em 1.2.0** |
 | P7 | Peso morto: `multiplayer/` (579 linhas, zero importações), `auth/` desligado (1.888), endpoints duplicados | **Pendente** |
 | P8 | Migrar `seaPenalty` para STAWAVE-1 (∝ Hs²), calibrado com dado de viagem real | **Pendente** |
 | P9 | `voice-assistant.tsx` tem 1.025 linhas e 30+ refs; quebrar em hooks | **Pendente** |
+| — | Limite de taxa global (hoje é por instância quente): exige Netlify Blobs, Redis ou equivalente | Ideia |
 | — | Calibração assistida: regressão de `hsObs` contra `hsForecast` ao longo da viagem | Ideia |
 | — | Assinatura hidrodinâmica: acumular (heave, roll) × (Hs, Tz, encontro) = RAO experimental do casco | Ideia |
 
 ## 10. Histórico de versões
+
+### 1.2.0 — 2026-09-20
+
+Escala, dimensão e portaria.
+
+1. **Escala de estado do mar.** A tabela usava as faixas certas mas numerava a
+   partir de 0 na faixa 0–0,1 m, deslocando todo grau em 1 face à Douglas /
+   WMO 3700, e truncava em 7. Quem reportasse "mar estado 4" à praticagem
+   estava um grau abaixo do padrão. Agora vai de 0 a 9, e os limiares de alarme
+   saíram das telas para `seaTone()`, presos à altura e não ao número do grau.
+2. **Declividade de onda.** `Hs/T` tem unidade de m/s e não é declividade.
+   Trocado por `Hs/L` com `L = g·T²/(2π)`, adimensional, que escala com `1/T²`.
+   Constante recalibrada no ponto de referência, de modo que só a resposta ao
+   período mudou.
+3. **Guarda dos endpoints.** Limite de taxa por IP e allowlist de origem em
+   `/api/meteo` e `/api/voice`, nos quatro pontos de entrada.
+
+Cobertura: 165 para 193 testes.
 
 ### 1.1.0 — 2026-09-20
 

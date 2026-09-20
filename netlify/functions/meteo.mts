@@ -1,5 +1,10 @@
 import type { Config } from "@netlify/functions";
 import {
+  METEO_RULES,
+  guardRequest,
+  parseAllowedOrigins,
+} from "../../src/lib/api-guard";
+import {
   fetchMeteoUpstream,
   parseWaypointQuery,
   syntheticMeteo,
@@ -17,6 +22,15 @@ export default async (req: Request) => {
   if (req.method !== "GET") {
     return new Response("Method Not Allowed", { status: 405 });
   }
+
+  // Porteiro antes de qualquer trabalho: quem for barrado não chega a
+  // custar uma chamada ao Open-Meteo comercial.
+  const barrado = guardRequest(req, {
+    bucket: "meteo",
+    rules: METEO_RULES,
+    extraOrigins: parseAllowedOrigins(process.env.PROA_ALLOWED_ORIGINS),
+  });
+  if (barrado) return barrado;
 
   const url = new URL(req.url);
   const lat = coord(url.searchParams.get("lat"), -3.718);

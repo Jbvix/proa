@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { VOICE_RULES, guardRequest, parseAllowedOrigins } from "@/lib/api-guard";
 import { env } from "@/lib/env.server";
 import { isCannedKind } from "@/lib/voice-copy";
 import { askGrokVoice, hearGrok, speakCanned, speakLine } from "@/lib/voice-api";
@@ -19,6 +20,15 @@ export const Route = createFileRoute("/api/voice")({
     handlers: {
       POST: async ({ request }) => {
         try {
+          // A voz é o endpoint caro: transcrição, chat e fala, tudo pago.
+          // O porteiro vem antes de tudo, inclusive de ler o corpo.
+          const barrado = guardRequest(request, {
+            bucket: "voice",
+            rules: VOICE_RULES,
+            extraOrigins: parseAllowedOrigins(env("PROA_ALLOWED_ORIGINS")),
+          });
+          if (barrado) return barrado;
+
           const key = env("XAI_API_KEY") ?? env("GROK_API_KEY") ?? "";
           if (!key) {
             return fail(503, "Assistente Grok indisponível neste aparelho.");

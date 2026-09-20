@@ -8,7 +8,7 @@ import { useLiveBridge } from "@/components/bridge-provider";
 import { cardinal, formatDurationMin, formatEtaClock, formatLatLon, pad3 } from "@/lib/utils";
 import { weatherLabel } from "@/lib/meteo";
 import { recommendRpm } from "@/lib/rpm";
-import { seaStateFromHs } from "@/lib/waves";
+import { seaStateFromHs, seaTone } from "@/lib/waves";
 import { useSettings } from "@/lib/store";
 import { nearestProgress, pathLengthNm, xteSideLabel } from "@/lib/geo";
 import { coastFix } from "@/lib/coastline";
@@ -69,7 +69,7 @@ export function PainelScreen() {
               : "Parado"}
         </Badge>
         <Badge
-          tone={sea.code >= 4 ? "danger" : sea.code >= 3 ? "warn" : "accent"}
+          tone={seaTone(sea.code)}
         >
           {sea.label}
         </Badge>

@@ -1,4 +1,9 @@
 import type { Config } from "@netlify/functions";
+import {
+  VOICE_RULES,
+  guardRequest,
+  parseAllowedOrigins,
+} from "../../src/lib/api-guard";
 import { askGrokVoice, hearGrok, speakCanned, speakLine } from "../../src/lib/voice-api";
 import { isCannedKind } from "../../src/lib/voice-copy";
 import type { VoiceContext, VoiceTurn } from "../../src/lib/voice-context";
@@ -9,6 +14,16 @@ export default async (req: Request) => {
     if (req.method !== "POST") {
       return new Response("Method Not Allowed", { status: 405 });
     }
+
+    // A voz é o endpoint caro: transcrição, chat e fala, tudo pago. O
+    // porteiro vem antes de tudo, inclusive de ler o corpo.
+    const barrado = guardRequest(req, {
+      bucket: "voice",
+      rules: VOICE_RULES,
+      extraOrigins: parseAllowedOrigins(process.env.PROA_ALLOWED_ORIGINS),
+    });
+    if (barrado) return barrado;
+
     const key = (process.env.XAI_API_KEY ?? process.env.GROK_API_KEY ?? "").trim();
     if (!key) {
       return Response.json(

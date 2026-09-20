@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { METEO_RULES, guardRequest, parseAllowedOrigins } from "@/lib/api-guard";
 import { env } from "@/lib/env.server";
 import { fetchMeteoUpstream, parseWaypointQuery, syntheticMeteo } from "@/lib/meteo";
 
@@ -6,6 +7,15 @@ export const Route = createFileRoute("/api/meteo")({
   server: {
     handlers: {
       GET: async ({ request }) => {
+        // Porteiro antes de qualquer trabalho: quem for barrado não chega a
+        // custar uma chamada ao Open-Meteo comercial.
+        const barrado = guardRequest(request, {
+          bucket: "meteo",
+          rules: METEO_RULES,
+          extraOrigins: parseAllowedOrigins(env("PROA_ALLOWED_ORIGINS")),
+        });
+        if (barrado) return barrado;
+
         const url = new URL(request.url);
         const lat = Number(url.searchParams.get("lat") ?? "-3.718");
         const lon = Number(url.searchParams.get("lon") ?? "-38.473");

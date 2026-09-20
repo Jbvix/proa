@@ -8,6 +8,9 @@ import {
   correctChainHs,
   heaveResponseGain,
   HeaveIntegrator,
+  seaStateFromHs,
+  seaTone,
+  SEA_STATE_TABLE,
   HS_HULL_MAX,
 } from "./waves.ts";
 
@@ -170,4 +173,82 @@ test("reset limpa o estado entre capturas", () => {
   // Depois do reset, entrada nula tem de sair nula — sem memória da captura
   // anterior vazando pro mar novo.
   assert.equal(chain.push(0, 0.1).heave, 0);
+});
+
+/* ===========================================================================
+ * Escala de estado do mar — Douglas / WMO 3700
+ * ---------------------------------------------------------------------------
+ * @autor  Jossian Brito
+ * @versao 1.1.0 · 2026-09-20
+ *
+ * A versão 1.0.0 numerava a partir de 0 na faixa 0–0,1 m, deslocando todo grau
+ * em 1 face ao padrão e truncando em 7. Quem reportasse à praticagem estaria
+ * um grau abaixo do que a escala manda.
+ * ========================================================================= */
+
+test("os graus batem com a tabela Douglas / WMO 3700", () => {
+  // Cada par é (Hs em metros, grau que a publicação manda).
+  const referencia: Array<[number, number]> = [
+    [0, 0],
+    [0.05, 1],
+    [0.09, 1],
+    [0.1, 2],
+    [0.49, 2],
+    [0.5, 3],
+    [1.24, 3],
+    [1.25, 4],
+    [2.49, 4],
+    [2.5, 5],
+    [3.99, 5],
+    [4, 6],
+    [5.99, 6],
+    [6, 7],
+    [8.99, 7],
+    [9, 8],
+    [13.99, 8],
+    [14, 9],
+    [30, 9],
+  ];
+  for (const [hs, grau] of referencia) {
+    assert.equal(seaStateFromHs(hs).code, grau, `Hs ${hs} m deveria ser grau ${grau}`);
+  }
+});
+
+test("a escala vai até 9 — mar excepcional existe e tem nome", () => {
+  // A 1.0.0 parava em 7 e jogava tudo acima de 9 m no mesmo balde.
+  assert.equal(seaStateFromHs(20).code, 9);
+  assert.equal(seaStateFromHs(10).code, 8);
+  assert.notEqual(seaStateFromHs(10).label, seaStateFromHs(20).label);
+});
+
+test("a tabela é contínua, crescente e sem buraco", () => {
+  let tetoAnterior = 0;
+  SEA_STATE_TABLE.forEach((grau, i) => {
+    assert.equal(grau.code, i, `o grau na posição ${i} deveria ser ${i}`);
+    assert.ok(grau.maxHs > tetoAnterior, `teto ${grau.maxHs} não avançou`);
+    assert.ok(grau.label.length > 0 && grau.hint.length > 0);
+    tetoAnterior = grau.maxHs;
+  });
+  assert.equal(SEA_STATE_TABLE[SEA_STATE_TABLE.length - 1]!.maxHs, Infinity);
+});
+
+test("entrada suja não quebra a escala", () => {
+  for (const ruim of [NaN, -1, -0.5, Infinity]) {
+    const s = seaStateFromHs(ruim);
+    assert.ok(s.code >= 0 && s.code <= 9, `Hs ${ruim} deu grau ${s.code}`);
+  }
+  assert.equal(seaStateFromHs(NaN).code, 0);
+  assert.equal(seaStateFromHs(-3).code, 0);
+});
+
+test("o selo dispara na ALTURA certa, não no número do grau", () => {
+  // Os pontos de disparo são os mesmos de antes da renumeração: âmbar a partir
+  // de 1,25 m e vermelho a partir de 2,5 m. Se alguém mexer na escala sem
+  // mexer aqui, este teste cai.
+  assert.equal(seaTone(seaStateFromHs(0.8).code), "accent");
+  assert.equal(seaTone(seaStateFromHs(1.24).code), "accent");
+  assert.equal(seaTone(seaStateFromHs(1.25).code), "warn");
+  assert.equal(seaTone(seaStateFromHs(2.49).code), "warn");
+  assert.equal(seaTone(seaStateFromHs(2.5).code), "danger");
+  assert.equal(seaTone(seaStateFromHs(9).code), "danger");
 });

@@ -3,7 +3,7 @@ import { Stat } from "@/components/stat";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardTitle } from "@/components/ui/card";
 import { cardinal, formatHour, hourKey, pad3 } from "@/lib/utils";
-import { amplitudeFromHs, seaStateFromHs, type HourlyWave } from "@/lib/waves";
+import { amplitudeFromHs, seaStateFromHs, seaTone, type HourlyWave } from "@/lib/waves";
 import { useLiveBridge } from "@/components/bridge-provider";
 import { useSettings } from "@/lib/store";
 
@@ -29,7 +29,7 @@ export function OndasScreen() {
           </p>
         </div>
         <Badge
-          tone={sea.code >= 4 ? "danger" : sea.code >= 3 ? "warn" : "accent"}
+          tone={seaTone(sea.code)}
         >
           Douglas {sea.code} · {sea.label}
         </Badge>
