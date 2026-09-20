@@ -52,10 +52,23 @@ Meteorologia: function Netlify `/api/meteo` (Open-Meteo Forecast + Marine). Com 
 
 Site: [tuglife-proa.netlify.app](https://tuglife-proa.netlify.app)
 
-Build: `npm run build` · publicação: `dist` · Node 22.
+Vinculado a este repositório, branch `main`: **todo push em `main` publica
+sozinho**, em cerca de 40 segundos.
+
+Build: `npm run build` · publicação: `dist` · Node 22. Tudo declarado no
+`netlify.toml`, que tem precedência sobre o painel — deixe os campos de build em
+branco lá.
+
+Para reproduzir o build do CI localmente (é o caminho que o Netlify usa, e o
+único em que o estático vai para `dist/`):
+
+```bash
+NETLIFY=true npx vite build
+```
 
 Variáveis:
 
 - `VITE_AUTH_ENABLED=false` — herdado do template; desde a 1.3.0 não há código de login nem banco no projeto
 - `OPENMETEO_API_KEY` — assinatura comercial Open-Meteo (a mesma do Atalaia). Escopos: Functions + Runtime. Secret.
 - `XAI_API_KEY` — Lara (Grok chat + fala feminina). No preview já entra sozinha; no Netlify, a mesma chave no painel (Functions + Runtime). Secret. Nunca vai ao aparelho.
+- `PROA_ALLOWED_ORIGINS` — opcional. Hosts extras aceitos pelos endpoints, separados por vírgula.

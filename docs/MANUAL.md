@@ -232,8 +232,25 @@ nomes da tripulação, vozes cadastradas e o histórico de ondas.
 
 ## 9. Para quem faz deploy
 
-**Site:** [tuglife-proa.netlify.app](https://tuglife-proa.netlify.app) ·
-Node 22 · comando `npm run build`
+**Site:** [tuglife-proa.netlify.app](https://tuglife-proa.netlify.app)
+
+O site está vinculado ao repositório **`Jbvix/proa`**, branch **`main`**:
+**todo push em `main` publica sozinho**, em cerca de 40 segundos. Não há passo
+manual nem upload.
+
+| Item | Valor |
+|---|---|
+| Production branch | `main` |
+| Build | `npm run build` · Node 22 |
+| Publicação | `dist/` |
+| Functions | `netlify/functions/` |
+
+Deixe build command e publish directory **em branco no painel** — o
+`netlify.toml` já declara os dois e tem precedência.
+
+**Voltar atrás:** Deploys → escolher o deploy anterior → *Publish deploy*. Um
+clique, e cada deploy traz o commit de origem para você saber ao que está
+voltando.
 
 | Variável | Papel |
 |---|---|

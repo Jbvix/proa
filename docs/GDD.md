@@ -335,6 +335,50 @@ Duas cartas para a mesma derrota é como navegar sem saber qual está corrigida.
 Desde a 1.3.0 a lógica mora em `src/lib/api/` e as quatro pontas somam 44 linhas
 de casca. Nenhum alvo foi removido: os dois continuam necessários.
 
+## 8.3 Publicação
+
+O site **`tuglife-proa`** constrói a partir do repositório `Jbvix/proa`, branch
+`main`. Todo push em `main` publica sozinho; não há passo manual.
+
+| Item | Valor |
+|---|---|
+| Site | [tuglife-proa.netlify.app](https://tuglife-proa.netlify.app) |
+| Production branch | `main` |
+| Build | `npm run build` · Node 22 |
+| Publicação | `dist/` |
+| Functions | `netlify/functions/` |
+
+Build command, publish directory e functions directory ficam **só no
+`netlify.toml`**, em branco no painel. O `netlify.toml` tem precedência sobre a
+interface, e preencher os dois cria duas fontes de verdade que divergem depois.
+
+### Por que `publish = "dist"` está certo
+
+Durante a análise inicial isto foi levantado como discrepância — o build local
+emite em `.vercel/output`, não em `dist`. Era alarme falso. O Netlify define
+`NETLIFY=true` no CI, e `vite.config.ts` troca o preset de `vercel` para
+`netlify`; nesse caminho o Nitro escreve o estático em `dist/` e as functions em
+`.netlify/functions-internal/`. Para reproduzir localmente:
+
+```bash
+NETLIFY=true npx vite build
+```
+
+Vale rodar isso antes de mexer em build: é o único caminho que o CI usa e o que
+ninguém exercitava. Foi assim que apareceu também a falta de `.netlify/**` na
+lista de ignorados do ESLint.
+
+### Rastreabilidade
+
+Antes do vínculo, o site era publicado por upload direto: `commit_ref`,
+`branch` e `commit_url` vinham todos `null`, e não havia como saber qual código
+estava no ar. Agora cada deploy carrega o commit, e a versão na tela
+(`v1.9.0`, ver `version.ts`) fecha a conta do outro lado — dá para casar o que
+a tripulação está vendo com o que está no repositório.
+
+Para voltar atrás: **Deploys → escolher o deploy → Publish deploy**. Reverter é
+um clique, e agora com histórico rastreável.
+
 ## 9. Trabalho futuro
 
 | # | Item | Estado |
@@ -373,6 +417,13 @@ o build com `NETLIFY=true` rodou localmente — 1.246 erros de lint em código
 gerado, que sumiram com uma linha.
 
 Cobertura: 201 para 202 testes.
+
+**Publicação vinculada ao Git.** Até aqui o site era publicado por upload
+direto, sem vínculo com o repositório: os deploys traziam `commit_ref`,
+`branch` e `commit_url` todos `null`, e não havia como saber qual código estava
+no ar. Com o vínculo a `Jbvix/proa` / `main`, todo push publica sozinho e cada
+deploy carrega o commit de origem. A 1.9.0 foi o primeiro build por Git — e
+também a primeira vez que o preset Netlify rodou no CI deles, em 35 s. Ver §8.3.
 
 ### 1.8.0 — 2026-09-20
 
