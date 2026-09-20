@@ -3,7 +3,7 @@
 **Projeto:** Proa · PWA de passadiço para rebocador
 **Organização:** TugLife Systems
 **Autor:** Jossian Brito
-**Versão do documento:** 1.11.0
+**Versão do documento:** 1.12.0
 **Data:** 2026-09-20 12:00 UTC (ano 2026)
 
 ---
@@ -83,6 +83,8 @@ PWA. Funções serverless em Netlify. Sem banco de dados.
 | `voice-idle.ts` | Prazo da conversa aberta: 90 s sem atividade e ela fecha sozinha (puro, testado) |
 | `voice-local.ts` | Escolha da voz pt-BR do aparelho para respostas locais (puro, testado) |
 | `voice-text.ts` | Apara resposta cortada pelo teto de tokens na última frase inteira (puro, testado) |
+| `passage-log.ts` | Diário de travessia: linha por hora cheia, 14 dias, CSV (puro, testado) |
+| `hourly-report.ts` | Relatório falado da hora cheia, derivado da linha do diário (puro, testado) |
 | `settings-migrate.ts` | Apaga do aparelho o que versões antigas gravaram e o app não usa mais |
 | `version.ts` | Versão publicada, amarrada ao `package.json` por teste |
 | `voice-echo.ts` | Memória das duas últimas falas, contra realimentação acústica |
@@ -262,9 +264,10 @@ contrações naturais, sem emoji, sem lista numerada.
   NORMAM, MARPOL, SOLAS.
 - **Regra dura:** fatos só do contexto ao vivo. Não inventa posição, Hs, SOG,
   ETA, waypoint nem número de regra. Se faltar dado, diz que não tem.
-- **Alertas espontâneos:** XTE acima do limite e passagem de waypoint, e mais
-  nada. A decisão vive em `voice-alerts.ts`, pura e testada, com travas de
-  cadência de 45 s (XTE) e 18 s (waypoint).
+- **Alertas espontâneos:** XTE acima do limite, passagem de waypoint e, desde
+  a 1.12.0, o relatório da hora cheia — e mais nada. A decisão vive em
+  `voice-alerts.ts`, pura e testada, com travas de cadência de 45 s (XTE) e
+  18 s (waypoint) e prioridade XTE > waypoint > hora (§7.3).
 
 ### 7.1 Turno com validade (desde a 1.10.0)
 
@@ -362,6 +365,66 @@ a resposta pra salvar um cumprimento (a pontuação tem de estar a partir de
 viagem em vez de duas: áudio + contexto num POST só), 11.4 (Opus via
 `AudioEncoder` em vez de WAV+base64 — 125 kB → 9 kB por 3 s de fala, o
 maior ganho em mar aberto), 11.5 (TTS da primeira frase em paralelo).
+
+### 7.3 Relatório da hora cheia e diário de travessia (desde a 1.12.0)
+
+**O pedido.** "Um relatório toda hora e por waypoints." O de waypoint já
+existia (`waypointReport`, trava de 18 s). O da hora é o P12.
+
+**12.1 — Quando.** Terceira ação do vigia, `hourly`, na hora cheia do relógio
+de parede (HH:00), o ritmo do passadiço — não "uma hora depois de abrir o
+app". `tickAlerts` recebe agora dois relógios: o monotônico para as travas
+(não salta) e o de parede para a hora (sabe que horas são). Três regras que
+merecem registro:
+
+- **A primeira leitura arma sem falar.** Abrir o app às 14h37 não rende
+  relatório às 14h37. Relatório em hora quebrada é fala não pedida, e fala
+  não pedida é o que o P10 acabou de corrigir.
+- **Prioridade XTE > waypoint > hora.** Se a hora vira no mesmo passo de um
+  aviso, o relatório espera o passo seguinte — atrasado, não perdido, porque
+  a chave da hora continua diferente. E espera 18 s depois de um relatório
+  de waypoint, porque dois relatórios emendados não informam nada.
+- **Grava sempre, fala em singradura.** A ação sai toda vez que a hora vira
+  com captura ligada; `underway` (SOG ≥ 0,6 nó, o mesmo critério do vigia de
+  XTE) diz se a Lara fala. No cais o diário ganha a linha e a Lara cala —
+  Hs medido × previsto vale mesmo fundeado; a tripulação não quer a Lara
+  falando sozinha num cais às 3 da manhã. Sem captura a hora passa em branco
+  e a chave não avança: se o sensor voltar ainda nesta hora, o relatório sai.
+
+**12.2 — O quê.** `hourlyReport(entry, nome)` monta o texto **a partir da
+linha do diário**, não do contexto: o que se ouve é o que fica escrito. Se um
+dia alguém comparar o CSV com o que ouviu, bate. Conteúdo: hora, SOG e rumo,
+**Hs medido no casco e previsto** lado a lado (a comparação que a tripulação
+faz de cabeça, e o par que calibra o modelo), estado do mar, vento com
+direção, RPM (com a faixa quando está fora dela — a diferença é o aviso),
+milhas restantes e ETA, próximo waypoint, maré, e XTE só acima de 0,08 mn.
+Régua do 11.6: menos de 260 caracteres.
+
+**12.3 — O diário.** `passage-log.ts`: uma linha por hora cheia, chave `t`,
+até `LOG_MAX = 336` (14 dias), **persistida** no `proa-settings` do aparelho.
+Cada linha traz versão do app, singradura, posição (4 casas ≈ 11 m, não a
+precisão falsa do GPS), SOG, rumo, XTE, Hs/Tz medidos e previstos, estado do
+mar, balanço, vento e corrente com direção, RPM e faixa, milhas feitas e
+restantes, ETA, próximo waypoint, maré. Regras de honestidade: sem captura ou
+com medida não confiável, o Hs do casco vai **nulo, não zero** — gravar zero
+seria dizer que o mar estava chão; NaN e Infinity não entram. Exporta em CSV
+(RFC 4180, ponto decimal, CRLF — o que R, Python e o Excel em inglês leem
+sem ajuste) pela folha de compartilhar do Android, com download como
+fallback. Cartão na aba RPM, ao lado do casco que ele calibra.
+
+**Por que isto é o desbloqueio do P8b.** `AW_RPM_PER_KN = 5.6` e
+`STEEPNESS_RPM = 5250` (§6.1) foram postos por ordem de grandeza. Cada linha
+do diário traz exatamente os pares que a regressão precisa — Hs medido ×
+previsto, RPM × SOG, vento e corrente com direção relativa ao rumo — hora a
+hora. Depois de uma dezena de viagens, a resistência adicionada deixa de ser
+catálogo e vira a curva **daquele casco, medida por ele mesmo**. O rebocador
+passa a calibrar o próprio modelo enquanto navega.
+
+**Achado durante a leitura.** `hourly[]` do store (a série de ondas das 48 h
+do gráfico) **nunca esteve no `partialize`**: recarregar o app zera a série.
+A 1.12.0 não muda isso — é série de gráfico, não de registro, e o diário passa
+a ser o lugar do registro. Fica anotado para que ninguém conte com `hourly`
+como memória.
 
 ## 8. Privacidade e segurança
 
@@ -488,17 +551,36 @@ um clique, e agora com histórico rastreável.
 | P5 | `/api/voice` e `/api/meteo` públicos e sem limite de taxa sobre APIs pagas | ✅ **Feito em 1.2.0** |
 | P7 | Peso morto: `multiplayer/`, `app-data/`, `auth/`, endpoints duplicados, deps órfãs | ✅ **Feito em 1.3.0** |
 | P8 | Migrar `seaPenalty` para STAWAVE-1 (∝ Hs²) | ✅ **Feito em 1.6.0** (a forma; a escala segue empírica) |
-| P8b | **Calibrar `AW_RPM_PER_KN` e `STEEPNESS_RPM` contra viagem real.** Bloqueado por dado, não por tempo: precisa de uma singradura instrumentada com a 1.1.0 ou posterior. Os campos `hsObs` e `hsForecast` já convivem hora a hora no store. | **Bloqueado** |
+| P8b | **Calibrar `AW_RPM_PER_KN` e `STEEPNESS_RPM` contra viagem real.** Bloqueado por dado, não por tempo. Desde a 1.12.0 o diário de travessia (§7.3) grava, hora a hora e persistido, os pares que a regressão precisa. Falta navegar. | **Coletando** — exportar o CSV depois de ~10 viagens |
 | P9 | `voice-assistant.tsx` tem 1.025 linhas e 30+ refs; quebrar em hooks | 🟡 **Em 1.4.0 e 1.7.0** — quatro peças extraídas e testadas. Restam no componente a orquestração de áudio (`arm`, `coolThenArm`, `playReply`) e as chamadas de rede de `ask`, que são efeito puro e não decisão. |
 | P10 | A Lara entra em conversa onde não foi chamada: `talkOn` nunca expirava | 🟡 **10.1 e 10.2 em 1.10.0** (prazo de 90 s e indicador). Restam 10.3 (filtro por impressão vocal) e 10.4 (régua de 4 → 10 caracteres e fraseologia de ponte), propostos. |
 | P11 | Latência da Lara: sete etapas em série, duas viagens à function, WAV+base64 11× maior que Opus, TTS mesmo em resposta local | 🟡 **11.1, 11.2 e 11.6 em 1.11.0** (voz local, aquecimento, resposta curta). Restam 11.3 (uma viagem), 11.4 (Opus) e 11.5 (TTS da primeira frase), propostos. |
-| P12 | Relatório horário na hora cheia, com diário de travessia (alimenta o P8b) | Proposto |
+| P12 | Relatório horário na hora cheia, com diário de travessia (alimenta o P8b) | ✅ **Feito em 1.12.0** (§7.3) |
 | ~~BUG~~ | ~~O aviso de fim de turno não dispara~~ | ✅ **Resolvido em 1.5.0 por remoção** — ver §10 |
 | — | Limite de taxa global (hoje é por instância quente): exige Netlify Blobs, Redis ou equivalente | Ideia |
 | — | Calibração assistida: regressão de `hsObs` contra `hsForecast` ao longo da viagem | Ideia |
 | — | Assinatura hidrodinâmica: acumular (heave, roll) × (Hs, Tz, encontro) = RAO experimental do casco | Ideia |
 
 ## 10. Histórico de versões
+
+### 1.12.0 — 2026-09-20
+
+P12 completo: relatório da hora cheia e diário de travessia. Detalhe em §7.3.
+
+- **12.1 — `voice-alerts.ts`:** ação `hourly`, na hora cheia do relógio de
+  parede (`nowWall`, novo em `AlertInput`), prioridade XTE > waypoint > hora,
+  primeira leitura arma sem falar, `underway` = SOG ≥ 0,6 nó. 9 testes novos.
+- **12.2 — `hourly-report.ts` (novo, puro, 7 testes):** texto falado
+  derivado da linha do diário.
+- **12.3 — `passage-log.ts` (novo, puro, 10 testes):** `makeLogEntry`,
+  `appendLogEntry`, `logToCsv`, `csvFilename`; `LOG_MAX = 336`. Store:
+  `passageLog` persistido, `appendLog`, `clearLog`. Cartão "Diário de
+  travessia" na aba RPM com Compartilhar CSV (Web Share, fallback download)
+  e Limpar (com confirmação).
+- `voice-context.fixture.ts`: contexto de mentira para testes, em arquivo
+  próprio — importar um `*.test.ts` re-executa os testes dele.
+- Cabeçalhos de módulo adicionados a `store.ts` e `screens/rpm.tsx`.
+- Cobertura: 222 → 248 testes.
 
 ### 1.11.0 — 2026-09-20
 

@@ -2,7 +2,7 @@
 
 **Para a tripulação do passadiço**
 **Autor:** Jossian Brito · TugLife Systems
-**Versão:** 1.11.0 · 2026-09-20 12:00 UTC (ano 2026)
+**Versão:** 1.12.0 · 2026-09-20 12:00 UTC (ano 2026)
 
 ---
 
@@ -174,8 +174,24 @@ daí só **"Lara"** a acorda de novo.
 waypoints, COLREG, estabilidade (GM, superfície livre, lastro), NORMAM,
 MARPOL, SOLAS.
 
-**A Lara avisa sozinha** em dois casos apenas: afastamento da derrota acima do
-limite e passagem de waypoint.
+**A Lara avisa sozinha** em três casos apenas: afastamento da derrota acima do
+limite, passagem de waypoint e, desde a 1.12.0, **o relatório da hora cheia**.
+
+**Relatório da hora cheia.** Toda hora redonda (14:00, 15:00…), com o
+rebocador em singradura, a Lara diz: velocidade e rumo, Hs medido no casco e
+Hs previsto, vento, RPM (e a faixa, se estiver fora dela), milhas restantes e
+ETA, próximo waypoint, maré. No cais ou fundeado ela não fala — mas grava.
+Ao abrir o app no meio da hora, o primeiro relatório é só na próxima hora
+redonda. Um aviso de XTE ou de waypoint no mesmo instante tem prioridade; o
+relatório sai logo depois.
+
+**Diário de travessia.** Cada relatório da hora fica gravado no aparelho —
+falado ou não — por até 14 dias: posição, SOG, rumo, Hs medido e previsto,
+vento, corrente, RPM e faixa, milhas, ETA, maré. Na aba **RPM**, o cartão
+*Diário de travessia* mostra quantas horas há e permite **Compartilhar CSV**
+(abre a folha do Android: WhatsApp, Drive, e-mail) ou **Limpar**. Exporte o
+CSV ao fim de cada viagem: é com ele que a faixa de RPM vai ser calibrada
+para o seu casco.
 
 > **O controle de turno saiu na 1.5.0.** O Proa chegou a aceitar "me avisa
 > quando acabar o turno do Pedro", respondia "fechou, aviso às 20:00" — e não
@@ -236,6 +252,7 @@ atrás, feche e reabra o app; se insistir, limpe o cache do navegador.
 | Período em branco | Mar fora da faixa de 3 a 16 s, ou captura com menos de 90 s. |
 | A Lara não ouve | No Samsung, toque uma vez na tela. Confira a permissão de microfone. |
 | A Lara parou de responder sem chamar pelo nome | A conversa expirou (90 s de silêncio) — veja a linha "Fechei a conversa" na gaveta. Diga **"Lara"** ou toque em **Conversar**. |
+| A Lara não deu o relatório da hora | Ou não estava em singradura (SOG abaixo de 0,6 nó — ela grava e cala), ou a captura estava parada, ou o app foi aberto depois da hora redonda. Confira o diário na aba RPM: se a hora está lá, ela gravou. |
 | Resposta de número sai numa voz diferente da Lara | É a voz do Android, escolhida de propósito para responder na hora. Veja a nota "Duas vozes" na seção 5. |
 | A Lara responde a conversa que não era com ela | Confira se o anel do ícone está aceso: a conversa está aberta. Toque em **Conversar** para encerrar, ou espere os 90 s. |
 | "Open-Meteo indisponível" | Sem rede. Vento e corrente passam a ser locais e aproximados; o mar do casco continua real. |

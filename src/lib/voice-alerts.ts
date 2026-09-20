@@ -2,8 +2,20 @@
  * Proa · TugLife Systems — Decisão dos avisos espontâneos da Lara
  * ---------------------------------------------------------------------------
  * @autor    Jossian Brito
- * @versao   1.4.0  (módulo novo nesta versão)
- * @data     2026-09-20 02:14 UTC  (ano 2026)
+ * @versao   1.12.0  (módulo novo na 1.4.0)
+ * @data     2026-09-20 12:00 UTC  (ano 2026)
+ *
+ * MODIFICAÇÕES NA 1.12.0 (P12, item 12.1)
+ *  - Terceira ação: `hourly`, na hora cheia do relógio (HH:00), o ritmo do
+ *    passadiço. Prioridade XTE > waypoint > hora: se a hora virar no mesmo
+ *    passo de um aviso, o relatório espera o passo seguinte — atrasado, não
+ *    perdido, porque a chave da hora continua diferente.
+ *  - A primeira leitura ARMA sem falar: abrir o app às 14h37 não rende
+ *    relatório às 14h37. Relatório em hora quebrada é fala não pedida, e
+ *    fala não pedida é o que o P10 acabou de corrigir.
+ *  - `hourly` sai SEMPRE que a hora vira com captura ligada — o diário grava
+ *    mesmo no cais. `underway` diz se a Lara deve FALAR (SOG ≥ 0,6 nó):
+ *    relatório horário é de singradura, não de cais.
  *
  * POR QUE ISTO EXISTE
  * A Lara fala sem ser chamada em poucos casos, e decidir QUANDO era um bloco
@@ -34,6 +46,13 @@ import {
 export const XTE_COOLDOWN_MS = 45_000;
 /** Silêncio mínimo entre dois relatórios de waypoint, em ms. */
 export const WAYPOINT_COOLDOWN_MS = 18_000;
+/** SOG mínima, em nós, para a Lara FALAR o relatório da hora. Abaixo, só grava. */
+export const HOURLY_UNDERWAY_KN = 0.6;
+
+/** Hora cheia (ms de época) de `wallMs`. Mesma conta de `utils.hourKey`, repetida pra manter o módulo puro e sem DOM. */
+export function hourOf(wallMs: number): number {
+  return Math.floor(wallMs / 3_600_000) * 3_600_000;
+}
 
 export type AlertState = {
   watch: WatchState;
@@ -44,6 +63,11 @@ export type AlertState = {
   lastXteAt: number;
   /** Relógio monotônico do último relatório de waypoint. */
   lastWaypointAt: number;
+  /**
+   * Hora cheia (ms de época) do último relatório horário — ou da primeira
+   * leitura, que arma sem falar. Negativo = ainda não armou.
+   */
+  lastHourKey: number;
 };
 
 export const ALERTS_IDLE: AlertState = {
@@ -52,6 +76,7 @@ export const ALERTS_IDLE: AlertState = {
   routeSource: "",
   lastXteAt: Number.NEGATIVE_INFINITY,
   lastWaypointAt: Number.NEGATIVE_INFINITY,
+  lastHourKey: Number.NEGATIVE_INFINITY,
 };
 
 export type AlertInput = {
@@ -66,11 +91,19 @@ export type AlertInput = {
   marks: WpMark[];
   /** Relógio monotônico (`performance.now()`), para as travas de cadência. */
   nowMono: number;
+  /**
+   * Relógio de parede (`Date.now()`), só para a hora cheia. O monotônico não
+   * sabe que horas são; o de parede não serve pra cadência porque salta com
+   * NTP e fuso. Cada um no seu posto.
+   */
+  nowWall: number;
 };
 
 export type AlertAction =
   | { kind: "xte"; alert: WatchKind }
-  | { kind: "waypoint"; passed: WpMark; next: WpMark | null };
+  | { kind: "waypoint"; passed: WpMark; next: WpMark | null }
+  /** A hora virou. `hourKey` é a hora cheia; `underway` diz se a Lara fala ou só grava. */
+  | { kind: "hourly"; hourKey: number; underway: boolean };
 
 /**
  * Um passo do vigia.
@@ -82,6 +115,11 @@ export type AlertAction =
  *   cruzou waypoint → ação `waypoint`, se a trava de 18 s deixar.
  *   os dois ao mesmo tempo → o XTE ganha. Estar fora da derrota importa mais
  *     que avisar por onde se passou.
+ *   virou a hora cheia, com captura → ação `hourly`, se nenhum dos dois acima
+ *     falou neste passo nem um waypoint foi relatado nos últimos 18 s (dois
+ *     relatórios emendados não informam nada). Sem captura, a hora passa em
+ *     branco: sem sensor não há o que gravar.
+ *   primeira leitura (chave negativa) → arma na hora atual, sem ação.
  *
  * QUANDO O XTE ALERTA, O TICK DE WAYPOINT NÃO RODA naquele passo. Isso não é
  * descuido: é o comportamento que o laço original tinha, e mexer nele durante
@@ -133,14 +171,42 @@ export function tickAlerts(
   };
 
   const passou = travessia.passed;
-  if (!passou) return { state, action: null };
-  if (input.nowMono - state.lastWaypointAt < WAYPOINT_COOLDOWN_MS) {
-    return { state, action: null };
+  if (passou && input.nowMono - state.lastWaypointAt >= WAYPOINT_COOLDOWN_MS) {
+    return {
+      state: { ...state, lastWaypointAt: input.nowMono },
+      action: { kind: "waypoint", passed: passou, next: nextMarkAfter(input.marks, passou) },
+    };
   }
 
+  return tickHourly(state, input);
+}
+
+/**
+ * A hora cheia. Só chega aqui quando nem XTE nem waypoint falaram no passo.
+ *
+ * Comportamento conforme as variáveis:
+ *   `lastHourKey` negativo   → arma na hora atual, sem ação (abrir o app não
+ *                              rende relatório em hora quebrada)
+ *   mesma hora de antes      → nada
+ *   hora nova, sem captura   → nada, e NÃO avança a chave: se a captura voltar
+ *                              ainda nesta hora, o relatório sai
+ *   hora nova, com captura, waypoint relatado há < 18 s → espera o próximo
+ *                              passo (a chave continua diferente)
+ *   hora nova, com captura   → `hourly`, com `underway` = SOG ≥ 0,6 nó
+ */
+function tickHourly(
+  state: AlertState,
+  input: AlertInput,
+): { state: AlertState; action: AlertAction | null } {
+  const hora = hourOf(input.nowWall);
+  if (!(state.lastHourKey >= 0)) {
+    return { state: { ...state, lastHourKey: hora }, action: null };
+  }
+  if (hora === state.lastHourKey || !input.capturing) return { state, action: null };
+  if (input.nowMono - state.lastWaypointAt < WAYPOINT_COOLDOWN_MS) return { state, action: null };
   return {
-    state: { ...state, lastWaypointAt: input.nowMono },
-    action: { kind: "waypoint", passed: passou, next: nextMarkAfter(input.marks, passou) },
+    state: { ...state, lastHourKey: hora },
+    action: { kind: "hourly", hourKey: hora, underway: input.sogKn >= HOURLY_UNDERWAY_KN },
   };
 }
 

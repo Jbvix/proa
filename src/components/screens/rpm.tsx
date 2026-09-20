@@ -1,3 +1,18 @@
+/**
+ * Proa · TugLife Systems — Aba RPM
+ * ---------------------------------------------------------------------------
+ * @autor    Jossian Brito
+ * @versao   1.12.0
+ * @data     2026-09-20 12:00 UTC  (ano 2026)
+ *
+ * MODIFICAÇÕES NA 1.12.0 (P12, item 12.3)
+ *  - Cartão "Diário de travessia": quantas horas gravadas, a última, e os
+ *    botões Compartilhar/Baixar CSV e Limpar. Fica nesta aba, e não na Rota,
+ *    porque o diário existe para calibrar o casco (P8b) — é o dado que
+ *    alimenta a faixa de RPM mostrada logo acima.
+ *  - Cabeçalho de módulo adicionado; o arquivo não tinha.
+ * ---------------------------------------------------------------------------
+ */
 import { RpmBand } from "@/components/rpm-band";
 import { Button } from "@/components/ui/button";
 import { Card, CardTitle } from "@/components/ui/card";
@@ -7,7 +22,8 @@ import { Slider } from "@/components/ui/slider";
 import { recommendRpm } from "@/lib/rpm";
 import { useLiveBridge } from "@/components/bridge-provider";
 import { useSettings } from "@/lib/store";
-import { clamp } from "@/lib/utils";
+import { clamp, formatHour } from "@/lib/utils";
+import { LOG_MAX, csvFilename, logToCsv } from "@/lib/passage-log";
 
 export function RpmScreen() {
   const rpm = useSettings((s) => s.rpm);
@@ -16,6 +32,8 @@ export function RpmScreen() {
   const setProfile = useSettings((s) => s.setProfile);
   const hull = useSettings((s) => s.hull);
   const setHull = useSettings((s) => s.setHull);
+  const passageLog = useSettings((s) => s.passageLog);
+  const clearLog = useSettings((s) => s.clearLog);
   const { engine, meteo } = useLiveBridge();
 
   const hs = engine?.wave.hsM ?? 0;
@@ -129,6 +147,40 @@ export function RpmScreen() {
       </Card>
 
       <Card className="rounded-2xl p-4">
+        <CardTitle>Diário de travessia</CardTitle>
+        <p className="mt-2 text-sm text-muted">
+          A Lara grava uma linha por hora cheia: posição, SOG, Hs medido e
+          previsto, vento, corrente, RPM e faixa. É o dado que calibra a
+          resistência do casco. Fica só neste aparelho, até {LOG_MAX / 24} dias.
+        </p>
+        <p className="mt-3 font-mono text-sm tabular text-fg">
+          {passageLog.length === 0
+            ? "Nenhuma hora gravada ainda."
+            : `${passageLog.length} ${passageLog.length === 1 ? "hora" : "horas"} · última ${formatHour(passageLog[passageLog.length - 1].t)}`}
+        </p>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={passageLog.length === 0}
+            onClick={() => void exportLog(logToCsv(passageLog))}
+          >
+            Compartilhar CSV
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={passageLog.length === 0}
+            onClick={() => {
+              if (window.confirm("Apagar o diário deste aparelho? Exporte antes se precisar.")) clearLog();
+            }}
+          >
+            Limpar
+          </Button>
+        </div>
+      </Card>
+
+      <Card className="rounded-2xl p-4">
         <CardTitle>Por que esta faixa</CardTitle>
         <ul className="mt-3 space-y-2 text-sm text-muted">
           <li>
@@ -182,4 +234,31 @@ function Field({
       />
     </label>
   );
+}
+
+/**
+ * Entrega o CSV ao usuário. No Android, a folha de compartilhar (WhatsApp,
+ * Drive, e-mail) é o caminho natural de um tablet de passadiço sem cabo;
+ * onde não há Web Share com arquivo, cai no download comum.
+ */
+async function exportLog(csv: string) {
+  const name = csvFilename(new Date());
+  const file = new File([csv], name, { type: "text/csv" });
+  const nav = navigator as Navigator & { canShare?: (d: ShareData) => boolean };
+  if (nav.share && nav.canShare?.({ files: [file] })) {
+    try {
+      await nav.share({ files: [file], title: "Diário de travessia — Proa" });
+      return;
+    } catch {
+      /* cancelou a folha: cai no download */
+    }
+  }
+  const url = URL.createObjectURL(file);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 2_000);
 }

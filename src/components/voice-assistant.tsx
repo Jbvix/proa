@@ -2,8 +2,15 @@
  * Proa · TugLife Systems — A Lara no passadiço (componente de voz)
  * ---------------------------------------------------------------------------
  * @autor    Jossian Brito
- * @versao   1.11.0
+ * @versao   1.12.0
  * @data     2026-09-20 12:00 UTC  (ano 2026)
+ *
+ * MODIFICAÇÕES NA 1.12.0 (P12)
+ *  - Ação `hourly` do vigia: na hora cheia, monta a linha do diário a partir
+ *    do contexto da Lara (`makeLogEntry`), grava no store (`appendLog`) e,
+ *    se em singradura, fala o relatório (`hourlyReport`) — o texto falado é
+ *    derivado da linha gravada, então o que se ouve é o que fica escrito.
+ *    No cais grava e cala.
  *
  * MODIFICAÇÕES NA 1.11.0 (P11 — 11.1 e 11.2)
  *  - Resposta que nasce no tablet (`quickReply`, apresentação) sai pela voz
@@ -64,6 +71,9 @@ import { passageOf } from "@/lib/passage";
 import { type WatchKind } from "@/lib/voice-watch";
 import { waypointMarks, waypointReport } from "@/lib/waypoint-pass";
 import { ALERTS_IDLE, tickAlerts, type AlertState } from "@/lib/voice-alerts";
+import { makeLogEntry } from "@/lib/passage-log";
+import { hourlyReport } from "@/lib/hourly-report";
+import { APP_VERSION } from "@/lib/version";
 import { createEchoMemory } from "@/lib/voice-echo";
 import { fetchCanned, fetchSay, prefetchCanned, warmVoice } from "@/lib/voice-tts";
 import { TALK_IDLE_LINE, talkIdle } from "@/lib/voice-idle";
@@ -93,6 +103,7 @@ export function AlanaRadio() {
   const setCrewNames = useSettings((s) => s.setCrewNames);
   const crewVoices = useSettings((s) => s.crewVoices);
   const setCrewVoices = useSettings((s) => s.setCrewVoices);
+  const appendLog = useSettings((s) => s.appendLog);
   const tab = useBridge((s) => s.tab);
 
   const [open, setOpen] = useState(false);
@@ -710,11 +721,33 @@ export function AlanaRadio() {
         capturing: !!engine?.capturing,
         marks,
         nowMono: performance.now(),
+        nowWall: Date.now(),
       });
       alertsRef.current = step.state;
       if (!step.action) return;
       if (step.action.kind === "xte") {
         void speakAlert(step.action.alert);
+        return;
+      }
+      if (step.action.kind === "hourly") {
+        // A hora virou. Primeiro a linha do diário, sempre; depois a fala,
+        // só em singradura. O texto sai da linha gravada, não do contexto:
+        // o que se ouve é o que fica escrito.
+        const entry = makeLogEntry(
+          buildVoiceContext({
+            engine,
+            meteo: meteoRef.current,
+            route,
+            rpm: rpmRef.current,
+            profile: profileRef.current,
+            tab: tabRef.current,
+            crewNames: crewRef.current,
+          }),
+          step.action.hourKey,
+          APP_VERSION,
+        );
+        appendLog(entry);
+        if (step.action.underway) void speakLine(hourlyReport(entry, crewRef.current[0]));
         return;
       }
       const { passed, next } = step.action;
@@ -909,7 +942,8 @@ export function AlanaRadio() {
                 <p className="text-sm text-muted">
                   Toca em <span className="text-fg">Conversar</span> pra falar com a Lara.
                   Toca de novo pra encerrar — ou ela fecha sozinha depois de 90 s de
-                  silêncio. Só o XTE e o waypoint falam sozinhos.
+                  silêncio. Sozinha ela só fala o XTE, o waypoint e o relatório da
+                  hora cheia.
                 </p>
               ) : (
                 turns.map((t, i) => (

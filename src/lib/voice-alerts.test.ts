@@ -2,7 +2,7 @@
  * Proa · TugLife Systems — Testes do vigia
  * ---------------------------------------------------------------------------
  * @autor  Jossian Brito
- * @versao 1.4.0 · 2026-09-20 02:14 UTC (ano 2026)
+ * @versao 1.12.0 · 2026-09-20 12:00 UTC (ano 2026)
  *
  * Esta lógica vivia dentro de um `setInterval` no meio de um componente de
  * 1.025 linhas, onde não havia como testá-la. Extraída, dá pra amarrar o
@@ -16,9 +16,11 @@ import {
   ALERTS_IDLE,
   WAYPOINT_COOLDOWN_MS,
   XTE_COOLDOWN_MS,
+  hourOf,
   nextMarkAfter,
   tickAlerts,
   type AlertInput,
+  type AlertState,
 } from "./voice-alerts.ts";
 import { XTE_ON_NM } from "./voice-watch.ts";
 
@@ -39,8 +41,18 @@ function navegando(over: Partial<AlertInput> = {}): AlertInput {
     capturing: true,
     marks: MARCAS,
     nowMono: 1_000_000,
+    nowWall: H14 + 5 * 60_000, // 14:05, meio da hora
     ...over,
   };
+}
+
+/** Uma hora cheia qualquer (14:00 UTC de um dia de 2026) e a seguinte. */
+const H14 = Date.UTC(2026, 8, 20, 14, 0);
+const H15 = H14 + 3_600_000;
+
+/** Estado já armado na hora 14, como fica depois da primeira leitura. */
+function armado(over: Partial<AlertState> = {}): AlertState {
+  return { ...ALERTS_IDLE, lastHourKey: H14, ...over };
 }
 
 /* --------------------------------------------------------------------- */
@@ -199,4 +211,78 @@ test("a próxima marca ignora quem está colado na que passou", () => {
   assert.equal(nextMarkAfter(coladas, coladas[0]!)?.nome, "C");
   assert.equal(nextMarkAfter(coladas, coladas[2]!), null, "depois da última não há próxima");
   assert.equal(nextMarkAfter([], { nome: "X", nm: 1 }), null);
+});
+
+/* --------------------------------------------------------------------- */
+/* Hora cheia (1.12.0)                                                    */
+/* --------------------------------------------------------------------- */
+
+test("a primeira leitura arma na hora atual e não fala", () => {
+  // Abrir o app às 14h05 não rende relatório às 14h05: hora quebrada é fala
+  // não pedida.
+  const r = tickAlerts(ALERTS_IDLE, navegando());
+  assert.equal(r.action, null);
+  assert.equal(r.state.lastHourKey, H14);
+});
+
+test("dentro da mesma hora, nada", () => {
+  const r = tickAlerts(armado(), navegando({ nowWall: H14 + 59 * 60_000 }));
+  assert.equal(r.action, null);
+  assert.equal(r.state.lastHourKey, H14);
+});
+
+test("virou a hora em singradura: relatório, pra falar", () => {
+  const r = tickAlerts(armado(), navegando({ nowWall: H15 + 2_000 }));
+  assert.deepEqual(r.action, { kind: "hourly", hourKey: H15, underway: true });
+  assert.equal(r.state.lastHourKey, H15);
+});
+
+test("virou a hora no cais: relatório pra gravar, não pra falar", () => {
+  // O diário quer a linha (Hs medido × previsto vale mesmo fundeado); a
+  // tripulação não quer a Lara falando sozinha num cais às 3 da manhã.
+  const r = tickAlerts(armado(), navegando({ nowWall: H15 + 2_000, sogKn: 0.2 }));
+  assert.deepEqual(r.action, { kind: "hourly", hourKey: H15, underway: false });
+});
+
+test("a mesma hora não é relatada duas vezes", () => {
+  const um = tickAlerts(armado(), navegando({ nowWall: H15 + 2_000 }));
+  const dois = tickAlerts(um.state, navegando({ nowWall: H15 + 3_100 }));
+  assert.equal(dois.action, null);
+});
+
+test("sem captura a hora passa em branco — e a chave não avança", () => {
+  // Se a captura voltar ainda nesta hora, o relatório sai.
+  const semSensor = tickAlerts(armado(), navegando({ nowWall: H15 + 2_000, capturing: false }));
+  assert.equal(semSensor.action, null);
+  assert.equal(semSensor.state.lastHourKey, H14);
+  const voltou = tickAlerts(semSensor.state, navegando({ nowWall: H15 + 20 * 60_000 }));
+  assert.equal(voltou.action?.kind, "hourly");
+});
+
+test("o XTE ganha da hora; o relatório sai no passo seguinte", () => {
+  // Duas leituras fora ainda na hora 14; a terceira, que confirma o
+  // afastamento, cai exatamente no passo em que a hora vira.
+  const antes = navegando({ xteNm: XTE_ON_NM + 0.1, nowWall: H14 + 59 * 60_000 });
+  const fora = { ...antes, nowWall: H15 + 1_000 };
+  let s = armado();
+  s = tickAlerts(s, antes).state;
+  s = tickAlerts(s, antes).state;
+  const tres = tickAlerts(s, fora);
+  assert.equal(tres.action?.kind, "xte");
+  assert.equal(tres.state.lastHourKey, H14, "a hora ainda não foi relatada");
+  const depois = tickAlerts(tres.state, { ...fora, nowMono: fora.nowMono + 1_100 });
+  assert.equal(depois.action?.kind, "hourly");
+});
+
+test("waypoint relatado há pouco: a hora espera 18 s pra não emendar dois relatórios", () => {
+  const recente = armado({ lastWaypointAt: 1_000_000 - 5_000 });
+  const cedo = tickAlerts(recente, navegando({ nowWall: H15 + 1_000 }));
+  assert.equal(cedo.action, null);
+  const tarde = tickAlerts(recente, navegando({ nowWall: H15 + 1_000, nowMono: 1_000_000 + WAYPOINT_COOLDOWN_MS }));
+  assert.equal(tarde.action?.kind, "hourly");
+});
+
+test("hourOf é a hora cheia, com o mesmo resultado de utils.hourKey", () => {
+  assert.equal(hourOf(H14 + 59 * 60_000 + 59_000), H14);
+  assert.equal(hourOf(H15), H15);
 });

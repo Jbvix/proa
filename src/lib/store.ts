@@ -1,3 +1,20 @@
+/**
+ * Proa · TugLife Systems — Estado persistido do aparelho
+ * ---------------------------------------------------------------------------
+ * @autor    Jossian Brito
+ * @versao   1.12.0
+ * @data     2026-09-20 12:00 UTC  (ano 2026)
+ *
+ * MODIFICAÇÕES NA 1.12.0 (P12, item 12.3)
+ *  - `passageLog`: o diário de travessia, uma linha por hora cheia, até 14
+ *    dias, PERSISTIDO (entra no `partialize`). `appendLog` e `clearLog`.
+ *  - Achado durante a leitura: `hourly[]` (série de ondas das 48 h do
+ *    gráfico) NUNCA esteve no `partialize` — recarregar o app zera a série.
+ *    Não mudei isso aqui: é série de gráfico, não de registro, e o diário
+ *    passa a ser o lugar do registro. Fica anotado no GDD.
+ *  - Cabeçalho de módulo adicionado; o arquivo não tinha.
+ * ---------------------------------------------------------------------------
+ */
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { hourKey } from "./utils";
@@ -5,6 +22,7 @@ import { SETTINGS_VERSION, migrateSettings } from "./settings-migrate";
 import type { ParsedRoute } from "./gpx";
 import { DEFAULT_HULL, DEFAULT_PROFILE, type EngineProfile, type HullProfile } from "./rpm";
 import type { HourlyWave } from "./waves";
+import { appendLogEntry, type LogEntry } from "./passage-log";
 import { sensorEngine } from "./sensor-engine";
 import { applyTheme, type ThemeId } from "./theme";
 import type { VoiceCard } from "./voice-print";
@@ -24,6 +42,8 @@ type SettingsState = {
   hull: HullProfile;
   route: ParsedRoute | null;
   hourly: HourlyWave[];
+  /** Diário de travessia: uma linha por hora cheia, mais recente por último. */
+  passageLog: LogEntry[];
   setOnboarded: (v: boolean) => void;
   setTheme: (t: ThemeId) => void;
   setAlanaMuted: (v: boolean) => void;
@@ -36,6 +56,8 @@ type SettingsState = {
   setRoute: (r: ParsedRoute | null) => void;
   upsertHour: (row: HourlyWave) => void;
   seedForecastHours: (rows: HourlyWave[]) => void;
+  appendLog: (entry: LogEntry) => void;
+  clearLog: () => void;
 };
 
 export const useSettings = create<SettingsState>()(
@@ -52,6 +74,7 @@ export const useSettings = create<SettingsState>()(
       hull: DEFAULT_HULL,
       route: null,
       hourly: [],
+      passageLog: [],
       setOnboarded: (v) => set({ onboarded: v }),
       setTheme: (t) => {
         applyTheme(t);
@@ -90,6 +113,9 @@ export const useSettings = create<SettingsState>()(
         const next = [...map.values()].sort((a, b) => a.t - b.t).slice(-48);
         set({ hourly: next });
       },
+      // A regra (uma por hora, 14 dias) é de `appendLogEntry`, pura e testada.
+      appendLog: (entry) => set({ passageLog: appendLogEntry(get().passageLog, entry) }),
+      clearLog: () => set({ passageLog: [] }),
     }),
     {
       name: "proa-settings",
@@ -109,6 +135,7 @@ export const useSettings = create<SettingsState>()(
         profile: s.profile,
         hull: s.hull,
         route: s.route,
+        passageLog: s.passageLog,
       }),
       onRehydrateStorage: () => (state) => {
         const t = state?.theme === "day" ? "day" : "night";
@@ -118,6 +145,8 @@ export const useSettings = create<SettingsState>()(
           state.route.waypoints = [];
         }
         if (!Array.isArray(state?.crewNames) && state) state.crewNames = [];
+        // Diário de versão anterior à 1.12.0 não existe; blob sujo vira vazio.
+        if (state && !Array.isArray(state.passageLog)) state.passageLog = [];
         // Casco veio de versão anterior a 1.6.0, ou com número sujo: volta ao
         // padrão. Boca zero ou negativa faria a raiz da STAWAVE-1 explodir.
         if (state) {
