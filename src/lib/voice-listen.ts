@@ -1,3 +1,20 @@
+/**
+ * Proa · TugLife Systems — Escuta do passadiço: microfone, VAD e envio do clipe
+ * ---------------------------------------------------------------------------
+ * @autor    Jossian Brito
+ * @versao   1.13.0
+ * @data     2026-09-20 12:00 UTC  (ano 2026)
+ *
+ * MODIFICAÇÕES NA 1.13.0 (P11, item 11.4)
+ *  - O clipe sobe em Ogg Opus (`encodeOpusClip`, 24 kbps) em vez de WAV:
+ *    ~3 kB por segundo de fala em vez de 42 kB. O anel PCM, o VAD, o
+ *    reamostrador e a impressão vocal não mudaram — só o que atravessa a
+ *    rede. Sem codificador no navegador, o WAV segue como antes.
+ *  - `codec` no snapshot de diagnóstico ("opus" | "wav"), pra saber a bordo
+ *    qual caminho o aparelho está usando.
+ *  - Cabeçalho de módulo adicionado; o arquivo não tinha.
+ * ---------------------------------------------------------------------------
+ */
 import {
   BRIDGE_VAD,
   PcmRing,
@@ -10,6 +27,7 @@ import {
   type VadState,
 } from "./voice-pcm";
 import { voicePrint } from "./voice-print";
+import { encodeOpusClip } from "./voice-opus";
 
 export type HearMeta = { ptt?: boolean; miss?: boolean; print?: number[] };
 
@@ -39,6 +57,8 @@ export type VoiceSnap = {
   visibility: "visible" | "hidden";
   clipping: boolean;
   lastClip: "ok" | "empty" | "short" | "fail" | "none";
+  /** Como o último clipe subiu. `none` antes do primeiro. */
+  codec: "opus" | "wav" | "none";
 };
 
 const PCM_HZ = 16_000;
@@ -69,6 +89,7 @@ let speechStartedAt = 0;
 let level = 0;
 let clipping = false;
 let lastClip: VoiceSnap["lastClip"] = "none";
+let lastCodec: VoiceSnap["codec"] = "none";
 let pipeState: VoiceSnap["state"] = "idle";
 let trackState: VoiceSnap["track"] = "off";
 let vis: "visible" | "hidden" = "visible";
@@ -106,8 +127,8 @@ export async function resumeListenCtx() {
   }
 }
 
-function bufB64(buf: ArrayBuffer) {
-  const u = new Uint8Array(buf);
+function bufB64(buf: ArrayBuffer | Uint8Array) {
+  const u = buf instanceof Uint8Array ? buf : new Uint8Array(buf);
   let s = "";
   const step = 0x8000;
   for (let i = 0; i < u.length; i += step) {
@@ -138,6 +159,7 @@ export function getVoiceSnap(): VoiceSnap {
     visibility: vis,
     clipping,
     lastClip,
+    codec: lastCodec,
   };
 }
 
@@ -452,8 +474,9 @@ async function sendClip(fromPtt: boolean) {
   }
   const pcm = floatTo16(downsample(raw, inputHz, PCM_HZ));
   const print = voicePrint(pcm) ?? undefined;
-  const wav = encodeWavPcm16(pcm, PCM_HZ);
-  if (wav.byteLength < 600 || wav.byteLength > 480_000) {
+  // Piso e teto em amostras, não em bytes de WAV: 300 bytes de WAV eram
+  // 0,28 s; 480 kB eram 15 s. O mesmo limite vale qualquer que seja o codec.
+  if (pcm.length < PCM_HZ * 0.28 || pcm.length > PCM_HZ * 15) {
     lastClip = "short";
     pipeState = "listening";
     emit();
@@ -462,10 +485,15 @@ async function sendClip(fromPtt: boolean) {
   hearing = true;
   onClipStart?.();
   try {
+    // Opus primeiro (11.4): ~12× menos bytes no ar. `null` = sem codificador
+    // neste navegador; o WAV segue como sempre seguiu.
+    const opus = await encodeOpusClip(pcm, PCM_HZ);
+    const bytes = opus ?? encodeWavPcm16(pcm, PCM_HZ);
+    lastCodec = opus ? "opus" : "wav";
     const res = await fetch("/api/voice", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ hear: bufB64(wav), mime: "audio/wav" }),
+      body: JSON.stringify({ hear: bufB64(bytes), mime: opus ? "audio/ogg" : "audio/wav" }),
       signal: AbortSignal.timeout(10_000),
     });
     const data = (await res.json()) as { ok?: boolean; text?: string };

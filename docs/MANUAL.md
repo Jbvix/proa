@@ -2,7 +2,7 @@
 
 **Para a tripulação do passadiço**
 **Autor:** Jossian Brito · TugLife Systems
-**Versão:** 1.12.0 · 2026-09-20 12:00 UTC (ano 2026)
+**Versão:** 1.13.0 · 2026-09-20 12:00 UTC (ano 2026)
 
 ---
 
@@ -209,6 +209,13 @@ para o seu casco.
 > em português, tudo sai na voz da Lara, como antes. Para instalar:
 > *Configurações → Gerenciamento geral → Conversão de texto em voz → Google →
 > Instalar dados de voz → Português (Brasil)*.
+
+> **Menos dados no ar (desde a 1.13.0).** O que você fala sobe comprimido
+> (Opus): uma pergunta de 3 segundos custa cerca de 12 kB em vez de 125 kB.
+> Em sinal fraco isso é a diferença entre esperar 1 segundo e esperar 5. Não
+> há nada a configurar. Em **Diagnóstico** (na gaveta da Lara) a linha
+> `clip … · opus` confirma; se aparecer `wav`, o navegador do aparelho não
+> tem o codificador e o app usa o caminho antigo, mais pesado, sozinho.
 
 > **Respostas mais curtas.** A Lara agora responde como se fala no
 > passadiço: uma a duas frases numa pergunta direta, no máximo quatro num

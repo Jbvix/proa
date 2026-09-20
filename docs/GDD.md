@@ -3,7 +3,7 @@
 **Projeto:** Proa · PWA de passadiço para rebocador
 **Organização:** TugLife Systems
 **Autor:** Jossian Brito
-**Versão do documento:** 1.12.0
+**Versão do documento:** 1.13.0
 **Data:** 2026-09-20 12:00 UTC (ano 2026)
 
 ---
@@ -85,6 +85,8 @@ PWA. Funções serverless em Netlify. Sem banco de dados.
 | `voice-text.ts` | Apara resposta cortada pelo teto de tokens na última frase inteira (puro, testado) |
 | `passage-log.ts` | Diário de travessia: linha por hora cheia, 14 dias, CSV (puro, testado) |
 | `hourly-report.ts` | Relatório falado da hora cheia, derivado da linha do diário (puro, testado) |
+| `ogg-opus.ts` | Empacotador Ogg Opus: cabeçalhos, laçamento, CRC, grânulo (puro, testado com leitor independente) |
+| `voice-opus.ts` | Ponte com o `AudioEncoder` do navegador; `null` = manda WAV |
 | `settings-migrate.ts` | Apaga do aparelho o que versões antigas gravaram e o app não usa mais |
 | `version.ts` | Versão publicada, amarrada ao `package.json` por teste |
 | `voice-echo.ts` | Memória das duas últimas falas, contra realimentação acústica |
@@ -361,10 +363,41 @@ texto. Guarda contra o efeito colateral: quando o modelo bate no teto
 a resposta pra salvar um cumprimento (a pontuação tem de estar a partir de
 40 % do texto).
 
+**11.4 — Opus no envio (desde a 1.13.0).** O clipe subia como WAV PCM16 em
+base64: 42 kB por segundo, 125 kB por "qual o vento". Agora o mesmo PCM de
+16 kHz que o VAD e a impressão vocal já usam passa pelo `AudioEncoder` do
+Chrome (Opus, 24 kbps, quadros de 20 ms) e sobe em **Ogg Opus, ~3 kB por
+segundo** — 12× menos bytes no ar. O anel PCM, o VAD, o reamostrador e a
+impressão **não mudaram**; só o que atravessa a rede. O servidor já aceitava
+`audio/ogg` desde sempre: nenhuma linha mudou lá.
+
+| Fala | WAV+base64 (até 1.12.0) | Ogg Opus+base64 (1.13.0) |
+|---|---|---|
+| 1 s | 42 kB | 4 kB |
+| 3 s | 125 kB | 12 kB |
+| 10 s | 417 kB | 40 kB |
+
+O codificador devolve **pacotes** soltos; o transcritor quer um **arquivo**.
+`ogg-opus.ts` é o que falta entre os dois: contêiner Ogg (RFC 3533) com os
+dois cabeçalhos do Opus (RFC 7845, `OpusHead` e `OpusTags`), tabela de
+laçamento, CRC de página (polinômio 0x04C11DB7 direto, sem reflexão — **não é
+o CRC do zip**, que é o erro clássico) e grânulo em amostras a 48 kHz
+qualquer que seja a taxa de entrada. É puro e testado com um **leitor de Ogg
+independente** no próprio teste, com CRC bit a bit e um vetor conferido por
+uma terceira implementação em Python: se escritor e leitor concordam e o
+CRC bate dos dois lados, o arquivo está certo — porque um transcritor
+rejeita arquivo errado sem dizer por quê.
+
+`voice-opus.ts` é a ponte com o navegador e devolve `null` quando não dá —
+sem `AudioEncoder`, Opus mono a 16 kHz não suportado (perguntado uma vez por
+sessão), ou codificador com erro — e `null` quer dizer **manda WAV como
+antes**. A pergunta nunca fica sem subir por causa do codec. O Diagnóstico
+da gaveta mostra `opus` ou `wav` no último clipe, pra se saber a bordo qual
+caminho o aparelho tomou.
+
 **O que fica para etapas seguintes** (propostos, não aprovados): 11.3 (uma
-viagem em vez de duas: áudio + contexto num POST só), 11.4 (Opus via
-`AudioEncoder` em vez de WAV+base64 — 125 kB → 9 kB por 3 s de fala, o
-maior ganho em mar aberto), 11.5 (TTS da primeira frase em paralelo).
+viagem em vez de duas: áudio + contexto num POST só) e 11.5 (TTS da primeira
+frase em paralelo).
 
 ### 7.3 Relatório da hora cheia e diário de travessia (desde a 1.12.0)
 
@@ -554,7 +587,7 @@ um clique, e agora com histórico rastreável.
 | P8b | **Calibrar `AW_RPM_PER_KN` e `STEEPNESS_RPM` contra viagem real.** Bloqueado por dado, não por tempo. Desde a 1.12.0 o diário de travessia (§7.3) grava, hora a hora e persistido, os pares que a regressão precisa. Falta navegar. | **Coletando** — exportar o CSV depois de ~10 viagens |
 | P9 | `voice-assistant.tsx` tem 1.025 linhas e 30+ refs; quebrar em hooks | 🟡 **Em 1.4.0 e 1.7.0** — quatro peças extraídas e testadas. Restam no componente a orquestração de áudio (`arm`, `coolThenArm`, `playReply`) e as chamadas de rede de `ask`, que são efeito puro e não decisão. |
 | P10 | A Lara entra em conversa onde não foi chamada: `talkOn` nunca expirava | 🟡 **10.1 e 10.2 em 1.10.0** (prazo de 90 s e indicador). Restam 10.3 (filtro por impressão vocal) e 10.4 (régua de 4 → 10 caracteres e fraseologia de ponte), propostos. |
-| P11 | Latência da Lara: sete etapas em série, duas viagens à function, WAV+base64 11× maior que Opus, TTS mesmo em resposta local | 🟡 **11.1, 11.2 e 11.6 em 1.11.0** (voz local, aquecimento, resposta curta). Restam 11.3 (uma viagem), 11.4 (Opus) e 11.5 (TTS da primeira frase), propostos. |
+| P11 | Latência da Lara: sete etapas em série, duas viagens à function, WAV+base64 11× maior que Opus, TTS mesmo em resposta local | 🟡 **11.1, 11.2, 11.6 em 1.11.0; 11.4 em 1.13.0** (voz local, aquecimento, resposta curta, Opus). Restam 11.3 (uma viagem) e 11.5 (TTS da primeira frase), propostos. |
 | P12 | Relatório horário na hora cheia, com diário de travessia (alimenta o P8b) | ✅ **Feito em 1.12.0** (§7.3) |
 | ~~BUG~~ | ~~O aviso de fim de turno não dispara~~ | ✅ **Resolvido em 1.5.0 por remoção** — ver §10 |
 | — | Limite de taxa global (hoje é por instância quente): exige Netlify Blobs, Redis ou equivalente | Ideia |
@@ -562,6 +595,24 @@ um clique, e agora com histórico rastreável.
 | — | Assinatura hidrodinâmica: acumular (heave, roll) × (Hs, Tz, encontro) = RAO experimental do casco | Ideia |
 
 ## 10. Histórico de versões
+
+### 1.13.0 — 2026-09-20
+
+P11, item 11.4: o clipe de voz sobe em Ogg Opus. Detalhe e tabela em §7.2.
+
+- **`ogg-opus.ts` (novo, puro, 10 testes):** `oggCrc32`, `opusHead`,
+  `opusTags`, `oggPage`, `muxOggOpus`. Testado com leitor de Ogg
+  independente e CRC bit a bit; vetor `"123456789"` → `0x89a1897f` conferido
+  em Python.
+- **`voice-opus.ts` (novo):** `encodeOpusClip(pcm, hz)` via `AudioEncoder`,
+  24 kbps, quadros de 20 ms; `null` = WAV. Suporte perguntado uma vez por
+  sessão.
+- **`voice-listen.ts`:** `sendClip` tenta Opus e cai em WAV; piso e teto do
+  clipe passaram a ser em amostras (0,28 s a 15 s), não em bytes de WAV;
+  `codec` no snapshot de diagnóstico.
+- Servidor: **nada mudou** — `hearGrok` já mapeava `audio/ogg` → `clip.ogg`.
+- Cabeçalho de módulo adicionado a `voice-listen.ts`.
+- Cobertura: 248 → 258 testes.
 
 ### 1.12.0 — 2026-09-20
 

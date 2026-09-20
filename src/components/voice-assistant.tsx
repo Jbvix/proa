@@ -2,8 +2,12 @@
  * Proa · TugLife Systems — A Lara no passadiço (componente de voz)
  * ---------------------------------------------------------------------------
  * @autor    Jossian Brito
- * @versao   1.12.0
+ * @versao   1.13.0
  * @data     2026-09-20 12:00 UTC  (ano 2026)
+ *
+ * MODIFICAÇÕES NA 1.13.0 (P11, item 11.4)
+ *  - Diagnóstico mostra o codec do último clipe (opus | wav). O envio em si
+ *    mudou em `voice-listen.ts`; aqui nada mais.
  *
  * MODIFICAÇÕES NA 1.12.0 (P12)
  *  - Ação `hourly` do vigia: na hora cheia, monta a linha do diário a partir
@@ -973,7 +977,8 @@ export function AlanaRadio() {
                   VAD {snap.vad} · hang {snap.hangMs} ms · frames {snap.framesIn} ·
                   clips {snap.clipsSent}
                   <br />
-                  last {snap.lastFrameAgeMs} ms · clip {snap.lastClip} · {snap.visibility}
+                  last {snap.lastFrameAgeMs} ms · clip {snap.lastClip} · {snap.codec} ·{" "}
+                  {snap.visibility}
                   {snap.ptt ? " · PTT" : ""}
                 </p>
               ) : null}
