@@ -2,7 +2,7 @@
  * Proa · TugLife Systems — Testes do roteamento do turno
  * ---------------------------------------------------------------------------
  * @autor  Jossian Brito
- * @versao 1.7.0 · 2026-09-20 02:14 UTC (ano 2026)
+ * @versao 1.14.0 · 2026-09-20 12:00 UTC (ano 2026)
  *
  * Estes testes foram escritos ANTES de o roteamento sair do componente, contra
  * a escada de `return` original, justamente pra que a extração pudesse ser
@@ -12,7 +12,7 @@
  */
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { routeHeard, type HeardInput } from "./voice-turn.ts";
+import { FOLLOW_UP_MS, inFollowUp, routeHeard, type HeardInput } from "./voice-turn.ts";
 
 /** Nada é eco — o caso normal. */
 const semEco = () => false;
@@ -27,6 +27,9 @@ function ouvindo(over: Partial<HeardInput> = {}): HeardInput {
     fromPtt: false,
     busy: false,
     talkOn: false,
+    // Conversa aberta nos testes antigos = "ela acabou de responder", que é
+    // a janela de continuação (1.14.0). Os testes da janela sobrescrevem.
+    followUp: over.talkOn === true,
     inIntroEcho: false,
     ...over,
   };
@@ -251,7 +254,7 @@ test("o roteamento nunca devolve rota fora do catálogo", () => {
         for (const fromPtt of [true, false]) {
           for (const isFinal of [true, false]) {
             const r = routeHeard(
-              { text, busy, talkOn, fromPtt, isFinal, inIntroEcho: false },
+              { text, busy, talkOn, fromPtt, isFinal, inIntroEcho: false, followUp: false },
               semEco,
             );
             assert.ok(catalogo.has(r.kind), `${text} → ${r.kind}`);
@@ -260,4 +263,59 @@ test("o roteamento nunca devolve rota fora do catálogo", () => {
       }
     }
   }
+});
+
+/* --------------------------------------------------------------------- */
+/* 5. Janela de continuação (1.14.0)                                      */
+/* --------------------------------------------------------------------- */
+
+test("conversa aberta FORA da janela: fala sem o nome é papo de ponte", () => {
+  // O furo da 1.10.0: gente falando perto do tablet mantinha a conversa viva
+  // e cada frase ia pro modelo. Agora, passados 10 s da resposta dela, só o
+  // nome acorda — com a gaveta aberta ou não.
+  const r = routeHeard(ouvindo({ talkOn: true, followUp: false, text: "vira a boreste cinco graus" }), semEco);
+  assert.equal(r.kind, "ignore");
+});
+
+test("conversa aberta fora da janela: com o nome, continua normal", () => {
+  const r = routeHeard(ouvindo({ talkOn: true, followUp: false, text: "lara quanto falta pro destino" }), semEco);
+  assert.equal(r.kind, "wake");
+  if (r.kind === "wake") assert.match(r.rest, /quanto falta/);
+});
+
+test("conversa aberta fora da janela: a despedida ainda fecha o turno", () => {
+  assert.equal(routeHeard(ouvindo({ talkOn: true, followUp: false, text: "tchau" }), semEco).kind, "endTalk");
+});
+
+test("ocupada, conversa aberta, ela ainda falando: fala por cima sem o nome não é guardada", () => {
+  // Enquanto ela fala, `followUp` é falso. O que se diz por cima da resposta
+  // só conta se a nomear — senão o papo do passadiço durante a resposta
+  // viraria pergunta assim que ela calasse.
+  const semNome = routeHeard(ouvindo({ busy: true, talkOn: true, followUp: false, text: "quanto falta pro destino" }), semEco);
+  assert.equal(semNome.kind, "ignore");
+  const comNome = routeHeard(ouvindo({ busy: true, talkOn: true, followUp: false, text: "lara quanto falta pro destino" }), semEco);
+  assert.equal(comNome.kind, "defer");
+});
+
+test("em conversa, 'sim.' não é pergunta: a régua subiu para 10", () => {
+  assert.equal(routeHeard(ouvindo({ busy: true, talkOn: true, text: "sim." }), semEco).kind, "ignore");
+  assert.equal(routeHeard(ouvindo({ busy: true, talkOn: true, text: "e o vento?" }), semEco).kind, "defer");
+});
+
+test("inFollowUp: 10 s inclusivos depois do fim da fala; nunca falou = fora", () => {
+  assert.equal(inFollowUp(1000, 1000 + FOLLOW_UP_MS), true);
+  assert.equal(inFollowUp(1000, 1000 + FOLLOW_UP_MS + 1), false);
+  assert.equal(inFollowUp(Number.NEGATIVE_INFINITY, 5), false);
+});
+
+test("conversa FECHADA, dentro da janela: 'e a corrente?' logo depois da resposta dispensa o nome", () => {
+  // "Lara, qual o vento?" → resposta → "e a corrente?" em 10 s. É o modo de
+  // continuação; a gaveta não precisa estar aberta.
+  const r = routeHeard(ouvindo({ talkOn: false, followUp: true, text: "e a corrente" }), semEco);
+  assert.equal(r.kind, "ask");
+});
+
+test("conversa fechada, dentro da janela: 'sim' chega como pergunta — é o cadastro que decide", () => {
+  const r = routeHeard(ouvindo({ talkOn: false, followUp: true, text: "sim" }), semEco);
+  assert.equal(r.kind, "ask");
 });

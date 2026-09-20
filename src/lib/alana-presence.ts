@@ -15,11 +15,21 @@ export function helloWord(ms = Date.now()) {
 }
 
 /** First wake: introduce and ask the name. Later: greet the known colleague. */
-export function greetLine(names: string[], ms = Date.now(), heard?: string | null) {
+/**
+ * O cumprimento ao abrir a conversa.
+ *
+ * `askName` (1.14.0): sem nome na lista ela pergunta o nome — mas só uma vez
+ * por sessão, e é o componente quem controla isso. Perguntar a cada
+ * cumprimento com a lista vazia era pedir ruído: qualquer coisa que o
+ * microfone pegasse depois virava tripulante.
+ */
+export function greetLine(names: string[], ms = Date.now(), heard?: string | null, askName = true) {
   const hi = helloWord(ms);
   const who =
     heard && names.some((n) => n.toLowerCase() === heard.toLowerCase()) ? heard : names[0];
-  if (!who) return `${hi}. Sou a Lara, do passadiço. Qual o seu nome?`;
+  if (!who) {
+    return askName ? `${hi}. Sou a Lara, do passadiço. Qual o seu nome?` : `${hi}. Tô aqui. Pode mandar.`;
+  }
   return `${hi}, ${who}. Tô aqui. Pode mandar.`;
 }
 

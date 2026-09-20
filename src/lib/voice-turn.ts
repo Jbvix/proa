@@ -2,8 +2,27 @@
  * Proa · TugLife Systems — Roteamento do turno de conversa
  * ---------------------------------------------------------------------------
  * @autor    Jossian Brito
- * @versao   1.7.0  (módulo novo nesta versão)
- * @data     2026-09-20 02:14 UTC  (ano 2026)
+ * @versao   1.14.0  (módulo novo na 1.7.0)
+ * @data     2026-09-20 12:00 UTC  (ano 2026)
+ *
+ * MODIFICAÇÕES NA 1.14.0 (P13, item 13.3) — A JANELA DE CONTINUAÇÃO
+ * O prazo de 90 s da 1.10.0 tinha um furo: cada resposta da Lara renovava o
+ * prazo. Num passadiço movimentado, com gente falando perto do tablet a cada
+ * minuto, a conversa nunca expirava — e cada frase de 4 caracteres ia pro
+ * modelo. Agora, com a conversa aberta, fala SEM o nome só é aceita dentro
+ * de `FOLLOW_UP_MS` (10 s) depois de ela terminar de falar: o tempo de
+ * emendar a pergunta seguinte. Fora da janela, mesmo com a gaveta aberta,
+ * é preciso chamar "Lara". É como se fala num rádio com o canal aberto: o
+ * que vem logo depois da resposta é pra ela; o que vem um minuto depois é
+ * papo de ponte.
+ *
+ * A janela vale com a gaveta aberta OU fechada: "Lara, qual o vento?" →
+ * resposta → "e a corrente?" nos 10 s seguintes dispensa o nome. Mas ela só
+ * abre depois de uma RESPOSTA a alguém — nunca depois de um aviso
+ * espontâneo (XTE, waypoint, hora cheia): comentar o relatório não é falar
+ * com ela. Quem decide isso é o componente, que sabe o que acabou de tocar.
+ *
+ * `MIN_ASK_IN_TALK` subiu de 4 para 10: "sim." não é pergunta.
  *
  * O QUE ESTE MÓDULO DECIDE
  * Chegou uma transcrição do microfone. O que fazer com ela? Ignorar, guardar
@@ -31,8 +50,20 @@ import { hearWake } from "./wake-word.ts";
 
 /** Fala curta demais, atrás de uma chamada pelo nome, não é pergunta guardável. */
 const MIN_ASK_AFTER_WAKE = 6;
-/** Em conversa aberta a régua é menor: já se sabe que é com ela. */
-const MIN_ASK_IN_TALK = 4;
+/** Em conversa aberta a régua é menor que atrás do nome — mas 4 era "sim.". */
+const MIN_ASK_IN_TALK = 10;
+
+/**
+ * Janela depois de a Lara terminar de falar em que a fala seguinte, sem o
+ * nome dela, ainda é pra ela. 10 s: o tempo de ouvir a resposta, pensar e
+ * emendar. Mais que isso já é outra conversa.
+ */
+export const FOLLOW_UP_MS = 10_000;
+
+/** A fala de agora cai na janela de continuação? `spokeEndMono` negativo = nunca falou. */
+export function inFollowUp(spokeEndMono: number, nowMono: number): boolean {
+  return nowMono - spokeEndMono <= FOLLOW_UP_MS;
+}
 
 export type HeardInput = {
   /** A transcrição, já aparada. */
@@ -45,6 +76,13 @@ export type HeardInput = {
   busy: boolean;
   /** A conversa está aberta (o usuário tocou em Conversar). */
   talkOn: boolean;
+  /**
+   * Estamos nos 10 s depois de a Lara terminar de RESPONDER a alguém (ou de
+   * a conversa abrir). Só aí a fala sem o nome dela é dela. Enquanto ela
+   * fala, é `false`: o que se diz por cima só conta se a nomear. Depois de
+   * um aviso espontâneo também é `false`.
+   */
+  followUp: boolean;
   /** Ainda dentro da janela de eco da apresentação dela. */
   inIntroEcho: boolean;
 };
@@ -94,16 +132,19 @@ export function routeHeard(
     const q = parse.woke ? parse.rest : text;
     const vale = parse.woke
       ? parse.rest.length >= MIN_ASK_AFTER_WAKE && !isEcho(parse.rest)
-      : input.talkOn && q.length >= MIN_ASK_IN_TALK && !isEcho(q) && !parse.sleep;
+      : input.followUp && q.length >= MIN_ASK_IN_TALK && !isEcho(q) && !parse.sleep;
     return vale ? { kind: "defer" } : { kind: "ignore" };
   }
 
   // 2. Silêncio transcrito como vazio.
   if (!text) return { kind: "ignore" };
 
-  // 3. Conversa aberta, ou dedo no botão: tudo que vier é dirigido a ela, e
-  //    não precisa chamar pelo nome a cada frase.
-  if (input.fromPtt || input.talkOn) {
+  // 3. Dedo no botão, ou DENTRO da janela de continuação (gaveta aberta ou
+  //    não): é dirigido a ela, sem precisar do nome. Fora da janela cai no
+  //    passo 4 — e lá só o nome acorda, gaveta aberta ou não. A despedida
+  //    com a conversa aberta ainda fecha o turno a qualquer momento.
+  if (input.talkOn && parse.sleep) return { kind: "endTalk" };
+  if (input.fromPtt || input.followUp) {
     if (parse.sleep) return { kind: "endTalk" };
     const q = parse.woke ? parse.rest : text;
     if (!q) {

@@ -42,3 +42,11 @@ test("detects a name prompt", () => {
   assert.equal(askedForName("Boa tarde. Sou a Lara, do passadiço. Qual o seu nome?"), true);
   assert.equal(askedForName("ETA hoje 11:20."), false);
 });
+
+test("sem nome e sem permissão de perguntar, cumprimenta e não pergunta", () => {
+  // A pergunta do nome sai uma vez por sessão (1.14.0). Depois disso, lista
+  // vazia rende só "Tô aqui" — nada de ficar pescando nome no ruído.
+  const t = greetLine([], new Date(2026, 8, 19, 15, 0, 0).getTime(), null, false);
+  assert.doesNotMatch(t, /Qual o seu nome/);
+  assert.match(t, /Tô aqui/);
+});

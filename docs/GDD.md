@@ -3,7 +3,7 @@
 **Projeto:** Proa · PWA de passadiço para rebocador
 **Organização:** TugLife Systems
 **Autor:** Jossian Brito
-**Versão do documento:** 1.13.0
+**Versão do documento:** 1.14.0
 **Data:** 2026-09-20 12:00 UTC (ano 2026)
 
 ---
@@ -87,6 +87,7 @@ PWA. Funções serverless em Netlify. Sem banco de dados.
 | `hourly-report.ts` | Relatório falado da hora cheia, derivado da linha do diário (puro, testado) |
 | `ogg-opus.ts` | Empacotador Ogg Opus: cabeçalhos, laçamento, CRC, grânulo (puro, testado com leitor independente) |
 | `voice-opus.ts` | Ponte com o `AudioEncoder` do navegador; `null` = manda WAV |
+| `voice-enroll.ts` | Cadastro de nome com confirmação: candidato → "Certo?" → sim (puro, testado) |
 | `settings-migrate.ts` | Apaga do aparelho o que versões antigas gravaram e o app não usa mais |
 | `version.ts` | Versão publicada, amarrada ao `package.json` por teste |
 | `voice-echo.ts` | Memória das duas últimas falas, contra realimentação acústica |
@@ -317,10 +318,11 @@ nos últimos 15 s; a gaveta mostra `conversa · N s` no cabeçalho e
 `Encerrar conversa · fecha em N s` no botão. Estado invisível é estado
 esquecido; era isso que deixava a conversa aberta por horas.
 
-**O que fica para etapas seguintes** (P10, itens 10.3 e 10.4, propostos e não
-aprovados): usar a impressão vocal já existente como filtro de quem pode
-perguntar em conversa aberta, e subir a régua de 4 caracteres com um filtro de
-fraseologia de ponte.
+**O furo, achado no mar (1.14.0).** O prazo de 90 s é renovado por cada
+resposta dela. Num passadiço movimentado, com gente falando perto do tablet
+a cada minuto, a conversa **nunca expirava** — e cada frase de 4 caracteres
+ia pro modelo. O timeout resolvia o silêncio esquecido, não o passadiço
+cheio. Ver §7.4.
 
 ### 7.2 Latência — as três primeiras medidas (desde a 1.11.0)
 
@@ -459,6 +461,58 @@ A 1.12.0 não muda isso — é série de gráfico, não de registro, e o diário
 a ser o lugar do registro. Fica anotado para que ninguém conte com `hourly`
 como memória.
 
+### 7.4 Escuta dirigida e cadastro de nome (desde a 1.14.0)
+
+**O relato.** "Lara está mencionando um tripulante 'Tadala'" e "ainda está
+ouvindo conversa e respondendo sem ser invocada". Duas causas, uma delas um
+furo da própria 1.10.0.
+
+**Causa 1 — o nome entrou pela escuta.** "Tadala" não existe no repositório;
+estava em `crewNames[0]` do aparelho. Até a 1.13.0, depois de "Qual o seu
+nome?", **qualquer fala de uma ou duas palavras** virava nome
+(`extractNameAnswer`) e ia pro `localStorage` para sempre — e não havia tela
+nenhuma para apagar. Ruído de passadiço vestido de tripulante, por meses.
+
+**Causa 2 — a conversa não expirava num passadiço cheio.** O prazo de 90 s
+(§7.1) era renovado a cada resposta. Com gente falando perto do tablet a
+cada minuto, a conversa ficava viva indefinidamente, e `MIN_ASK_IN_TALK = 4`
+mandava "vira a boreste" ao modelo.
+
+**13.1 — Cartão Tripulação** (aba RPM). Lista os nomes, apaga cada um, e
+`dropCrew` leva a impressão vocal junto. "Tadala" sai sem perder casco,
+derrota nem diário.
+
+**13.2 — Nome só com confirmação** (`voice-enroll.ts`, puro, 10 testes).
+Candidato ouvido → ela repete *"Anotei Jossian. Certo?"* → só grava com um
+sim em até 20 s. Um não descarta com frase; qualquer outra fala descarta em
+silêncio e segue o caminho normal (pode ser uma pergunta de verdade). A
+impressão vocal gravada é a de quando o **nome** foi dito, não a do "sim".
+Apresentação explícita ("meu nome é X") também passa pela confirmação. E a
+pergunta do nome sai **uma vez por sessão**: lista vazia depois disso rende
+só "Tô aqui" — perguntar a cada cumprimento era pescar tripulante no ruído.
+É como se passa um nome pelo rádio: soletra, o outro lado repete, só então
+se anota.
+
+**13.3 — Janela de continuação** (`voice-turn.ts`, `FOLLOW_UP_MS = 10 s`).
+Fala **sem o nome** só é dela dentro de 10 s depois de ela terminar de
+**responder a alguém** — pergunta, cumprimento, confirmação. Fora da janela,
+mesmo com a gaveta aberta, é preciso chamar "Lara". A janela vale com a
+gaveta aberta ou fechada ("Lara, qual o vento?" → resposta → "e a corrente?"
+dispensa o nome), mas **nunca abre depois de um aviso espontâneo** — XTE,
+waypoint, hora cheia — porque comentar o relatório não é falar com ela.
+Enquanto ela fala, a janela é falsa: o que se diz por cima só conta se a
+nomear, senão o papo durante a resposta viraria pergunta assim que ela
+calasse. `MIN_ASK_IN_TALK` 4 → 10: "sim." não é pergunta. Os 90 s viram só a
+vida da gaveta; o rótulo diz em que estado se está: *conversa · pode falar*
+ou *conversa · chame Lara*.
+
+É o canal de rádio aberto: o que vem logo depois da resposta é pra ela; o que
+vem um minuto depois é papo de ponte.
+
+**O que fica** (propostos, não aprovados): 13.4 (retirar `keyterm
+Lara/Iara` do STT, **só** se as bolhas da gaveta mostrarem "Lara" inventado
+em ruído) e 13.5 (impressão vocal como filtro de quem pode perguntar).
+
 ## 8. Privacidade e segurança
 
 Nada de conta, nada de nuvem, nada de banco. O estado vive em `localStorage`.
@@ -586,7 +640,8 @@ um clique, e agora com histórico rastreável.
 | P8 | Migrar `seaPenalty` para STAWAVE-1 (∝ Hs²) | ✅ **Feito em 1.6.0** (a forma; a escala segue empírica) |
 | P8b | **Calibrar `AW_RPM_PER_KN` e `STEEPNESS_RPM` contra viagem real.** Bloqueado por dado, não por tempo. Desde a 1.12.0 o diário de travessia (§7.3) grava, hora a hora e persistido, os pares que a regressão precisa. Falta navegar. | **Coletando** — exportar o CSV depois de ~10 viagens |
 | P9 | `voice-assistant.tsx` tem 1.025 linhas e 30+ refs; quebrar em hooks | 🟡 **Em 1.4.0 e 1.7.0** — quatro peças extraídas e testadas. Restam no componente a orquestração de áudio (`arm`, `coolThenArm`, `playReply`) e as chamadas de rede de `ask`, que são efeito puro e não decisão. |
-| P10 | A Lara entra em conversa onde não foi chamada: `talkOn` nunca expirava | 🟡 **10.1 e 10.2 em 1.10.0** (prazo de 90 s e indicador). Restam 10.3 (filtro por impressão vocal) e 10.4 (régua de 4 → 10 caracteres e fraseologia de ponte), propostos. |
+| P10 | A Lara entra em conversa onde não foi chamada: `talkOn` nunca expirava | 🟡 **10.1 e 10.2 em 1.10.0**; o furo (resposta renovava o prazo) fechado pela **janela de continuação em 1.14.0** (§7.4). Resta 10.3 = 13.5. |
+| P13 | Nome fantasma "Tadala" no aparelho e escuta de papo de ponte | 🟡 **13.1, 13.2, 13.3 em 1.14.0**. Restam 13.4 (keyterm do STT, só com evidência) e 13.5 (impressão vocal como filtro). |
 | P11 | Latência da Lara: sete etapas em série, duas viagens à function, WAV+base64 11× maior que Opus, TTS mesmo em resposta local | 🟡 **11.1, 11.2, 11.6 em 1.11.0; 11.4 em 1.13.0** (voz local, aquecimento, resposta curta, Opus). Restam 11.3 (uma viagem) e 11.5 (TTS da primeira frase), propostos. |
 | P12 | Relatório horário na hora cheia, com diário de travessia (alimenta o P8b) | ✅ **Feito em 1.12.0** (§7.3) |
 | ~~BUG~~ | ~~O aviso de fim de turno não dispara~~ | ✅ **Resolvido em 1.5.0 por remoção** — ver §10 |
@@ -595,6 +650,24 @@ um clique, e agora com histórico rastreável.
 | — | Assinatura hidrodinâmica: acumular (heave, roll) × (Hs, Tz, encontro) = RAO experimental do casco | Ideia |
 
 ## 10. Histórico de versões
+
+### 1.14.0 — 2026-09-20
+
+P13, itens 13.1, 13.2 e 13.3, a partir de relato do mar. Detalhe em §7.4.
+
+- **13.1 — Cartão Tripulação** na aba RPM; `dropCrew` em `crew.ts` apaga
+  nome e impressão vocal.
+- **13.2 — `voice-enroll.ts` (novo, puro, 10 testes):** `routeEnroll`,
+  `isYes`, `isNo`, `confirmLine`, `savedLine`, `discardLine`;
+  `NAME_CONFIRM_MS = 20 s`. `greetLine` ganhou `askName`; o componente
+  pergunta o nome uma vez por sessão.
+- **13.3 — `voice-turn.ts`:** `followUp` em `HeardInput`, `FOLLOW_UP_MS`,
+  `inFollowUp`; passo 3 aceita fala sem nome só com PTT ou dentro da janela;
+  passo 1 idem para guardar; `MIN_ASK_IN_TALK` 4 → 10. O componente marca
+  `spokeEndAt` ao fim de cada resposta a alguém (não de aviso). 8 testes
+  novos.
+- Cabeçalho de módulo adicionado a `crew.ts`.
+- Cobertura: 258 → 278 testes.
 
 ### 1.13.0 — 2026-09-20
 

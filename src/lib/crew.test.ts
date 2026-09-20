@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { extractCrewNames, extractNameAnswer, mergeCrew } from "./crew.ts";
+import { dropCrew, extractCrewNames, extractNameAnswer, mergeCrew } from "./crew.ts";
 
 test("picks up a bridge intro", () => {
   assert.deepEqual(extractCrewNames("Lara, meu nome é Jossian"), ["Jossian"]);
@@ -22,4 +22,18 @@ test("ignores the radio and generic vocatives", () => {
 
 test("merge keeps unique names", () => {
   assert.deepEqual(mergeCrew(["Jossian"], ["jossian", "Pedro"]), ["Jossian", "Pedro"]);
+});
+
+test("dropCrew tira o nome e a voz dele, e só dele", () => {
+  const voices = [
+    { name: "Tadala", print: [1, 2], enrolledMs: 1 },
+    { name: "Jossian", print: [3, 4], enrolledMs: 2 },
+  ];
+  const r = dropCrew(["Tadala", "Jossian"], voices, "tadala");
+  assert.deepEqual(r.names, ["Jossian"]);
+  assert.deepEqual(r.voices.map((v) => v.name), ["Jossian"]);
+  // Nome que não existe: nada muda.
+  const s = dropCrew(["Jossian"], voices.slice(1), "Ninguém");
+  assert.deepEqual(s.names, ["Jossian"]);
+  assert.equal(s.voices.length, 1);
 });

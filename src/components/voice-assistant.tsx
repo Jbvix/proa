@@ -2,8 +2,19 @@
  * Proa · TugLife Systems — A Lara no passadiço (componente de voz)
  * ---------------------------------------------------------------------------
  * @autor    Jossian Brito
- * @versao   1.13.0
+ * @versao   1.14.0
  * @data     2026-09-20 12:00 UTC  (ano 2026)
+ *
+ * MODIFICAÇÕES NA 1.14.0 (P13 — 13.2 e 13.3)
+ *  - Nome só com confirmação: `routeEnroll` (puro) decide; aqui só se fala
+ *    "Anotei X. Certo?" pela voz local, guarda-se a impressão vocal de quando
+ *    o nome foi dito, e grava-se no "sim". A pergunta do nome sai uma vez
+ *    por sessão (`askedName`).
+ *  - Janela de continuação: `spokeEndAt` marca o fim de cada RESPOSTA a
+ *    alguém (pergunta, cumprimento, confirmação) — não de aviso espontâneo.
+ *    `handleHeard` passa `followUp` a `routeHeard`; fora dos 10 s, só o nome
+ *    acorda, gaveta aberta ou não. O rótulo da gaveta diz em qual estado se
+ *    está: "pode falar" ou "chame Lara".
  *
  * MODIFICAÇÕES NA 1.13.0 (P11, item 11.4)
  *  - Diagnóstico mostra o codec do último clipe (opus | wav). O envio em si
@@ -66,10 +77,18 @@ import {
   type VoiceSnap,
 } from "@/lib/voice-listen";
 import { buildVoiceContext, type VoiceTurn } from "@/lib/voice-context";
-import { routeHeard } from "@/lib/voice-turn";
-import { extractCrewNames, extractNameAnswer, mergeCrew } from "@/lib/crew";
+import { inFollowUp, routeHeard } from "@/lib/voice-turn";
+import { mergeCrew } from "@/lib/crew";
+import {
+  ENROLL_IDLE,
+  confirmLine,
+  discardLine,
+  routeEnroll,
+  savedLine,
+  type EnrollState,
+} from "@/lib/voice-enroll";
 import { quickReply } from "@/lib/voice-quick";
-import { greetLine, byeLine, askedForName } from "@/lib/alana-presence";
+import { greetLine, byeLine } from "@/lib/alana-presence";
 import { matchVoice, upsertVoice } from "@/lib/voice-print";
 import { passageOf } from "@/lib/passage";
 import { type WatchKind } from "@/lib/voice-watch";
@@ -125,6 +144,8 @@ export function AlanaRadio() {
   const [talking, setTalking] = useState(false);
   /** Segundos até a conversa expirar, só nos últimos 15 s; `null` fora deles. */
   const [idleLeftS, setIdleLeftS] = useState<number | null>(null);
+  /** Dentro da janela de continuação (só para o rótulo; a decisão usa o ref). */
+  const [followUpUi, setFollowUpUi] = useState(false);
 
   const asking = useRef(false);
   const locking = useRef(false);
@@ -150,6 +171,14 @@ export function AlanaRadio() {
   const talkOn = useRef(false);
   /** Relógio monotônico da última atividade do turno: abre, pergunta, ou a Lara termina de falar. */
   const talkLastAt = useRef(0);
+  /** Fim da última RESPOSTA a alguém. Abre a janela de continuação de 10 s. */
+  const spokeEndAt = useRef(Number.NEGATIVE_INFINITY);
+  /** Cadastro de nome à espera de "sim". */
+  const enrollRef = useRef<EnrollState>(ENROLL_IDLE);
+  /** Impressão vocal de quando o nome pendente foi dito — é ela que se grava no sim. */
+  const pendingPrint = useRef<number[] | null>(null);
+  /** A pergunta do nome já saiu nesta sessão? Sai uma vez só. */
+  const askedName = useRef(false);
   const pendingTalk = useRef(false);
   const pendingTimer = useRef(0);
   const engineRef = useRef(engine);
@@ -237,6 +266,9 @@ export function AlanaRadio() {
         fromPtt,
         busy,
         talkOn: talkOn.current,
+        // Janela de continuação: 10 s depois de uma resposta a alguém, e nunca
+        // enquanto ela fala. Aviso espontâneo não marca `spokeEndAt`.
+        followUp: !speaking.current && inFollowUp(spokeEndAt.current, performance.now()),
         inIntroEcho: performance.now() < introEchoUntil.current,
       },
       heardEcho,
@@ -445,7 +477,11 @@ export function AlanaRadio() {
         return;
       }
       if (!rest) {
-        const line = greetLine(crewRef.current, Date.now(), heardName ?? lastHeardName.current);
+        // A pergunta do nome sai uma vez por sessão. Perguntar a cada
+        // cumprimento com a lista vazia era pescar tripulante no ruído.
+        const askName = !askedName.current;
+        if (!crewRef.current.length && askName) askedName.current = true;
+        const line = greetLine(crewRef.current, Date.now(), heardName ?? lastHeardName.current, askName);
         rememberLine(line);
         setTurns((t) => [...t, { role: "assistant", content: line }]);
         setBusy(true);
@@ -453,6 +489,7 @@ export function AlanaRadio() {
         try {
           const audio = await fetchSay(line);
           await playReply(line, audio);
+          spokeEndAt.current = performance.now();
         } finally {
           setBusy(false);
           setThinking(false);
@@ -533,21 +570,43 @@ export function AlanaRadio() {
     stopRec();
     stopVoice();
     try {
-      const found = extractCrewNames(q);
+      // Nome só com confirmação (13.2). A DECISÃO é de `routeEnroll`, pura;
+      // aqui se fala a linha, guarda-se a impressão vocal de quando o nome
+      // foi dito, e grava-se no "sim".
       const prevAssist = [...turnsRef.current].reverse().find((t) => t.role === "assistant")?.content;
-      const named =
-        askedForName(prevAssist) && !found.length ? extractNameAnswer(q) : null;
-      if (found.length || named) {
-        const next = mergeCrew(crewRef.current, named ? [named, ...found] : found);
-        crewRef.current = next;
-        setCrewNames(next);
-      }
-      const whoEnroll = named ?? found[0];
-      if (whoEnroll && lastPrint.current) {
-        const nextV = upsertVoice(voicesRef.current, whoEnroll, lastPrint.current);
-        voicesRef.current = nextV;
-        setCrewVoices(nextV);
-        lastHeardName.current = whoEnroll;
+      const enroll = routeEnroll(enrollRef.current, {
+        text: q,
+        nowMono: performance.now(),
+        lastAssistant: prevAssist,
+      });
+      enrollRef.current = enroll.state;
+      if (enroll.action.kind !== "none") {
+        let spoken: string;
+        if (enroll.action.kind === "confirm") {
+          pendingPrint.current = lastPrint.current;
+          spoken = confirmLine(enroll.action.name);
+        } else if (enroll.action.kind === "save") {
+          const name = enroll.action.name;
+          const next = mergeCrew(crewRef.current, [name]);
+          crewRef.current = next;
+          setCrewNames(next);
+          const print = pendingPrint.current ?? lastPrint.current;
+          if (print) {
+            const nextV = upsertVoice(voicesRef.current, name, print);
+            voicesRef.current = nextV;
+            setCrewVoices(nextV);
+          }
+          lastHeardName.current = name;
+          pendingPrint.current = null;
+          spoken = savedLine(name);
+        } else {
+          pendingPrint.current = null;
+          spoken = discardLine();
+        }
+        rememberLine(spoken);
+        setTurns((t) => [...t, { role: "assistant", content: spoken }]);
+        await playReply(spoken, null, { local: true });
+        return;
       }
       const ctx = buildVoiceContext({
         engine: engineRef.current,
@@ -558,11 +617,7 @@ export function AlanaRadio() {
         tab: tabRef.current,
         crewNames: crewRef.current,
       });
-      const who = named ?? found[0];
-      const introOnly = !!who && q.length < 48;
-      const local = introOnly
-        ? `Prazer, ${who}. Tô aqui. Pode mandar.`
-        : quickReply(q, ctx);
+      const local = quickReply(q, ctx);
       if (local) {
         const spoken = local;
         rememberLine(spoken);
@@ -593,6 +648,9 @@ export function AlanaRadio() {
     } catch {
       setError("Sem ligação com a Lara.");
     } finally {
+      // Acabou de responder a alguém (ou tentou): abre a janela de 10 s em
+      // que a fala seguinte, sem o nome, ainda é pra ela.
+      spokeEndAt.current = performance.now();
       setBusy(false);
       asking.current = false;
       setThinking(false);
@@ -685,6 +743,7 @@ export function AlanaRadio() {
   useEffect(() => {
     if (!talking) {
       setIdleLeftS(null);
+      setFollowUpUi(false);
       return;
     }
     // Vigia do prazo. A FASE é de `talkIdle`, pura e testada; aqui só se lê o
@@ -695,6 +754,7 @@ export function AlanaRadio() {
     const id = window.setInterval(() => {
       const idle = talkIdle(talkLastAt.current, performance.now());
       setIdleLeftS(idle.phase === "encerrando" ? idle.remainingS : null);
+      setFollowUpUi(!speaking.current && inFollowUp(spokeEndAt.current, performance.now()));
       if (idle.phase !== "expirou") return;
       if (speaking.current || asking.current || locking.current || pendingHear.current) return;
       expireTalk();
@@ -807,7 +867,9 @@ export function AlanaRadio() {
     : talking && idleLeftS != null
       ? `conversa · ${idleLeftS} s`
       : talking && face === "espera"
-        ? "conversa"
+        ? followUpUi
+          ? "conversa · pode falar"
+          : "conversa · chame Lara"
         : lost
         ? "toca pra retomar"
         : ALANA_FACE_LABEL[face];
@@ -945,9 +1007,9 @@ export function AlanaRadio() {
               {turns.length === 0 ? (
                 <p className="text-sm text-muted">
                   Toca em <span className="text-fg">Conversar</span> pra falar com a Lara.
-                  Toca de novo pra encerrar — ou ela fecha sozinha depois de 90 s de
-                  silêncio. Sozinha ela só fala o XTE, o waypoint e o relatório da
-                  hora cheia.
+                  Depois de cada resposta dela, você tem 10 s pra emendar sem chamar
+                  pelo nome; passou, diz <span className="text-fg">Lara</span> de novo.
+                  Sozinha ela só fala o XTE, o waypoint e o relatório da hora cheia.
                 </p>
               ) : (
                 turns.map((t, i) => (

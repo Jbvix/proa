@@ -2,8 +2,13 @@
  * Proa · TugLife Systems — Aba RPM
  * ---------------------------------------------------------------------------
  * @autor    Jossian Brito
- * @versao   1.12.0
+ * @versao   1.14.0
  * @data     2026-09-20 12:00 UTC  (ano 2026)
+ *
+ * MODIFICAÇÕES NA 1.14.0 (P13, item 13.1)
+ *  - Cartão "Tripulação": os nomes que a Lara conhece, com apagar em cada
+ *    um (leva a impressão vocal junto). Não havia como tirar um nome do
+ *    aparelho sem limpar os dados do site inteiro.
  *
  * MODIFICAÇÕES NA 1.12.0 (P12, item 12.3)
  *  - Cartão "Diário de travessia": quantas horas gravadas, a última, e os
@@ -24,6 +29,7 @@ import { useLiveBridge } from "@/components/bridge-provider";
 import { useSettings } from "@/lib/store";
 import { clamp, formatHour } from "@/lib/utils";
 import { LOG_MAX, csvFilename, logToCsv } from "@/lib/passage-log";
+import { dropCrew } from "@/lib/crew";
 
 export function RpmScreen() {
   const rpm = useSettings((s) => s.rpm);
@@ -34,6 +40,10 @@ export function RpmScreen() {
   const setHull = useSettings((s) => s.setHull);
   const passageLog = useSettings((s) => s.passageLog);
   const clearLog = useSettings((s) => s.clearLog);
+  const crewNames = useSettings((s) => s.crewNames);
+  const crewVoices = useSettings((s) => s.crewVoices);
+  const setCrewNames = useSettings((s) => s.setCrewNames);
+  const setCrewVoices = useSettings((s) => s.setCrewVoices);
   const { engine, meteo } = useLiveBridge();
 
   const hs = engine?.wave.hsM ?? 0;
@@ -144,6 +154,42 @@ export function RpmScreen() {
             onChange={(n) => setHull({ bowLengthM: n })}
           />
         </div>
+      </Card>
+
+      <Card className="rounded-2xl p-4">
+        <CardTitle>Tripulação</CardTitle>
+        <p className="mt-2 text-sm text-muted">
+          Os nomes pelos quais a Lara chama. Ela pergunta o nome uma vez por
+          sessão e só grava depois de você confirmar. Apagar leva a voz junto.
+        </p>
+        {crewNames.length === 0 ? (
+          <p className="mt-3 text-sm text-subtle">Nenhum nome gravado.</p>
+        ) : (
+          <ul className="mt-3 space-y-2">
+            {crewNames.map((n) => (
+              <li key={n} className="flex items-center justify-between rounded-md bg-surface-2 px-3 py-2">
+                <span className="text-sm text-fg">
+                  {n}
+                  {crewVoices.some((v) => v.name.toLowerCase() === n.toLowerCase()) ? (
+                    <span className="ml-2 text-[11px] uppercase tracking-[0.12em] text-subtle">voz</span>
+                  ) : null}
+                </span>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  aria-label={`Apagar ${n}`}
+                  onClick={() => {
+                    const r = dropCrew(crewNames, crewVoices, n);
+                    setCrewNames(r.names);
+                    setCrewVoices(r.voices);
+                  }}
+                >
+                  Apagar
+                </Button>
+              </li>
+            ))}
+          </ul>
+        )}
       </Card>
 
       <Card className="rounded-2xl p-4">

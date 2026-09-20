@@ -2,7 +2,7 @@
 
 **Para a tripulação do passadiço**
 **Autor:** Jossian Brito · TugLife Systems
-**Versão:** 1.13.0 · 2026-09-20 12:00 UTC (ano 2026)
+**Versão:** 1.14.0 · 2026-09-20 12:00 UTC (ano 2026)
 
 ---
 
@@ -157,13 +157,30 @@ Colega de passadiço, não rádio.
 | Acordar pela voz | Diga **"Lara"** |
 | Encerrar | Toque em **Conversar** de novo, ou diga "tchau, Lara" |
 | Deixar encerrar | Fique 90 s sem falar com ela. A conversa fecha sozinha, sem ela falar nada |
+| Emendar sem chamar pelo nome | Fale **nos 10 s depois da resposta dela**. Passou disso, diga **"Lara"** de novo — com a gaveta aberta ou não |
+| Dizer seu nome | Quando ela perguntar (uma vez por sessão), ou "meu nome é …". Ela repete *"Anotei X. Certo?"* — responda **"sim"** para gravar. Sem o sim, não grava |
+| Apagar um nome | Aba **RPM → Tripulação → Apagar** |
 
 **Enquanto a conversa está aberta**, o ícone da Lara no alto da tela fica com
-um anel aceso. É o "canal aberto": tudo que se diz no passadiço vai para ela,
-sem precisar chamar pelo nome. Nos últimos 15 segundos aparece um número no
-canto do ícone contando para trás — basta falar qualquer coisa para renovar o
-prazo. Quando fecha, fica escrito na gaveta: *"Fechei a conversa…"*. A partir
-daí só **"Lara"** a acorda de novo.
+um anel aceso. Mas atenção, desde a 1.14.0: **anel aceso não quer dizer que
+tudo que se fala vai para ela.** Só vai o que se diz **nos 10 segundos depois
+de uma resposta dela** — o tempo de emendar a pergunta seguinte. Passou
+disso, mesmo com o anel aceso, chame **"Lara"**. A gaveta mostra em que
+estado está: *conversa · pode falar* ou *conversa · chame Lara*. Nos últimos
+15 segundos aparece um número no canto do ícone contando para trás. Quando
+fecha, fica escrito: *"Fechei a conversa…"*.
+
+> **Por que mudou.** Na 1.10.0 a conversa fechava sozinha após 90 s de
+> silêncio — mas cada resposta dela renovava o prazo, e num passadiço
+> movimentado a conversa nunca fechava: ordens ao timoneiro viravam pergunta
+> para a Lara. Agora a regra é a do rádio: o que vem logo depois da resposta
+> é para ela; o que vem um minuto depois é papo de ponte.
+
+> **O nome "Tadala".** Se o seu tablet cumprimenta alguém que não existe, o
+> nome entrou por ruído: até a 1.13.0 qualquer palavra dita depois de "Qual o
+> seu nome?" virava tripulante. Apague em **RPM → Tripulação**. De agora em
+> diante ela só grava nome depois de você dizer **"sim"** ao *"Anotei X.
+> Certo?"*.
 
 > **Por que ela fecha sozinha.** Antes da 1.10.0 a conversa ficava aberta até
 > alguém lembrar de encerrar — e ninguém lembrava. Ordens ao timoneiro, horas
@@ -259,6 +276,8 @@ atrás, feche e reabra o app; se insistir, limpe o cache do navegador.
 | Período em branco | Mar fora da faixa de 3 a 16 s, ou captura com menos de 90 s. |
 | A Lara não ouve | No Samsung, toque uma vez na tela. Confira a permissão de microfone. |
 | A Lara parou de responder sem chamar pelo nome | A conversa expirou (90 s de silêncio) — veja a linha "Fechei a conversa" na gaveta. Diga **"Lara"** ou toque em **Conversar**. |
+| A Lara não responde sem eu chamar pelo nome, mesmo com o anel aceso | Passaram os 10 s da última resposta. Diga **"Lara"** e a pergunta. É de propósito. |
+| A Lara cumprimenta um nome que ninguém tem | Nome entrou por ruído em versão antiga. **RPM → Tripulação → Apagar**. |
 | A Lara não deu o relatório da hora | Ou não estava em singradura (SOG abaixo de 0,6 nó — ela grava e cala), ou a captura estava parada, ou o app foi aberto depois da hora redonda. Confira o diário na aba RPM: se a hora está lá, ela gravou. |
 | Resposta de número sai numa voz diferente da Lara | É a voz do Android, escolhida de propósito para responder na hora. Veja a nota "Duas vozes" na seção 5. |
 | A Lara responde a conversa que não era com ela | Confira se o anel do ícone está aceso: a conversa está aberta. Toque em **Conversar** para encerrar, ou espere os 90 s. |

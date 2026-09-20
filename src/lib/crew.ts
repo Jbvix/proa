@@ -1,3 +1,20 @@
+/**
+ * Proa · TugLife Systems — Nomes da tripulação
+ * ---------------------------------------------------------------------------
+ * @autor    Jossian Brito
+ * @versao   1.14.0
+ * @data     2026-09-20 12:00 UTC  (ano 2026)
+ *
+ * MODIFICAÇÕES NA 1.14.0 (P13, item 13.1)
+ *  - `dropCrew`: tira um nome da lista E a impressão vocal dele. Até aqui não
+ *    havia como apagar um nome do aparelho a não ser limpando os dados do
+ *    site inteiro — e foi assim que "Tadala" ficou meses num tablet.
+ *  - A gravação em si passou a exigir confirmação (`voice-enroll.ts`);
+ *    `extractCrewNames` e `extractNameAnswer` continuam só PROPONDO.
+ *  - Cabeçalho de módulo adicionado; o arquivo não tinha.
+ * ---------------------------------------------------------------------------
+ */
+import type { VoiceCard } from "./voice-print.ts";
 import { foldPt } from "./wake-word.ts";
 
 const STOP = new Set([
@@ -77,3 +94,19 @@ export function mergeCrew(prev: string[], found: string[]) {
   return next.slice(0, 6);
 }
 
+
+/**
+ * Tira `name` da lista de nomes e do banco de vozes, sem distinguir
+ * maiúsculas. Devolve as duas listas novas; nada é mudado no lugar.
+ */
+export function dropCrew(
+  names: readonly string[],
+  voices: readonly VoiceCard[],
+  name: string,
+): { names: string[]; voices: VoiceCard[] } {
+  const key = name.trim().toLowerCase();
+  return {
+    names: names.filter((n) => n.toLowerCase() !== key),
+    voices: voices.filter((v) => v.name.toLowerCase() !== key),
+  };
+}
