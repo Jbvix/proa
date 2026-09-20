@@ -18,9 +18,9 @@ test("memória vazia não acusa eco de uma pergunta comum", () => {
 
 test("há frases que são eco pelo conteúdo, com ou sem memória", () => {
   // `isAlanaEcho` guarda também um conjunto de bordões que só a Lara diz —
-  // "passando X", "chegando em X", "fim de turno". Se o microfone devolve uma
-  // dessas, é o alto-falante, não a tripulação, mesmo que a memória esteja
-  // vazia (por exemplo logo após um reset ou um recarregamento da página).
+  // "passando X", "chegando em X", "abriu demais da derrota". Se o microfone
+  // devolve uma dessas, é o alto-falante e não a tripulação, mesmo com a memória
+  // vazia (logo após um reset, por exemplo, ou um recarregamento da página).
   const m = createEchoMemory();
   assert.equal(m.isEcho("passando o Mucuripe"), true);
   assert.equal(m.isEcho("chegando em Pecém"), true);

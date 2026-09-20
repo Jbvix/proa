@@ -131,14 +131,6 @@ export function quickReply(raw: string, ctx: VoiceContext): string | null {
       : `${hi}${ctx.posicao.latLon}.`;
   }
 
-  if (/turno|vigia/.test(t) && ctx.turnos.length) {
-    const named = ctx.turnos.find((w) => t.includes(foldPt(w.nome)));
-    const w = named ?? (ctx.turnos.length === 1 ? ctx.turnos[0] : null);
-    if (w) {
-      return `${hi}${w.nome}, fim ${w.fim}. Faltam ${w.faltaMin} min.`;
-    }
-  }
-
   if (/\brpm\b|rotacao|máquina|maquina/.test(t)) {
     return `${hi}${ctx.rpm.atual} RPM, faixa ${ctx.rpm.min} a ${ctx.rpm.max}. ${ctx.rpm.situacao}.`;
   }

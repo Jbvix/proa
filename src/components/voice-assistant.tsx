@@ -27,8 +27,7 @@ import {
 } from "@/lib/voice-listen";
 import { buildVoiceContext, type VoiceTurn } from "@/lib/voice-context";
 import { hearWake } from "@/lib/wake-word";
-import { extractCrewNames, extractNameAnswer, mergeCrew, parseWatchAsk, parseWatchCancel, pruneWatches, dropWatch, upsertWatch } from "@/lib/crew";
-import { formatEtaClock } from "@/lib/utils";
+import { extractCrewNames, extractNameAnswer, mergeCrew } from "@/lib/crew";
 import { quickReply } from "@/lib/voice-quick";
 import { greetLine, byeLine, withHold, askedForName } from "@/lib/alana-presence";
 import { matchVoice, upsertVoice } from "@/lib/voice-print";
@@ -62,8 +61,6 @@ export function AlanaRadio() {
   const setPtt = useSettings((s) => s.setAlanaPtt);
   const crewNames = useSettings((s) => s.crewNames);
   const setCrewNames = useSettings((s) => s.setCrewNames);
-  const crewWatches = useSettings((s) => s.crewWatches);
-  const setCrewWatches = useSettings((s) => s.setCrewWatches);
   const crewVoices = useSettings((s) => s.crewVoices);
   const setCrewVoices = useSettings((s) => s.setCrewVoices);
   const tab = useBridge((s) => s.tab);
@@ -113,7 +110,6 @@ export function AlanaRadio() {
   const profileRef = useRef(profile);
   const tabRef = useRef(tab);
   const crewRef = useRef(crewNames);
-  const watchesRef = useRef(crewWatches);
   const turnsRef = useRef(turns);
   engineRef.current = engine;
   meteoRef.current = meteo;
@@ -122,7 +118,6 @@ export function AlanaRadio() {
   profileRef.current = profile;
   tabRef.current = tab;
   crewRef.current = crewNames;
-  watchesRef.current = crewWatches;
   voicesRef.current = crewVoices;
   turnsRef.current = turns;
   modeRef.current = mode;
@@ -455,21 +450,6 @@ export function AlanaRadio() {
         setCrewVoices(nextV);
         lastHeardName.current = whoEnroll;
       }
-      const cancel = parseWatchCancel(q, crewRef.current, watchesRef.current);
-      if (cancel) {
-        const nextWatches = dropWatch(watchesRef.current, cancel);
-        watchesRef.current = nextWatches;
-        setCrewWatches(nextWatches);
-      }
-      const watch = parseWatchAsk(q, crewRef.current, Date.now());
-      if (watch) {
-        const nextNames = mergeCrew(crewRef.current, [watch.name]);
-        crewRef.current = nextNames;
-        setCrewNames(nextNames);
-        const nextWatches = upsertWatch(pruneWatches(watchesRef.current, Date.now()), watch);
-        watchesRef.current = nextWatches;
-        setCrewWatches(nextWatches);
-      }
       const ctx = buildVoiceContext({
         engine: engineRef.current,
         meteo: meteoRef.current,
@@ -478,17 +458,12 @@ export function AlanaRadio() {
         profile: profileRef.current,
         tab: tabRef.current,
         crewNames: crewRef.current,
-        crewWatches: watchesRef.current,
       });
       const who = named ?? found[0];
-      const introOnly = !!who && q.length < 48 && !watch && !cancel;
+      const introOnly = !!who && q.length < 48;
       const local = introOnly
         ? `Prazer, ${who}. Tô aqui. Pode mandar.`
-        : watch && q.length < 90
-          ? `Fechou. Aviso o ${watch.name} às ${formatEtaClock(watch.endMs)}.`
-          : cancel && !watch && q.length < 70
-            ? `Beleza. Cancelei o aviso do ${cancel}.`
-            : quickReply(q, ctx);
+        : quickReply(q, ctx);
       if (local) {
         const spoken = introOnly ? local : withHold(local);
         rememberLine(spoken);
@@ -609,18 +584,6 @@ export function AlanaRadio() {
     }
     const id = window.setInterval(() => {
       if (muted || speaking.current || asking.current || cooling.current || locking.current) return;
-      const now = Date.now();
-      const watches = pruneWatches(watchesRef.current, now);
-      const pruned =
-        watches.length !== watchesRef.current.length ||
-        watches.some(
-          (w, i) =>
-            w.fired !== watchesRef.current[i]?.fired || w.warned !== watchesRef.current[i]?.warned,
-        );
-      if (pruned) {
-        watchesRef.current = watches;
-        setCrewWatches(watches);
-      }
       // Quem DECIDE se há aviso é `tickAlerts`, puro e testado. Aqui só se lê o
       // que os sensores dizem e se executa o que ele mandar.
       const engine = engineRef.current;
@@ -652,7 +615,6 @@ export function AlanaRadio() {
         profile: profileRef.current,
         tab: tabRef.current,
         crewNames: crewRef.current,
-        crewWatches: watchesRef.current,
       });
       const text = waypointReport(passed, {
         name: crewRef.current[0],
@@ -819,21 +781,6 @@ export function AlanaRadio() {
               </button>
             </div>
             <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 pb-3">
-              {crewWatches.some((w) => !w.fired) ? (
-                <div className="space-y-1 rounded-md bg-bg px-3 py-2">
-                  {crewWatches
-                    .filter((w) => !w.fired)
-                    .map((w) => (
-                      <p
-                        key={`${w.name}-${w.endMs}`}
-                        className="flex items-baseline justify-between gap-3 text-sm"
-                      >
-                        <span className="text-fg">{w.name}</span>
-                        <span className="text-subtle">{formatEtaClock(w.endMs)}</span>
-                      </p>
-                    ))}
-                </div>
-              ) : null}
               {turns.length === 0 ? (
                 <p className="text-sm text-muted">
                   Toca em <span className="text-fg">Conversar</span> pra falar com a Lara.

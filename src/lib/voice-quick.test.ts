@@ -8,7 +8,6 @@ function ctx(over: Partial<VoiceContext> = {}): VoiceContext {
     aviso: "",
     agora: "sáb. 19 set 07:10",
     tripulacao: ["Jossian"],
-    turnos: [{ nome: "Pedro", fim: "hoje 08:00", faltaMin: 50 }],
     viagem: {
       nome: "Fortaleza–Pecém",
       origem: "Fortaleza",

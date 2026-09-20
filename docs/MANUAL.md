@@ -2,7 +2,7 @@
 
 **Para a tripulação do passadiço**
 **Autor:** Jossian Brito · TugLife Systems
-**Versão:** 1.4.0 · 2026-09-20 02:14 UTC (ano 2026)
+**Versão:** 1.5.0 · 2026-09-20 02:14 UTC (ano 2026)
 
 ---
 
@@ -138,18 +138,19 @@ Colega de passadiço, não rádio.
 | Encerrar | Toque em **Conversar** de novo, ou diga "tchau, Lara" |
 
 **Pergunte à vontade sobre:** posição, quanto falta, ETA, mar, vento, maré,
-waypoints, turno da tripulação, COLREG, estabilidade (GM, superfície livre,
-lastro), NORMAM, MARPOL, SOLAS.
+waypoints, COLREG, estabilidade (GM, superfície livre, lastro), NORMAM,
+MARPOL, SOLAS.
 
 **A Lara avisa sozinha** em dois casos apenas: afastamento da derrota acima do
 limite e passagem de waypoint.
 
-> **Correção do manual.** Até a 1.3.0 este parágrafo listava também o fim de
-> turno de tripulante. Estava errado: o Proa **registra** o turno que você pede
-> e responde sobre ele quando perguntado, mas **não chama o nome sozinho** no
-> fim. O aviso foi implementado, testado e depois desligado sem querer numa
-> reescrita — ver a nota técnica no GDD §9. Até religarem, **não conte com o
-> app para render a vigia**.
+> **O controle de turno saiu na 1.5.0.** O Proa chegou a aceitar "me avisa
+> quando acabar o turno do Pedro", respondia "fechou, aviso às 20:00" — e não
+> avisava. O aviso tinha sido desligado numa reescrita e ninguém percebeu,
+> porque o código e os testes ficaram no lugar. Em vez de religar, a
+> funcionalidade foi removida inteira: **um app de passadiço que promete
+> chamar e não chama é pior que um app que não promete nada**. Para render a
+> vigia, use o despertador do aparelho.
 
 > **A Lara orienta, não ordena.** É suporte de consultoria. Não substitui o
 > oficial de serviço nem o texto oficial da norma. Se ela não tiver o dado no
@@ -190,8 +191,8 @@ banco de dados.
 Sai do aparelho apenas: a **coordenada** (para buscar a meteorologia) e o
 **áudio da sua fala** (para a transcrição, só enquanto a Lara está em conversa).
 
-Limpar os dados do site apaga: derrota importada, perfil de motor, nomes e
-turnos da tripulação, vozes cadastradas e o histórico de ondas.
+Limpar os dados do site apaga: derrota importada, perfil de motor, nomes da
+tripulação, vozes cadastradas e o histórico de ondas.
 
 ## 9. Para quem faz deploy
 
@@ -211,7 +212,7 @@ Nenhuma das chaves chega ao navegador.
 
 ```bash
 npm run dev            # servidor em :8080
-npm test               # testes de domínio (164) — tem de ficar verde
+npm test               # testes de domínio (159) — tem de ficar verde
 npm run test:scaffold  # testes do andaime do template (precisa de .grok/)
 npm run test:all       # os dois
 npm run typecheck      # tsc --noEmit

@@ -6,7 +6,6 @@ import { DEFAULT_PROFILE, type EngineProfile } from "./rpm";
 import type { HourlyWave } from "./waves";
 import { sensorEngine } from "./sensor-engine";
 import { applyTheme, type ThemeId } from "./theme";
-import type { CrewWatch } from "./crew";
 import type { VoiceCard } from "./voice-print";
 import { isVoicePrint } from "./voice-print";
 
@@ -18,7 +17,6 @@ type SettingsState = {
   alanaMuted: boolean;
   alanaPtt: boolean;
   crewNames: string[];
-  crewWatches: CrewWatch[];
   crewVoices: VoiceCard[];
   rpm: number;
   profile: EngineProfile;
@@ -29,7 +27,6 @@ type SettingsState = {
   setAlanaMuted: (v: boolean) => void;
   setAlanaPtt: (v: boolean) => void;
   setCrewNames: (n: string[]) => void;
-  setCrewWatches: (w: CrewWatch[]) => void;
   setCrewVoices: (v: VoiceCard[]) => void;
   setRpm: (n: number) => void;
   setProfile: (p: Partial<EngineProfile>) => void;
@@ -46,7 +43,6 @@ export const useSettings = create<SettingsState>()(
       alanaMuted: false,
       alanaPtt: false,
       crewNames: [],
-      crewWatches: [],
       crewVoices: [],
       rpm: 920,
       profile: DEFAULT_PROFILE,
@@ -60,7 +56,6 @@ export const useSettings = create<SettingsState>()(
       setAlanaMuted: (v) => set({ alanaMuted: v }),
       setAlanaPtt: (v) => set({ alanaPtt: v }),
       setCrewNames: (n) => set({ crewNames: n.slice(0, 6) }),
-      setCrewWatches: (w) => set({ crewWatches: w.slice(-6) }),
       setCrewVoices: (v) => set({ crewVoices: v.slice(-6) }),
       setRpm: (n) => set({ rpm: n }),
       setProfile: (p) => set({ profile: { ...get().profile, ...p } }),
@@ -99,7 +94,6 @@ export const useSettings = create<SettingsState>()(
         alanaMuted: s.alanaMuted,
         alanaPtt: s.alanaPtt,
         crewNames: s.crewNames,
-        crewWatches: s.crewWatches,
         crewVoices: s.crewVoices,
         rpm: s.rpm,
         profile: s.profile,
@@ -114,15 +108,6 @@ export const useSettings = create<SettingsState>()(
         }
         if (!Array.isArray(state?.crewNames) && state) state.crewNames = [];
         if (state) {
-          const raw = Array.isArray(state.crewWatches) ? state.crewWatches : [];
-          state.crewWatches = raw
-            .map((w) => ({
-              name: String(w?.name ?? "").trim(),
-              endMs: Number(w?.endMs) || 0,
-              warned: !!(w as { warned?: boolean }).warned || !!w?.fired,
-              fired: !!w?.fired,
-            }))
-            .filter((w) => w.name && w.endMs);
           const voices = Array.isArray((state as { crewVoices?: VoiceCard[] }).crewVoices)
             ? (state as { crewVoices: VoiceCard[] }).crewVoices
             : [];

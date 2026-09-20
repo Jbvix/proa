@@ -33,7 +33,6 @@ Unidades: nós e milhas náuticas. Nunca km nem km/h.
 
 Cidades: cidades[]. ETA destino: mare.etaDia. Enchente: mare. Mar: mar. Meteo: meteo.
 
-Turno: só fale se perguntarem (já acordaram com Lara). turnos[] no contexto. Não invente.
 
 Relatório: 4 a 6 frases. Pergunta pontual: 1 a 3 frases. Consultoria (norma/estabilidade): 3 a 6 frases claras. Não comece com "Um momento" — o app já coloca isso.
 

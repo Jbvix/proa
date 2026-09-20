@@ -3,7 +3,7 @@
 **Projeto:** Proa · PWA de passadiço para rebocador
 **Organização:** TugLife Systems
 **Autor:** Jossian Brito
-**Versão do documento:** 1.4.0
+**Versão do documento:** 1.5.0
 **Data:** 2026-09-20 02:14 UTC (ano 2026)
 
 ---
@@ -220,9 +220,9 @@ contrações naturais, sem emoji, sem lista numerada.
   NORMAM, MARPOL, SOLAS.
 - **Regra dura:** fatos só do contexto ao vivo. Não inventa posição, Hs, SOG,
   ETA, waypoint nem número de regra. Se faltar dado, diz que não tem.
-- **Alertas espontâneos:** XTE acima do limite e passagem de waypoint. A decisão
-  vive em `voice-alerts.ts`, pura e testada, com travas de cadência de 45 s
-  (XTE) e 18 s (waypoint). O fim de turno **não** dispara — ver §9.
+- **Alertas espontâneos:** XTE acima do limite e passagem de waypoint, e mais
+  nada. A decisão vive em `voice-alerts.ts`, pura e testada, com travas de
+  cadência de 45 s (XTE) e 18 s (waypoint).
 
 ## 8. Privacidade e segurança
 
@@ -288,12 +288,39 @@ de casca. Nenhum alvo foi removido: os dois continuam necessários.
 | P7 | Peso morto: `multiplayer/`, `app-data/`, `auth/`, endpoints duplicados, deps órfãs | ✅ **Feito em 1.3.0** |
 | P8 | Migrar `seaPenalty` para STAWAVE-1 (∝ Hs²), calibrado com dado de viagem real | **Pendente** |
 | P9 | `voice-assistant.tsx` tem 1.025 linhas e 30+ refs; quebrar em hooks | 🟡 **Parcial em 1.4.0** — três peças extraídas, o laço de turno continua no componente |
-| **BUG** | **O aviso de fim de turno não dispara.** `dueWarn`, `dueWatch`, `watchLine` e `watchWarnLine` estão implementados em `crew.ts` e cobertos por teste, mas nenhum componente os chama. O fio foi cortado em `5e2c387` ("Sprint 1: … XTE-only alerts"), que estreitou o laço de avisos. Como as funções e os testes ficaram, a suíte segue verde e ninguém percebeu. Religar é acrescentar um ramo em `tickAlerts` e a fala correspondente. **Aguardando decisão:** o título do commit sugere corte deliberado, então não foi religado por conta própria. | **Aberto** |
+| ~~BUG~~ | ~~O aviso de fim de turno não dispara~~ | ✅ **Resolvido em 1.5.0 por remoção** — ver §10 |
 | — | Limite de taxa global (hoje é por instância quente): exige Netlify Blobs, Redis ou equivalente | Ideia |
 | — | Calibração assistida: regressão de `hsObs` contra `hsForecast` ao longo da viagem | Ideia |
 | — | Assinatura hidrodinâmica: acumular (heave, roll) × (Hs, Tz, encontro) = RAO experimental do casco | Ideia |
 
 ## 10. Histórico de versões
+
+### 1.5.0 — 2026-09-20
+
+Removido o controle de turno de tripulação.
+
+O defeito achado na 1.4.0 tinha duas saídas: religar o aviso ou tirar a
+funcionalidade. Foi tirada, e a razão é de produto, não de código: o app
+aceitava "me avisa quando acabar o turno do Pedro", respondia **"Fechou. Aviso
+o Pedro às 20:00."** — e não avisava. Enquanto o fio esteve cortado, essa frase
+foi uma mentira dita à tripulação. **Num app de passadiço, promessa que não se
+cumpre é pior que recurso que não existe**: quem confia no aviso não põe o
+despertador.
+
+Saíram de `crew.ts` o tipo `CrewWatch` e as funções `parseWatchAsk`,
+`parseWatchCancel`, `upsertWatch`, `dropWatch`, `pruneWatches`, `dueWarn`,
+`dueWatch`, `watchLine`, `watchWarnLine` e `parseClockPt` — esta última um
+analisador de hora em português ("às 8 da manhã", "20h", "daqui 2 horas") que
+não tinha nenhum outro consumidor. Com elas saíram `crewWatches` do store, o
+campo `turnos[]` do contexto da Lara, a resposta rápida sobre turno, a linha
+"Turno:" do prompt do sistema, o painel de turnos na gaveta da conversa e as
+duas regras de eco para "fim de turno", que a Lara não diz mais.
+
+O **cadastro de nomes da tripulação continua** — é o que faz a Lara chamar o
+pessoal pelo nome, e não depende de turno nenhum.
+
+`crew.ts` cai de 228 para 79 linhas; `voice-assistant.tsx` de 952 para 899.
+Cobertura: 164 para 159 testes, a diferença sendo os 5 testes de turno.
 
 ### 1.4.0 — 2026-09-20
 

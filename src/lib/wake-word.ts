@@ -118,8 +118,6 @@ export function isAlanaEcho(raw: string, lastLine?: string | null) {
   if (/segura o rumo/.test(t) && t.length < 96) return true;
   if (/me chama (quando|se) precisar/.test(t)) return true;
   if (/nao peguei/.test(t) && t.length < 64) return true;
-  if (/fim de turno/.test(t) && t.length < 96) return true;
-  if (/pro fim de turno/.test(t) && t.length < 96) return true;
   if (/^(fechou|beleza|tranquilo|olha so)\b/.test(t) && t.length < 64) return true;
   const last = foldPt(lastLine ?? "");
   if (!last) return false;

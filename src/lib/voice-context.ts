@@ -45,7 +45,6 @@ export type VoiceContext = {
   waypoints: { nome: string; nm: number; faltaNm: number | null; eta: string | null; hsPrev: number | null }[];
   cidades: { nome: string; faltaNm: number; eta: string | null; passou: boolean }[];
   tripulacao: string[];
-  turnos: { nome: string; fim: string; faltaMin: number }[];
   agora: string;
   mar: {
     hsCasco: number;
@@ -112,9 +111,8 @@ export function buildVoiceContext(opts: {
   profile: EngineProfile;
   tab?: string;
   crewNames?: string[];
-  crewWatches?: { name: string; endMs: number; fired: boolean }[];
 }): VoiceContext {
-  const { engine, meteo, route, rpm, profile, tab, crewNames = [], crewWatches = [] } = opts;
+  const { engine, meteo, route, rpm, profile, tab, crewNames = [] } = opts;
   const passage = passageOf(route, engine);
   const plan = planFloodArrival(
     meteo?.tideHours ?? [],
@@ -238,14 +236,6 @@ export function buildVoiceContext(opts: {
     aviso: "Nós e milhas. Fatos só daqui. Consulta de bordo, não texto oficial.",
     agora: formatNowStamp(nowMs),
     tripulacao: crewNames.slice(0, 6),
-    turnos: crewWatches
-      .filter((w) => !w.fired && w.endMs > nowMs - 60_000)
-      .slice(0, 4)
-      .map((w) => ({
-        nome: w.name,
-        fim: formatEtaDay(w.endMs, nowMs),
-        faltaMin: Math.max(0, Math.round((w.endMs - nowMs) / 60_000)),
-      })),
     viagem: {
       nome: route?.name ?? null,
       origem: origin ? withCity(origin.lat, origin.lon, origin.name || "Origem") : null,
