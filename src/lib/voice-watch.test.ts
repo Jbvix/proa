@@ -42,7 +42,7 @@ const underway = {
 };
 
 test("Alana calls XTE only after crossing the limit, then waits to reset", () => {
-  let s = WATCH_IDLE;
+  const s = WATCH_IDLE;
   let a = tickWatch(s, { ...underway, xteNm: 0.1 });
   assert.equal(a.alert, null);
   a = tickWatch(a.state, { ...underway, xteNm: XTE_ON_NM });

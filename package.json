@@ -16,7 +16,9 @@
     "preview:stop": "node scripts/preview.mjs stop",
     "typecheck": "tsc --noEmit",
     "check:auth": "node scripts/check-auth-invariant.mjs",
-    "test": "node --test 'scripts/**/*.test.mjs' && node --experimental-strip-types --test src/lib/app-data/app-data.test.ts src/lib/app-data/readiness-schedule.test.ts src/lib/auth/gate-identity.test.ts src/lib/auth/sign-in-gate.test.ts src/lib/waves.test.ts src/lib/wake-word.test.ts src/lib/rpm.test.ts src/lib/coastline.test.ts src/lib/voice-watch.test.ts src/lib/voice-pcm.test.ts src/lib/crew.test.ts src/lib/places.test.ts src/lib/alana-presence.test.ts src/lib/gpx-waypoints.test.ts src/lib/voice-quick.test.ts src/lib/bridge-knowledge.test.ts src/lib/voice-print.test.ts src/lib/waypoint-pass.test.ts",
+    "test": "node --experimental-strip-types --test 'src/**/*.test.ts'",
+    "test:scaffold": "node --test 'scripts/**/*.test.mjs'",
+    "test:all": "npm run test && npm run test:scaffold",
     "lint": "eslint .",
     "format": "prettier --write ."
   },

@@ -55,6 +55,7 @@ const BOOT_ENGINE: EngineSnapshot = {
   },
   rollP2P: 0,
   hz: 0,
+  imuHz: 0,
   simNm: 0,
   lastHourKey: 0,
   permission: "unknown",

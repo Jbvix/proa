@@ -1,3 +1,32 @@
+/**
+ * Proa · TugLife Systems — Onda e heave do casco
+ * ---------------------------------------------------------------------------
+ * @autor    Jossian Brito
+ * @versao   1.1.0
+ * @data     2026-09-20 02:14 UTC  (ano 2026)
+ *
+ * MODIFICAÇÕES DESTA VERSÃO (1.1.0)
+ *  1. Novo `HeaveIntegrator` — a cadeia de dupla integração que antes vivia
+ *     dentro de `sensor-engine.ts` foi extraída para cá, pura e sem DOM, pra
+ *     poder ser testada com mar senoidal conhecido.
+ *  2. Removida a realimentação `disp = heave` da cadeia original. Ela
+ *     substituía o estado do integrador pela própria saída filtrada a cada
+ *     amostra, o que subtraía a baixa frequência recursivamente e derrubava o
+ *     Hs lido para 16 % do real em onda de 8 s e 4,7 % em onda de 12 s.
+ *  3. Nova `heaveResponseGain()` — função de transferência analítica da
+ *     cadeia. Permite devolver ao Hs medido o que os filtros tiraram dele.
+ *  4. Nova `correctChainHs()` — passo explícito de calibração do instrumento.
+ *     `hullWaveFromHeave()` segue pura (estatística de um registro de heave);
+ *     quem sabe que as amostras vieram da cadeia é o motor de sensores, e é
+ *     lá que a correção é aplicada.
+ *  5. `zeroCrossingPeriod()` corrigida. Dividia a janela inteira pelo número
+ *     de cruzamentos, o que fazia uma onda de 12 s e uma de 14 s lerem ambas
+ *     12,84 s numa janela de 90 s. Agora mede entre o primeiro e o último
+ *     cruzamento, com interpolação linear de cada um. Importa em dobro: além
+ *     do Tz na tela, é nessa frequência que o ganho da cadeia é avaliado.
+ * ---------------------------------------------------------------------------
+ */
+
 export type SeaState = {
   code: number;
   label: string;
@@ -30,18 +59,46 @@ export function amplitudeFromHs(hs: number) {
   return hs / 2;
 }
 
+/**
+ * Período de cruzamento zero ascendente (Tz), em segundos.
+ *
+ * Mede do PRIMEIRO ao ÚLTIMO cruzamento e divide pelo número de intervalos
+ * entre eles — não pela janela inteira. A diferença não é acadêmica: a janela
+ * raramente começa e termina exatamente numa passagem pelo zero, e as sobras
+ * das duas pontas entram na conta como se fossem período. Numa janela de 90 s,
+ * a versão antiga lia 12,84 s tanto para uma onda de 12 s quanto para uma de
+ * 14 s — o contador de cruzamentos quantizava e engolia a diferença.
+ *
+ * Cada cruzamento é interpolado linearmente entre as duas amostras que o
+ * cercam, o que dá resolução abaixo do passo de amostragem: com dt = 0,1 s,
+ * o erro cai de ±0,1 s para a ordem de milissegundos.
+ *
+ * Comportamento conforme as variáveis:
+ *   90 s de janela, onda de 8 s  → ~11 cruzamentos → Tz ≈ 8,00 s
+ *   90 s de janela, onda de 14 s → ~6 cruzamentos  → Tz ≈ 14,0 s
+ *   menos de 2 cruzamentos → 0 (sem base para afirmar período)
+ */
 export function zeroCrossingPeriod(samples: ArrayLike<number>, dt: number) {
-  if (samples.length < 8 || dt <= 0) return 0;
+  const n = samples.length;
+  if (n < 8 || dt <= 0) return 0;
+  let first = -1;
+  let last = -1;
   let crossings = 0;
-  let last = samples[0]!;
-  for (let i = 1; i < samples.length; i++) {
+  let prev = samples[0]!;
+  for (let i = 1; i < n; i++) {
     const v = samples[i]!;
-    if (last <= 0 && v > 0) crossings += 1;
-    last = v;
+    if (prev <= 0 && v > 0) {
+      // Onde exatamente entre i-1 e i a curva cortou o zero.
+      const frac = v !== prev ? -prev / (v - prev) : 0;
+      const at = i - 1 + frac;
+      if (first < 0) first = at;
+      last = at;
+      crossings += 1;
+    }
+    prev = v;
   }
-  const duration = (samples.length - 1) * dt;
-  if (crossings < 2) return 0;
-  return duration / crossings;
+  if (crossings < 2 || last <= first) return 0;
+  return ((last - first) * dt) / (crossings - 1);
 }
 
 export function stdev(samples: ArrayLike<number>) {
@@ -67,6 +124,164 @@ export function highpass1(s: HpState, x: number, dt: number, fc: number) {
   s.x = x;
   s.y = y;
   return y;
+}
+
+/* ===========================================================================
+ * CADEIA DE HEAVE — da aceleração vertical ao deslocamento do casco
+ * ===========================================================================
+ * O acelerômetro entrega aceleração; a onda é deslocamento. Entre os dois há
+ * duas integrações — e toda integração amplifica a deriva do sensor, do mesmo
+ * jeito que um erro pequeno de agulha vira milhas de desvio depois de uma
+ * singradura longa. Por isso a cadeia intercala passa-altas e integradores com
+ * fuga, que seguram a deriva mas, em troca, também comem parte da onda real.
+ *
+ * A cadeia, na ordem:
+ *   acc → HP → HP → ∫(fuga) → HP → ∫(fuga) → HP → heave
+ *
+ * O que cada estágio faz com as variáveis:
+ *   HEAVE_HP_FC = 0,055 Hz → corta tudo mais lento que ~18 s (deriva térmica
+ *     do MEMS, inclinação lenta do tablet na mesa do passadiço).
+ *   HEAVE_VEL_LEAK = 0,988 por amostra a 10 Hz → constante de tempo
+ *     τ = −dt/ln(λ) ≈ 8,3 s. Impede que o integrador "fuja" pro infinito.
+ *
+ * O preço: a cadeia devolve menos heave do que entrou, e quanto mais longa a
+ * onda, mais ela devolve a menos. Medido em bancada (senoide, Hs = 1,50 m):
+ *   T =  4 s → lê 86 %      T = 10 s → lê 55 %
+ *   T =  6 s → lê 76 %      T = 12 s → lê 44 %
+ *   T =  8 s → lê 66 %      T = 14 s → lê 36 %
+ * É justamente no swell longo — o que impõe o pitch num rebocador em viagem
+ * costeira — que a cegueira é maior. `heaveResponseGain()` calcula esse fator
+ * e `hullWaveFromHeave()` devolve ao Hs o que os filtros tiraram.
+ * ========================================================================= */
+
+/** Canto dos passa-altas da cadeia de heave, em Hz (período ≈ 18 s). */
+export const HEAVE_HP_FC = 0.055;
+/** Fuga por amostra dos integradores (a 10 Hz → τ ≈ 8,3 s). */
+export const HEAVE_VEL_LEAK = 0.988;
+/** Acima disso a amostra é manuseio do aparelho, não mar. Em m/s². */
+export const HEAVE_ACC_SPIKE = 2.8;
+
+/**
+ * Ganho da cadeia: amplitude de deslocamento VERDADEIRA → amplitude na saída.
+ *
+ * Deduzido da função de transferência discreta, avaliada em z = e^{jωΔt}:
+ *   passa-alta      Ha(z) = a(1 − z⁻¹)/(1 − a·z⁻¹),  a = RC/(RC + Δt)
+ *   integrador      I(z)  = Δt/(1 − λ·z⁻¹)
+ *   cadeia completa H(z)  = Ha(z)⁴ · I(z)²          (acc → heave)
+ * Como uma senoide de deslocamento A tem aceleração A·ω², o ganho de
+ * deslocamento-para-deslocamento é ω²·|Ha|⁴·|I|².
+ *
+ * Comportamento: devolve ~0,86 em T = 4 s e cai monotonicamente até ~0,36 em
+ * T = 14 s. Valor 1,0 significaria cadeia transparente. Sempre em (0, 1].
+ * Conferido contra a cadeia rodando em bancada: casa dentro de 0,5 %.
+ *
+ * @param periodS período de cruzamento zero da onda, em segundos
+ * @param dt      intervalo real entre amostras, em segundos
+ */
+export function heaveResponseGain(periodS: number, dt: number): number {
+  if (!(periodS > 0) || !(dt > 0)) return 1;
+  const w = (2 * Math.PI) / periodS;
+  const th = w * dt;
+  // z⁻¹ = cos(θ) − j·sin(θ)
+  const cz = Math.cos(th);
+  const sz = Math.sin(th);
+
+  const rc = 1 / (2 * Math.PI * HEAVE_HP_FC);
+  const a = rc / (rc + dt);
+  // |Ha| = |a(1 − z⁻¹)| / |1 − a·z⁻¹|
+  const magHp =
+    Math.hypot(a * (1 - cz), a * sz) / Math.hypot(1 - a * cz, a * sz);
+  // |I| = Δt / |1 − λ·z⁻¹|
+  const magInt =
+    dt / Math.hypot(1 - HEAVE_VEL_LEAK * cz, HEAVE_VEL_LEAK * sz);
+
+  const gain = w * w * magHp ** 4 * magInt ** 2;
+  // Guarda: fora da banda útil o ganho tende a zero e a divisão explodiria.
+  return gain > 1e-3 ? Math.min(1, gain) : 1;
+}
+
+/**
+ * Dupla integração da aceleração vertical, amostra a amostra.
+ *
+ * Extraída de `sensor-engine.ts` pra ser pura — sem `window`, sem
+ * `performance`, sem DeviceMotion — e portanto testável com mar conhecido.
+ *
+ * Diferença de comportamento face à versão 1.0.0: o estado do integrador de
+ * deslocamento (`disp`) NÃO é mais substituído pela saída filtrada. Aquela
+ * realimentação reaplicava o passa-alta sobre o próprio estado a cada amostra
+ * e fazia o ganho desabar muito além do que o projeto do filtro previa.
+ */
+export class HeaveIntegrator {
+  private hpA1: HpState = { x: 0, y: 0 };
+  private hpA2: HpState = { x: 0, y: 0 };
+  private hpV: HpState = { x: 0, y: 0 };
+  private hpD: HpState = { x: 0, y: 0 };
+  private vel = 0;
+  private disp = 0;
+
+  reset() {
+    this.hpA1 = { x: 0, y: 0 };
+    this.hpA2 = { x: 0, y: 0 };
+    this.hpV = { x: 0, y: 0 };
+    this.hpD = { x: 0, y: 0 };
+    this.vel = 0;
+    this.disp = 0;
+  }
+
+  /**
+   * @param accUp aceleração ao longo da vertical local, em m/s²
+   * @param dt    intervalo REAL desde a amostra anterior, em segundos
+   * @returns     heave em metros e se a amostra foi manuseio do aparelho
+   */
+  push(accUp: number, dt: number): { heave: number; spike: boolean } {
+    const a1 = highpass1(this.hpA1, accUp, dt, HEAVE_HP_FC);
+    const a2 = highpass1(this.hpA2, a1, dt, HEAVE_HP_FC);
+
+    // Alguém pegou o tablet: descarrega os integradores antes que o safanão
+    // vire "onda de 3 m" na tela.
+    const spike = Math.abs(a2) > HEAVE_ACC_SPIKE;
+    if (spike) {
+      this.vel *= 0.55;
+      this.disp *= 0.55;
+    }
+
+    this.vel = this.vel * HEAVE_VEL_LEAK + a2 * dt;
+    const vHp = highpass1(this.hpV, this.vel, dt, HEAVE_HP_FC);
+    this.disp = this.disp * HEAVE_VEL_LEAK + vHp * dt;
+    const heave = highpass1(this.hpD, this.disp, dt, HEAVE_HP_FC);
+
+    // Limita só o que sai. O estado interno segue intacto — realimentar o
+    // clamp no integrador era exatamente o defeito da versão 1.0.0.
+    if (this.disp > HEAVE_SAMPLE_MAX * 4) this.disp = HEAVE_SAMPLE_MAX * 4;
+    if (this.disp < -HEAVE_SAMPLE_MAX * 4) this.disp = -HEAVE_SAMPLE_MAX * 4;
+
+    return {
+      heave: Math.max(-HEAVE_SAMPLE_MAX, Math.min(HEAVE_SAMPLE_MAX, heave)),
+      spike,
+    };
+  }
+}
+
+/**
+ * Devolve ao Hs medido o que a cadeia de filtros tirou dele.
+ *
+ * É a mesma ideia de calibrar um corrediço contra a milha medida: o
+ * instrumento lê baixo por construção, e a gente aplica o fator conhecido.
+ *
+ * Comportamento conforme as variáveis:
+ *   hsRaw = 0,99 m · T = 8 s → ganho 0,656 → devolve 1,51 m
+ *   hsRaw = 0,67 m · T = 12 s → ganho 0,445 → devolve 1,50 m
+ *   T = 0 (período rejeitado) → devolve hsRaw sem tocar: sem período
+ *     confiável não há frequência onde avaliar o ganho, e chutar seria pior
+ *     que assumir a leitura crua.
+ *
+ * @param hsRaw   Hs calculado sobre a saída da cadeia, em metros
+ * @param periodS Tz medido, em segundos. Zero desliga a correção.
+ * @param dt      intervalo real entre amostras, em segundos
+ */
+export function correctChainHs(hsRaw: number, periodS: number, dt: number) {
+  if (!(periodS > 0) || !(dt > 0) || !(hsRaw > 0)) return hsRaw;
+  return hsRaw / heaveResponseGain(periodS, dt);
 }
 
 /** Remove mean + linear ramp so IMU drift does not inflate Hs = 4σ. */

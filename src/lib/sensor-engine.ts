@@ -1,13 +1,44 @@
-import { alongTrack, haversineNm, msToKn } from "./geo";
-import type { ParsedRoute } from "./gpx";
+/**
+ * Proa · TugLife Systems — Motor de sensores de bordo
+ * ---------------------------------------------------------------------------
+ * @autor    Jossian Brito
+ * @versao   1.1.0
+ * @data     2026-09-20 02:14 UTC  (ano 2026)
+ *
+ * MODIFICAÇÕES DESTA VERSÃO (1.1.0)
+ *  1. CORREÇÃO CRÍTICA DE TAXA DE AMOSTRAGEM. Até a 1.0.0, todo evento
+ *     `devicemotion` era integrado com `dt` fixo de 1/10 s. Mas o IMU de
+ *     tablet e smartphone dispara a ~60 Hz, não a 10 Hz. O resultado era
+ *     integrar com um passo 6× maior que o real: num mar de 1,50 m e 8 s, o
+ *     app mostrava 0,008 m e período zero. O simulador não sofria do defeito
+ *     porque empurrava amostras de dentro do próprio `tick()`, a 10 Hz certos
+ *     — ou seja, a bancada mentia bonito e o mar não.
+ *     Agora as amostras do IMU são ACUMULADAS entre ticks e decimadas para a
+ *     grade de 10 Hz com o `dt` medido de verdade. A média sobre a janela faz
+ *     as vezes de filtro anti-aliasing, como convém a toda decimação.
+ *  2. A cadeia de dupla integração saiu daqui para `waves.ts`
+ *     (`HeaveIntegrator`), pura e testável, e sem a realimentação
+ *     `disp = heave` que derrubava o Hs lido.
+ *  3. O Hs passa por `correctChainHs()` — a resposta dos filtros é conhecida
+ *     analiticamente e agora é compensada.
+ *  4. Novo campo `imuHz` no snapshot: a taxa REAL do acelerômetro. É o número
+ *     que prova, no aparelho, que a correção (1) está de pé.
+ *  5. A estatística de onda passa a usar o período MEDIDO do tick em vez do
+ *     nominal de 10 Hz. Mesma classe de erro da correção (1), um nível
+ *     acima: `setInterval` deriva quando o navegador estrangula a aba.
+ * ---------------------------------------------------------------------------
+ */
+import { alongTrack, haversineNm, msToKn } from "./geo.ts";
+import type { ParsedRoute } from "./gpx.ts";
 import {
-  HEAVE_SAMPLE_MAX,
+  HS_HULL_MAX,
+  HeaveIntegrator,
   WAVE_STATS_S,
-  highpass1,
+  amplitudeFromHs,
+  correctChainHs,
   hullWaveFromHeave,
   sustainedRollP2P,
-  type HpState,
-} from "./waves";
+} from "./waves.ts";
 
 export type SensorMode = "idle" | "sim" | "live";
 
@@ -48,6 +79,8 @@ export type EngineSnapshot = {
   wave: WaveLive;
   rollP2P: number;
   hz: number;
+  /** Taxa real medida do acelerômetro, em Hz. Zero enquanto nada chegou. */
+  imuHz: number;
   simNm: number;
   lastHourKey: number;
   permission: "unknown" | "granted" | "denied" | "unavailable";
@@ -69,9 +102,8 @@ const SCOPE_S = 24;
 const SCOPE_CAP = HEAVE_HZ * SCOPE_S;
 const ROLL_S = 16;
 const ROLL_CAP = HEAVE_HZ * ROLL_S;
-const HP_FC = 0.055;
-const ACC_SPIKE = 2.8;
-const VEL_LEAK = 0.988;
+/** Sem amostra de IMU por mais que isto, o sensor é dado como parado. */
+const MOTION_STALL_MS = 400;
 
 type Listener = (snap: EngineSnapshot) => void;
 
@@ -88,9 +120,6 @@ function emptyWave(): WaveLive {
   };
 }
 
-function hpState(): HpState {
-  return { x: 0, y: 0 };
-}
 
 export class SensorEngine {
   mode: SensorMode = "idle";
@@ -106,12 +135,14 @@ export class SensorEngine {
   private orientOn = false;
   private timer: number | null = null;
   private lastTick = 0;
-  private hpA1 = hpState();
-  private hpA2 = hpState();
-  private hpV = hpState();
-  private hpD = hpState();
-  private vel = 0;
-  private disp = 0;
+  private heave = new HeaveIntegrator();
+  /** Soma das acelerações verticais chegadas do IMU desde o último tick. */
+  private accSum = 0;
+  /** Quantas amostras do IMU entraram nessa soma — a base da decimação. */
+  private accCount = 0;
+  private imuTicks = 0;
+  private imuHz = 0;
+  private imuStamp = 0;
   private heaveBuf = new Float32Array(HEAVE_CAP);
   private heaveN = 0;
   private heaveI = 0;
@@ -150,6 +181,7 @@ export class SensorEngine {
       wave: this.waveStats(),
       rollP2P: this.rollSwing(),
       hz: this.hz,
+      imuHz: this.imuHz,
       simNm: this.simNm,
       lastHourKey: this.lastHourKey,
       permission: this.permission,
@@ -233,12 +265,12 @@ export class SensorEngine {
   }
 
   private resetFilters() {
-    this.hpA1 = hpState();
-    this.hpA2 = hpState();
-    this.hpV = hpState();
-    this.hpD = hpState();
-    this.vel = 0;
-    this.disp = 0;
+    this.heave.reset();
+    this.accSum = 0;
+    this.accCount = 0;
+    this.imuTicks = 0;
+    this.imuHz = 0;
+    this.imuStamp = 0;
     this.heaveN = 0;
     this.heaveI = 0;
     this.scopeI = 0;
@@ -398,24 +430,36 @@ export class SensorEngine {
     const accUp = hasLin
       ? m.ax * ux + m.ay * uy + m.az * uz
       : m.gx * ux + m.gy * uy + m.gz * uz - gMag;
-    this.pushHeaveFromAcc(accUp, 1 / HEAVE_HZ, m.t);
+    // NÃO integra aqui. O IMU chega a ~60 Hz e a cadeia trabalha a 10 Hz;
+    // quem fecha a conta é o tick, com o dt medido. Aqui só se acumula.
+    this.accSum += accUp;
+    this.accCount += 1;
+    this.imuTicks += 1;
+    if (this.imuStamp === 0) this.imuStamp = m.t;
+    else if (m.t - this.imuStamp >= 1000) {
+      this.imuHz = (this.imuTicks * 1000) / (m.t - this.imuStamp);
+      this.imuTicks = 0;
+      this.imuStamp = m.t;
+    }
   }
 
-  private pushHeaveFromAcc(acc: number, dt: number, now = performance.now()) {
-    const a1 = highpass1(this.hpA1, acc, dt, HP_FC);
-    const a2 = highpass1(this.hpA2, a1, dt, HP_FC);
-    if (Math.abs(a2) > ACC_SPIKE) {
-      this.handlingUntil = now + 2500;
-      this.vel *= 0.55;
-      this.disp *= 0.55;
-    }
-    this.vel = this.vel * VEL_LEAK + a2 * dt;
-    const vHp = highpass1(this.hpV, this.vel, dt, HP_FC);
-    this.disp = this.disp * VEL_LEAK + vHp * dt;
-    let heave = highpass1(this.hpD, this.disp, dt, HP_FC);
-    if (heave > HEAVE_SAMPLE_MAX) heave = HEAVE_SAMPLE_MAX;
-    if (heave < -HEAVE_SAMPLE_MAX) heave = -HEAVE_SAMPLE_MAX;
-    this.disp = heave;
+  /**
+   * Fecha uma amostra de 10 Hz e a entrega à cadeia de integração.
+   *
+   * A média das amostras do IMU acumuladas desde o tick anterior é a própria
+   * decimação: média de janela é um passa-baixa, que é o anti-aliasing que
+   * toda redução de taxa exige. Sem ela, uma vibração de motor a 25 Hz
+   * rebateria dentro da banda da onda e viraria mar que não existe.
+   *
+   * @param dt  intervalo REAL desde o tick anterior, em segundos
+   * @param now relógio monotônico, para a janela de manuseio
+   */
+  private pushHeaveTick(dt: number, now: number) {
+    const acc = this.accCount > 0 ? this.accSum / this.accCount : 0;
+    this.accSum = 0;
+    this.accCount = 0;
+    const { heave, spike } = this.heave.push(acc, dt);
+    if (spike) this.handlingUntil = now + 2500;
     this.pushSample(heave);
   }
 
@@ -490,9 +534,12 @@ export class SensorEngine {
         this.seedFix();
       }
     } else if (this.mode === "live") {
-      if (now - this.lastLiveMotion > 400) {
-        this.pushHeaveFromAcc(0, dt, now);
-      }
+      // Uma amostra por tick, sempre. É isso que mantém a grade de 10 Hz
+      // honesta e faz `windowS` valer o que diz. Se o IMU parou de mandar, a
+      // média sai zero e a cadeia relaxa sozinha, em vez de congelar a última
+      // leitura e fingir mar parado.
+      if (now - this.lastLiveMotion > MOTION_STALL_MS) this.imuHz = 0;
+      this.pushHeaveTick(dt, now);
     }
 
     this.emit();
@@ -520,18 +567,38 @@ export class SensorEngine {
     const slice = new Float32Array(n);
     const start = (this.heaveI - n + HEAVE_CAP) % HEAVE_CAP;
     for (let i = 0; i < n; i++) slice[i] = this.heaveBuf[(start + i) % HEAVE_CAP]!;
-    const dt = 1 / HEAVE_HZ;
+    // Uma amostra por tick, tanto no simulador quanto ao vivo. Então o passo
+    // da grade é o período REAL do tick, não o nominal: `setInterval` de 100 ms
+    // deriva quando o navegador estrangula a aba, e assumir 10 Hz cravados foi
+    // exatamente o erro que fez o app mentir na 1.0.0. Só se aceita a taxa
+    // medida dentro de uma banda sadia; fora dela, o nominal é o mal menor.
+    const medida = this.hz;
+    const dt = medida >= 5 && medida <= 20 ? 1 / medida : 1 / HEAVE_HZ;
     const w = hullWaveFromHeave(slice, dt);
+
+    // Só o mar ao vivo passou pela cadeia de filtros e precisa de compensação.
+    // O simulador injeta deslocamento direto no buffer; corrigir ali inflaria
+    // um número que já é verdadeiro.
+    const live = this.mode === "live";
+    const hsRaw = w.hsM;
+    let hsM = live ? correctChainHs(hsRaw, w.periodS, dt) : hsRaw;
+    const clamped = w.clamped || hsM > HS_HULL_MAX;
+    hsM = Math.min(HS_HULL_MAX, hsM);
+
+    // Sem período confiável não há frequência onde avaliar o ganho, então a
+    // leitura fica crua — e subestimada. O passadiço merece saber disso: some
+    // o selo de confiança em vez de mostrar número bonito e errado.
+    const uncompensated = live && hsRaw > 0 && w.periodS <= 0;
     const handling = performance.now() < this.handlingUntil;
     return {
       heaveM: slice[n - 1]!,
-      hsM: w.hsM,
-      amplitudeM: w.amplitudeM,
+      hsM,
+      amplitudeM: amplitudeFromHs(hsM),
       periodS: w.periodS,
       perMin: w.perMin,
       samples: n,
       windowS: n * dt,
-      trusted: !w.clamped && !handling,
+      trusted: !clamped && !handling && !uncompensated,
     };
   }
 

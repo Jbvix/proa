@@ -26,7 +26,7 @@ test("does not dump waypoints already behind on start", () => {
 });
 
 test("fires once when the tug crosses a waypoint", () => {
-  let s = tickWaypointPass(PASS_IDLE, { ...go, alongNm: 7.8 }).state;
+  const s = tickWaypointPass(PASS_IDLE, { ...go, alongNm: 7.8 }).state;
   let a = tickWaypointPass(s, { ...go, alongNm: 8.15 });
   assert.equal(a.passed?.nome, "WP meio");
   a = tickWaypointPass(a.state, { ...go, alongNm: 8.4 });

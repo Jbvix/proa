@@ -1,6 +1,6 @@
-import { alongTrack, crossTrackOf, nearestProgress, pathLengthNm, type XteFix } from "./geo";
-import type { ParsedRoute } from "./gpx";
-import type { EngineSnapshot } from "./sensor-engine";
+import { alongTrack, crossTrackOf, nearestProgress, pathLengthNm, type XteFix } from "./geo.ts";
+import type { ParsedRoute } from "./gpx.ts";
+import type { EngineSnapshot } from "./sensor-engine.ts";
 
 export type Passage = {
   alongNm: number;

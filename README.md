@@ -23,9 +23,28 @@ Captura movimento e posição do rebocador, atualiza características de onda a 
 
 Dados ficam só neste aparelho (sem conta, sem nuvem).
 
+## Documentação
+
+- [Documento de Design (GDD)](docs/GDD.md) — arquitetura, o motor de onda e as decisões de projeto
+- [Manual do Usuário](docs/MANUAL.md) — uso a bordo, precisão esperada e solução de problemas
+
 ## Stack
 
 TanStack Start (React 19), Vite, Tailwind v4, PWA.
+
+## Desenvolvimento
+
+```bash
+npm run dev            # servidor em :8080
+npm test               # testes de domínio (165) — tem de ficar verde
+npm run test:scaffold  # testes do andaime do template (exige .grok/)
+npm run test:all       # os dois
+npm run typecheck      # tsc --noEmit
+npm run lint           # eslint
+```
+
+`npm test` cobre só `src/` justamente pra ficar verde num clone limpo: os testes
+de `scripts/` dependem do diretório `.grok/`, que não vai pro repositório.
 
 Meteorologia: function Netlify `/api/meteo` (Open-Meteo Forecast + Marine). Com `OPENMETEO_API_KEY` no painel do Netlify, usa o endpoint comercial (`customer-api` / `customer-marine-api`). Sem a chave, cai no endpoint público (desenvolvimento). A chave nunca vai ao navegador; o JSON só traz `plano: "comercial" | "gratuito"`.
 

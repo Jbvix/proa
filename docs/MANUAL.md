@@ -1,0 +1,186 @@
+# Proa — Manual do Usuário
+
+**Para a tripulação do passadiço**
+**Autor:** Jossian Brito · TugLife Systems
+**Versão:** 1.1.0 · 2026-09-20 02:14 UTC (ano 2026)
+
+---
+
+## 1. O que o Proa faz
+
+O Proa usa o tablet como instrumento de bordo. O acelerômetro do aparelho sente
+o mar no casco, o GPS acompanha a derrota, e o app recomenda a **faixa de RPM
+de viagem**.
+
+O casco vira a boia: o mar que aparece na tela é o que o rebocador está
+sentindo agora, não o que um modelo global calculou para a região.
+
+## 2. Antes de sair
+
+### 2.1 Instalar
+
+Abra [tuglife-proa.netlify.app](https://tuglife-proa.netlify.app) e adicione à
+tela de início.
+
+- **iPad / iPhone:** botão Compartilhar → *Adicionar à Tela de Início*
+- **Android / Samsung:** menu ⋮ → *Instalar aplicativo*
+
+### 2.2 Fixar o aparelho
+
+**Isto é o que mais afeta a qualidade da medição.** O Proa mede o movimento do
+que está preso ao aparelho. Se o tablet estiver solto na mesa, ele mede a mesa.
+
+- Prenda firme à estrutura do passadiço — suporte, berço ou fita.
+- Quanto mais perto do centro do navio, melhor: nas extremidades, o pitch
+  soma-se ao heave e infla a leitura.
+- Não segure na mão durante a captura.
+
+### 2.3 Liberar os sensores
+
+Na primeira abertura o aparelho pede permissão de **localização** e de
+**movimento**. Precisa das duas.
+
+No tablet Samsung, **o primeiro toque na tela libera o microfone** — sem esse
+toque a Lara não ouve.
+
+## 3. Uso a bordo
+
+1. **Abra o Proa.** A captura e o mapa começam sozinhos.
+2. **Importe o GPX** da derrota na aba **Rota** (aceita track, rota ou waypoints).
+3. **Informe o RPM atual** na aba **RPM**.
+4. **Acompanhe** Painel, Ondas, Rota e RPM.
+5. **Toque em Conversar** para falar com a Lara. Toque de novo para encerrar.
+
+## 4. As quatro abas
+
+### Painel
+
+Visão geral: posição, SOG, rumo, mar ao vivo, vento e a faixa de RPM.
+
+O campo ao lado da velocidade diz **de onde veio o número**:
+
+| Indicação | Significado |
+|---|---|
+| `validada` | GPS e distância percorrida concordam. Pode confiar. |
+| `GPS 9.2 · derrota 4.0` | Discordam. Julgue: pode ser GPS ruim ou corrente. |
+| `derrota 4.1 nós` | Só a distância percorrida. O GPS não deu velocidade. |
+| `sem confirmação` | Ainda não há base para afirmar velocidade. |
+
+### Ondas
+
+O mar medido no casco: **Hs** (altura significativa), **amplitude**, **período**
+e o osciloscópio de heave dos últimos 24 s.
+
+**Leia o selo de confiança.** Quando o app não confia na própria leitura, ele
+avisa. Isso acontece quando:
+
+- alguém pegou o aparelho (a leitura fica suspensa por 2,5 s);
+- o Hs estourou o limite de casco (8 m) — é deriva do sensor, não mar;
+- **não há período confiável** — sem período, o app não consegue compensar os
+  filtros e o Hs sai subestimado.
+
+A leitura precisa de cerca de **90 segundos** de captura para assentar. Nos
+primeiros instantes depois de ligar, ignore.
+
+### Rota
+
+O GPX importado no mapa, com os waypoints do arquivo, previsão marinha em cada
+um, e o **afastamento da derrota (XTE)** com o bordo:
+
+- **BB** — bombordo, você está à esquerda de quem olha a proa da derrota
+- **EB** — estibordo, à direita
+- **na linha** — em cima da derrota
+
+### RPM
+
+A faixa recomendada, com o porquê: Hs, período, vento e o encontro com a onda
+(**mar de proa**, **de través** ou **de popa**).
+
+Abaixo, o conselho de combustível — se o tempo está a favor e dá para aliviar,
+ou se cortar RPM só vai alongar a viagem sem economizar.
+
+## 5. A Lara
+
+Colega de passadiço, não rádio.
+
+| Para... | Faça... |
+|---|---|
+| Começar a conversa | Toque em **Conversar** |
+| Acordar pela voz | Diga **"Lara"** |
+| Encerrar | Toque em **Conversar** de novo, ou diga "tchau, Lara" |
+
+**Pergunte à vontade sobre:** posição, quanto falta, ETA, mar, vento, maré,
+waypoints, turno da tripulação, COLREG, estabilidade (GM, superfície livre,
+lastro), NORMAM, MARPOL, SOLAS.
+
+**A Lara avisa sozinha** em três casos apenas: afastamento da derrota acima do
+limite, passagem de waypoint, e fim de turno de tripulante.
+
+> **A Lara orienta, não ordena.** É suporte de consultoria. Não substitui o
+> oficial de serviço nem o texto oficial da norma. Se ela não tiver o dado no
+> contexto, ela diz que não tem — e isso é de propósito.
+
+## 6. Precisão — o que esperar
+
+O mar medido no casco tem precisão de cerca de **±5 %** em ondas de 4 a 14
+segundos, depois que a janela de 90 s assenta.
+
+Fora dessa faixa:
+
+- **Abaixo de 3 s** — vaga muito curta, tratada como ruído e descartada.
+- **Acima de 16 s** — swell muito longo para a janela; o período é rejeitado e
+  o Hs sai sem compensação, ou seja, **abaixo do real**. O selo de confiança
+  cai. Nesse caso use a previsão do Open-Meteo.
+
+Se o Hs parecer baixo demais em swell longo, confira: (a) o aparelho está
+firme? (b) o período aparece na tela ou está em branco?
+
+## 7. Problemas comuns
+
+| Sintoma | O que fazer |
+|---|---|
+| Mapa parado numa posição fixa | GPS ainda esquentando. Depois de 4 s sem fix, o app cai em simulação — saia para o convés ou perto da janela. |
+| Hs em zero com mar visível | Aparelho solto ou permissão de movimento negada. Prenda firme e recarregue. |
+| Período em branco | Mar fora da faixa de 3 a 16 s, ou captura com menos de 90 s. |
+| A Lara não ouve | No Samsung, toque uma vez na tela. Confira a permissão de microfone. |
+| "Open-Meteo indisponível" | Sem rede. Vento e corrente passam a ser locais e aproximados; o mar do casco continua real. |
+| Tela clara demais à noite | Alterne o tema para `night`. |
+
+## 8. Seus dados
+
+Tudo fica **neste aparelho**, em armazenamento local. Sem conta, sem nuvem, sem
+banco de dados.
+
+Sai do aparelho apenas: a **coordenada** (para buscar a meteorologia) e o
+**áudio da sua fala** (para a transcrição, só enquanto a Lara está em conversa).
+
+Limpar os dados do site apaga: derrota importada, perfil de motor, nomes e
+turnos da tripulação, vozes cadastradas e o histórico de ondas.
+
+## 9. Para quem faz deploy
+
+**Site:** [tuglife-proa.netlify.app](https://tuglife-proa.netlify.app) ·
+Node 22 · comando `npm run build`
+
+| Variável | Papel |
+|---|---|
+| `VITE_AUTH_ENABLED=false` | O app não usa login nem banco |
+| `OPENMETEO_API_KEY` | Assinatura comercial Open-Meteo. Escopos: Functions + Runtime. Secret. |
+| `XAI_API_KEY` | Lara (Grok chat, STT e TTS). Functions + Runtime. Secret. |
+
+Nenhuma das chaves chega ao navegador.
+
+**Comandos de desenvolvimento:**
+
+```bash
+npm run dev            # servidor em :8080
+npm test               # testes de domínio (165) — tem de ficar verde
+npm run test:scaffold  # testes do andaime do template (precisa de .grok/)
+npm run test:all       # os dois
+npm run typecheck      # tsc --noEmit
+npm run lint           # eslint
+```
+
+---
+
+*Dúvidas e melhorias: Jossian Brito · TugLife Systems*
