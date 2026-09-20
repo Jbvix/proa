@@ -3,7 +3,7 @@
 **Projeto:** Proa · PWA de passadiço para rebocador
 **Organização:** TugLife Systems
 **Autor:** Jossian Brito
-**Versão do documento:** 1.2.0
+**Versão do documento:** 1.3.0
 **Data:** 2026-09-20 02:14 UTC (ano 2026)
 
 ---
@@ -76,6 +76,8 @@ PWA. Funções serverless em Netlify. Sem banco de dados.
 | `rpm.ts` | Faixa de RPM e conselho de combustível |
 | `tide.ts` | Fase de maré e janela de enchente |
 | `meteo.ts` | Open-Meteo, previsão por waypoint, fallback sintético |
+| `api-guard.ts` | Limite de taxa e allowlist de origem dos endpoints |
+| `api/*-handler.ts` | Lógica de `/api/meteo` e `/api/voice`, partilhada pelas duas pontas |
 
 ## 5. O motor de onda — decisões de projeto
 
@@ -256,13 +258,30 @@ preview e sandbox), localhost, e o que estiver em `PROA_ALLOWED_ORIGINS`.
 > um quebra-molas contra um laço, não um cofre contra um ataque distribuído.
 > Um limite global exige armazenamento compartilhado — ver §9.
 
+## 8.2 Os dois pontos de entrada de cada endpoint
+
+`/api/meteo` e `/api/voice` têm **duas** pontas, e as duas estão vivas em alvos
+diferentes:
+
+| Ponta | Onde serve |
+|---|---|
+| `src/routes/api/*.ts` (TanStack/Nitro) | desenvolvimento local, sandbox de preview, preset Vercel |
+| `netlify/functions/*.mts` | produção na Netlify — declara `path`, tem precedência sobre o SSR |
+
+Até a 1.2.0 cada ponta carregava sua própria cópia da lógica, e elas já tinham
+divergido (só a rota Nitro devolvia o cabeçalho de diagnóstico `x-proa-voice`).
+Duas cartas para a mesma derrota é como navegar sem saber qual está corrigida.
+
+Desde a 1.3.0 a lógica mora em `src/lib/api/` e as quatro pontas somam 44 linhas
+de casca. Nenhum alvo foi removido: os dois continuam necessários.
+
 ## 9. Trabalho futuro
 
 | # | Item | Estado |
 |---|---|---|
 | P4 | Código de estado do mar deslocado em 1 face à escala WMO; declividade com dimensão errada | ✅ **Feito em 1.2.0** |
 | P5 | `/api/voice` e `/api/meteo` públicos e sem limite de taxa sobre APIs pagas | ✅ **Feito em 1.2.0** |
-| P7 | Peso morto: `multiplayer/` (579 linhas, zero importações), `auth/` desligado (1.888), endpoints duplicados | **Pendente** |
+| P7 | Peso morto: `multiplayer/`, `app-data/`, `auth/`, endpoints duplicados, deps órfãs | ✅ **Feito em 1.3.0** |
 | P8 | Migrar `seaPenalty` para STAWAVE-1 (∝ Hs²), calibrado com dado de viagem real | **Pendente** |
 | P9 | `voice-assistant.tsx` tem 1.025 linhas e 30+ refs; quebrar em hooks | **Pendente** |
 | — | Limite de taxa global (hoje é por instância quente): exige Netlify Blobs, Redis ou equivalente | Ideia |
@@ -270,6 +289,37 @@ preview e sandbox), localhost, e o que estiver em `PROA_ALLOWED_ORIGINS`.
 | — | Assinatura hidrodinâmica: acumular (heave, roll) × (Hs, Tz, encontro) = RAO experimental do casco | Ideia |
 
 ## 10. Histórico de versões
+
+### 1.3.0 — 2026-09-20
+
+Amputação do peso morto. **−5.363 linhas de código e −36 dependências diretas**,
+sem mudar uma vírgula do comportamento do app.
+
+O que saiu, e a evidência de que estava morto:
+
+| Removido | Linhas | Evidência |
+|---|---|---|
+| `src/lib/multiplayer/` (P2P WebRTC) | 579 | zero importadores |
+| `src/lib/app-data/` (conectores Grok) | 768 | laço fechado — a ponte de preview disparava um evento que só um hook escutava, e esse hook nunca era montado |
+| `src/lib/auth/` | 1.888 | o `AuthProvider` era `return <>{children}</>`; nada disso entrava no bundle; README e GDD já declaravam "sem conta, sem nuvem" |
+| `src/lib/db.ts` + `migrations/` + `scripts/migrate*` | ~400 | só a auth usava |
+| `vite.config.ts`: `pgliteBootstrapPlugin`, `authPopupPlugin` | ~130 | dependiam do que saiu |
+| `src/components/route-plot.tsx` | 110 | substituído pelo `nautical-map.tsx` e nunca removido |
+| 31 dependências de UI (21 Radix, react-hook-form, react-query, react-table, cmdk, date-fns, sonner, vaul…) | — | nenhum import em lugar nenhum: biblioteca do template para telas que nunca existiram |
+| 5 dependências de banco (better-auth, pglite, pg, kysely, jose) | — | idem |
+
+Também **unificados** os endpoints duplicados: a lógica foi para
+`src/lib/api/`, e as quatro pontas viraram cascas (ver §8.2). Isso corrigiu uma
+divergência real — a function Netlify não devolvia o cabeçalho de diagnóstico
+que a rota Nitro devolvia.
+
+O que **não** saiu, e por quê: `react-dom` (é o renderizador),
+`@tanstack/router-plugin` (gera o route tree), e os scripts de andaime em
+`scripts/` (são do template, seguem funcionando, e mexer neles ampliaria o raio
+de explosão sem ganho de produto).
+
+Cobertura: 193 para 138 testes — a queda é só a saída dos 55 testes de `auth/`
+e `app-data/`. Nenhum teste de domínio foi perdido.
 
 ### 1.2.0 — 2026-09-20
 

@@ -36,7 +36,7 @@ TanStack Start (React 19), Vite, Tailwind v4, PWA.
 
 ```bash
 npm run dev            # servidor em :8080
-npm test               # testes de domínio (193) — tem de ficar verde
+npm test               # testes de domínio (138) — tem de ficar verde
 npm run test:scaffold  # testes do andaime do template (exige .grok/)
 npm run test:all       # os dois
 npm run typecheck      # tsc --noEmit
@@ -56,6 +56,6 @@ Build: `npm run build` · publicação: `dist` · Node 22.
 
 Variáveis:
 
-- `VITE_AUTH_ENABLED=false` — o app não usa login nem banco
+- `VITE_AUTH_ENABLED=false` — herdado do template; desde a 1.3.0 não há código de login nem banco no projeto
 - `OPENMETEO_API_KEY` — assinatura comercial Open-Meteo (a mesma do Atalaia). Escopos: Functions + Runtime. Secret.
 - `XAI_API_KEY` — Lara (Grok chat + fala feminina). No preview já entra sozinha; no Netlify, a mesma chave no painel (Functions + Runtime). Secret. Nunca vai ao aparelho.

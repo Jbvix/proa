@@ -2,7 +2,7 @@
 
 **Para a tripulação do passadiço**
 **Autor:** Jossian Brito · TugLife Systems
-**Versão:** 1.2.0 · 2026-09-20 02:14 UTC (ano 2026)
+**Versão:** 1.3.0 · 2026-09-20 02:14 UTC (ano 2026)
 
 ---
 
@@ -193,7 +193,7 @@ Node 22 · comando `npm run build`
 
 | Variável | Papel |
 |---|---|
-| `VITE_AUTH_ENABLED=false` | O app não usa login nem banco |
+| `VITE_AUTH_ENABLED=false` | Herdado do template. Desde a 1.3.0 não há mais código de login nem banco no projeto; a variável fica só para o andaime do template. |
 | `OPENMETEO_API_KEY` | Assinatura comercial Open-Meteo. Escopos: Functions + Runtime. Secret. |
 | `XAI_API_KEY` | Lara (Grok chat, STT e TTS). Functions + Runtime. Secret. |
 | `PROA_ALLOWED_ORIGINS` | Opcional. Hosts extras aceitos pelos endpoints, separados por vírgula. Mesma origem e localhost já passam sem configuração. |
@@ -204,7 +204,7 @@ Nenhuma das chaves chega ao navegador.
 
 ```bash
 npm run dev            # servidor em :8080
-npm test               # testes de domínio (193) — tem de ficar verde
+npm test               # testes de domínio (138) — tem de ficar verde
 npm run test:scaffold  # testes do andaime do template (precisa de .grok/)
 npm run test:all       # os dois
 npm run typecheck      # tsc --noEmit

@@ -6,7 +6,6 @@
  */
 
 import { z } from "zod";
-import { CONNECTOR_TOKEN_READY_EVENT } from "./app-data/types";
 import { resolveParentEmbedderOrigin } from "./preview-embedder-origin";
 
 export {
@@ -36,10 +35,6 @@ const NavigateSchema = EnvelopeSchema.extend({
 const HistorySchema = EnvelopeSchema.extend({
   type: z.literal("history"),
   delta: z.union([z.literal(-1), z.literal(1)]),
-});
-
-const ConnectorTokenReadySchema = EnvelopeSchema.extend({
-  type: z.literal("connector-token-ready"),
 });
 
 export type PreviewHostBridgeOptions = {
@@ -204,16 +199,13 @@ export function installPreviewHostBridge(
     window.history.go(parsed.data.delta);
   };
 
-  const onConnectorTokenReady = (data: unknown) => {
-    if (!ConnectorTokenReadySchema.safeParse(data).success) return;
-    window.dispatchEvent(new Event(CONNECTOR_TOKEN_READY_EVENT));
-  };
-
   const hostMessageHandlers = new Map<string, (data: unknown) => void>([
     ["hello", onHello],
     ["navigate", onNavigate],
     ["history", onHistory],
-    ["connector-token-ready", onConnectorTokenReady],
+    // 'connector-token-ready' saiu na 1.3.0 junto com o app-data: o handler só
+    // disparava um evento que ninguém escutava. Tipo não registrado é ignorado
+    // sem erro pelo despachante abaixo, então o host pode seguir mandando.
   ]);
 
   const onMessage = (event: MessageEvent) => {
