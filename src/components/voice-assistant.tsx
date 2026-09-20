@@ -26,7 +26,7 @@ import {
   type VoiceSnap,
 } from "@/lib/voice-listen";
 import { buildVoiceContext, type VoiceTurn } from "@/lib/voice-context";
-import { hearWake } from "@/lib/wake-word";
+import { routeHeard } from "@/lib/voice-turn";
 import { extractCrewNames, extractNameAnswer, mergeCrew } from "@/lib/crew";
 import { quickReply } from "@/lib/voice-quick";
 import { greetLine, byeLine, withHold, askedForName } from "@/lib/alana-presence";
@@ -152,57 +152,57 @@ export function AlanaRadio() {
 
   function handleHeard(heard: string, isFinal: boolean, fromPtt = false, miss = false, print?: number[]) {
     const text = heard.trim();
-    const parse = hearWake(text);
     if (print?.length) lastPrint.current = print;
-    if (blocked() || performance.now() < liveAt.current) {
-      const q = parse.woke ? parse.rest : text;
-      const realAsk = parse.woke
-        ? parse.rest.length >= 6 && !heardEcho(parse.rest)
-        : talkOn.current && q.length >= 4 && !heardEcho(q) && !parse.sleep;
-      if (realAsk) {
+
+    // A DECISÃO é de `routeHeard`, pura e testada. Aqui só se colhem os fatos
+    // do momento e se executa a rota. Era uma escada de nove `return` com
+    // `setState` no meio, que não dava pra testar nem pra ler.
+    const busy = blocked() || performance.now() < liveAt.current;
+    const route = routeHeard(
+      {
+        text,
+        isFinal,
+        fromPtt,
+        busy,
+        talkOn: talkOn.current,
+        inIntroEcho: performance.now() < introEchoUntil.current,
+      },
+      heardEcho,
+    );
+
+    switch (route.kind) {
+      case "defer": {
         pendingHear.current = { text, ptt: fromPtt, miss, print };
         const until = Math.max(deafUntil.current, liveAt.current);
         scheduleFlush(until - performance.now());
+        return;
       }
-      return;
-    }
-    if (!text) {
-      setThinking(false);
-      return;
-    }
-    if (fromPtt || talkOn.current) {
-      if (parse.sleep) {
+      case "ignore":
+        // Com a linha ocupada o "pensando" pertence ao turno em andamento e
+        // não se desliga aqui; em qualquer outro caso, descarta-se o spinner.
+        if (!busy) setThinking(false);
+        return;
+      case "endTalk":
         void endTalk();
         return;
-      }
-      const q = parse.woke ? parse.rest : text;
-      if (!q) {
-        if (!talkOn.current) void startTalk();
-        else setThinking(false);
+      case "startTalk":
+        void startTalk();
+        return;
+      case "ask":
+        void ask(route.question);
+        return;
+      case "sleep":
+      case "wake": {
+        // Quem falou fica registrado nos dois casos, inclusive na despedida:
+        // é por esse nome que ela cumprimenta da próxima vez.
+        const heardName =
+          matchVoice(voicesRef.current, lastPrint.current)?.name ?? lastHeardName.current;
+        if (heardName) lastHeardName.current = heardName;
+        const goingSleep = route.kind === "sleep";
+        void wake(goingSleep ? "" : route.rest, goingSleep, heardName);
         return;
       }
-      if (heardEcho(text) || heardEcho(q)) {
-        setThinking(false);
-        return;
-      }
-      void ask(q);
-      return;
     }
-    if (!parse.woke || !isFinal) {
-      setThinking(false);
-      return;
-    }
-    if (!parse.rest && performance.now() < introEchoUntil.current) {
-      setThinking(false);
-      return;
-    }
-    if (heardEcho(text) || (parse.rest && heardEcho(parse.rest))) {
-      setThinking(false);
-      return;
-    }
-    const heardName = matchVoice(voicesRef.current, lastPrint.current)?.name ?? lastHeardName.current;
-    if (heardName) lastHeardName.current = heardName;
-    void wake(parse.rest, parse.sleep, heardName);
   }
 
   function scheduleFlush(wait: number) {

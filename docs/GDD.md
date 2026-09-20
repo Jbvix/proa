@@ -3,7 +3,7 @@
 **Projeto:** Proa · PWA de passadiço para rebocador
 **Organização:** TugLife Systems
 **Autor:** Jossian Brito
-**Versão do documento:** 1.6.0
+**Versão do documento:** 1.7.0
 **Data:** 2026-09-20 02:14 UTC (ano 2026)
 
 ---
@@ -79,6 +79,7 @@ PWA. Funções serverless em Netlify. Sem banco de dados.
 | `api-guard.ts` | Limite de taxa e allowlist de origem dos endpoints |
 | `api/*-handler.ts` | Lógica de `/api/meteo` e `/api/voice`, partilhada pelas duas pontas |
 | `voice-alerts.ts` | Decide QUANDO a Lara fala sem ser chamada (puro, testado) |
+| `voice-turn.ts` | Decide o que fazer com cada transcrição do microfone (puro, testado) |
 | `voice-echo.ts` | Memória das duas últimas falas, contra realimentação acústica |
 | `voice-tts.ts` | Cache e busca do áudio da fala |
 
@@ -323,13 +324,46 @@ de casca. Nenhum alvo foi removido: os dois continuam necessários.
 | P7 | Peso morto: `multiplayer/`, `app-data/`, `auth/`, endpoints duplicados, deps órfãs | ✅ **Feito em 1.3.0** |
 | P8 | Migrar `seaPenalty` para STAWAVE-1 (∝ Hs²) | ✅ **Feito em 1.6.0** (a forma; a escala segue empírica) |
 | P8b | **Calibrar `AW_RPM_PER_KN` e `STEEPNESS_RPM` contra viagem real.** Bloqueado por dado, não por tempo: precisa de uma singradura instrumentada com a 1.1.0 ou posterior. Os campos `hsObs` e `hsForecast` já convivem hora a hora no store. | **Bloqueado** |
-| P9 | `voice-assistant.tsx` tem 1.025 linhas e 30+ refs; quebrar em hooks | 🟡 **Parcial em 1.4.0** — três peças extraídas, o laço de turno continua no componente |
+| P9 | `voice-assistant.tsx` tem 1.025 linhas e 30+ refs; quebrar em hooks | 🟡 **Em 1.4.0 e 1.7.0** — quatro peças extraídas e testadas. Restam no componente a orquestração de áudio (`arm`, `coolThenArm`, `playReply`) e as chamadas de rede de `ask`, que são efeito puro e não decisão. |
 | ~~BUG~~ | ~~O aviso de fim de turno não dispara~~ | ✅ **Resolvido em 1.5.0 por remoção** — ver §10 |
 | — | Limite de taxa global (hoje é por instância quente): exige Netlify Blobs, Redis ou equivalente | Ideia |
 | — | Calibração assistida: regressão de `hsObs` contra `hsForecast` ao longo da viagem | Ideia |
 | — | Assinatura hidrodinâmica: acumular (heave, roll) × (Hs, Tz, encontro) = RAO experimental do casco | Ideia |
 
 ## 10. Histórico de versões
+
+### 1.7.0 — 2026-09-20
+
+Segunda etapa do P9: o roteamento do turno de conversa saiu do componente.
+
+`routeHeard` (`voice-turn.ts`) decide o que fazer com cada transcrição —
+ignorar, guardar pra depois, acordar, perguntar, abrir ou encerrar a conversa.
+Era uma escada de nove `return` com `setState` no meio, sem como testar.
+
+**Os testes foram escritos antes da extração**, contra a escada original, para
+que a mudança pudesse ser conferida em vez de acreditada. São 26, e cobrem
+sobretudo a ordem das peneiras, que é o próprio comportamento: linha ocupada
+vence tudo, conversa aberta dispensa a palavra de acordar, e com a conversa
+fechada só o nome dela passa.
+
+**Isto não encolheu o componente** — 899 linhas antes e depois, porque a escada
+virou um `switch` de tamanho parecido. O ganho é que a decisão agora se testa,
+e o componente só executa.
+
+Duas sutilezas do original foram descobertas na costura e preservadas:
+
+1. **Despedida tem dois caminhos.** Com a conversa aberta, fecha o turno; com
+   ela fechada, a Lara ainda abre a gaveta e se despede. Achatar os dois numa
+   rota só faria a despedida sumir justamente quando ninguém abriu a conversa.
+   Daí as rotas `endTalk` e `sleep` serem separadas.
+2. **O nome de quem falou é memorizado também na despedida** — é por ele que
+   ela cumprimenta da próxima vez.
+
+Registrada em teste uma assimetria herdada: a pergunta vai crua ao modelo
+quando não houve palavra de acordar, e dobrada (sem acento) quando houve. Não
+foi mexida, só documentada.
+
+Cobertura: 168 para 194 testes.
 
 ### 1.6.0 — 2026-09-20
 

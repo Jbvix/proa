@@ -2,7 +2,7 @@
 
 **Para a tripulação do passadiço**
 **Autor:** Jossian Brito · TugLife Systems
-**Versão:** 1.6.0 · 2026-09-20 02:14 UTC (ano 2026)
+**Versão:** 1.7.0 · 2026-09-20 02:14 UTC (ano 2026)
 
 ---
 
@@ -232,7 +232,7 @@ Nenhuma das chaves chega ao navegador.
 
 ```bash
 npm run dev            # servidor em :8080
-npm test               # testes de domínio (168) — tem de ficar verde
+npm test               # testes de domínio (194) — tem de ficar verde
 npm run test:scaffold  # testes do andaime do template (precisa de .grok/)
 npm run test:all       # os dois
 npm run typecheck      # tsc --noEmit
