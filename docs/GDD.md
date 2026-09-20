@@ -3,7 +3,7 @@
 **Projeto:** Proa · PWA de passadiço para rebocador
 **Organização:** TugLife Systems
 **Autor:** Jossian Brito
-**Versão do documento:** 1.14.0
+**Versão do documento:** 1.15.0
 **Data:** 2026-09-20 12:00 UTC (ano 2026)
 
 ---
@@ -88,6 +88,7 @@ PWA. Funções serverless em Netlify. Sem banco de dados.
 | `ogg-opus.ts` | Empacotador Ogg Opus: cabeçalhos, laçamento, CRC, grânulo (puro, testado com leitor independente) |
 | `voice-opus.ts` | Ponte com o `AudioEncoder` do navegador; `null` = manda WAV |
 | `voice-enroll.ts` | Cadastro de nome com confirmação: candidato → "Certo?" → sim (puro, testado) |
+| `voice-mic.ts` | Política do microfone: fechado / à espera do nome / conversa (puro, testado) |
 | `settings-migrate.ts` | Apaga do aparelho o que versões antigas gravaram e o app não usa mais |
 | `version.ts` | Versão publicada, amarrada ao `package.json` por teste |
 | `voice-echo.ts` | Memória das duas últimas falas, contra realimentação acústica |
@@ -513,6 +514,52 @@ vem um minuto depois é papo de ponte.
 Lara/Iara` do STT, **só** se as bolhas da gaveta mostrarem "Lara" inventado
 em ruído) e 13.5 (impressão vocal como filtro de quem pode perguntar).
 
+### 7.5 O microfone (desde a 1.15.0)
+
+**O relato.** "O microfone fica ligado direto mesmo com o botão de controle
+de conversa." Era verdade por desenho, e escondia uma consequência que o
+manual não dizia.
+
+**O que era.** O microfone abria sempre que a Lara estava ligada. O botão
+Conversar mudava só se era preciso chamar pelo nome. E como **o
+reconhecimento do nome não é feito no aparelho** — a cadeia é VAD → clipe →
+transcritor do xAI → texto → procura-se "Lara" —, com a conversa fechada
+**todo trecho de fala do passadiço subia pra nuvem** só pra checar se alguém
+a chamou. Privacidade, custo, e o combustível do "responde sem ser chamada".
+O manual dizia "áudio sobe só enquanto a Lara está em conversa": estava
+errado. O único jeito de fechar o microfone era um gesto não documentado
+(segurar o ícone por 650 ms).
+
+**14.1 — Conversar = microfone.** `micPolicy` (puro, testado): Lara
+desligada → fechado; conversa aberta → aberto; conversa fechada → **fechado
+por padrão**. `closeMic()` libera o stream — o indicador do Android apaga,
+nada sobe. Fechar a conversa (toque, despedida, 90 s) fecha o microfone
+junto. Os avisos (XTE, waypoint, hora cheia) continuam: falar não precisa de
+microfone — e depois de um aviso o microfone fecha de novo. O primeiro toque
+na tela deixou de armar o microfone; só libera o áudio e adianta as falas
+prontas.
+
+**14.2 — Ajuste "Escuta pelo nome"** (`alanaWakeWord`, padrão **falso**).
+Ligado, volta ao modo antigo: microfone aberto com a conversa fechada, à
+espera do nome. O botão e uma legenda na gaveta dizem o preço com todas as
+letras: *todo trecho de fala do passadiço sobe pro transcritor*. É a única
+forma honesta de oferecer mãos-livres enquanto o nome é reconhecido na nuvem.
+
+**14.3 — Rótulo e manual.** A gaveta mostra *mic fechado · toca pra
+conversar* ou *escuta pelo nome · mic aberto*. O manual ganhou a linha do
+gesto de segurar e a seção "Seus dados" foi corrigida.
+
+**Por que o padrão é fechado.** É a única política que se explica numa
+frase — "microfone aberto só enquanto a conversa está aberta" — e é o que o
+botão sempre pareceu prometer. Um tablet de passadiço com microfone aberto
+direto e transcrição na nuvem passa despercebido até o dia em que alguém
+pergunta "isso grava?". A resposta era "não grava, mas transcreve tudo".
+
+**O que fica** (14.4, proposto, é projeto e não etapa): reconhecer "Lara" no
+aparelho — um detector de palavra pequeno em WebAssembly, treinado pra essa
+palavra com vozes reais do passadiço — pra que o modo mãos-livres não suba
+nada até ouvir o nome.
+
 ## 8. Privacidade e segurança
 
 Nada de conta, nada de nuvem, nada de banco. O estado vive em `localStorage`.
@@ -642,6 +689,7 @@ um clique, e agora com histórico rastreável.
 | P9 | `voice-assistant.tsx` tem 1.025 linhas e 30+ refs; quebrar em hooks | 🟡 **Em 1.4.0 e 1.7.0** — quatro peças extraídas e testadas. Restam no componente a orquestração de áudio (`arm`, `coolThenArm`, `playReply`) e as chamadas de rede de `ask`, que são efeito puro e não decisão. |
 | P10 | A Lara entra em conversa onde não foi chamada: `talkOn` nunca expirava | 🟡 **10.1 e 10.2 em 1.10.0**; o furo (resposta renovava o prazo) fechado pela **janela de continuação em 1.14.0** (§7.4). Resta 10.3 = 13.5. |
 | P13 | Nome fantasma "Tadala" no aparelho e escuta de papo de ponte | 🟡 **13.1, 13.2, 13.3 em 1.14.0**. Restam 13.4 (keyterm do STT, só com evidência) e 13.5 (impressão vocal como filtro). |
+| P14 | Microfone aberto direto; áudio do passadiço subindo pra achar o nome | 🟡 **14.1, 14.2, 14.3 em 1.15.0** (§7.5). Resta 14.4 (palavra de chamada no aparelho), projeto. |
 | P11 | Latência da Lara: sete etapas em série, duas viagens à function, WAV+base64 11× maior que Opus, TTS mesmo em resposta local | 🟡 **11.1, 11.2, 11.6 em 1.11.0; 11.4 em 1.13.0** (voz local, aquecimento, resposta curta, Opus). Restam 11.3 (uma viagem) e 11.5 (TTS da primeira frase), propostos. |
 | P12 | Relatório horário na hora cheia, com diário de travessia (alimenta o P8b) | ✅ **Feito em 1.12.0** (§7.3) |
 | ~~BUG~~ | ~~O aviso de fim de turno não dispara~~ | ✅ **Resolvido em 1.5.0 por remoção** — ver §10 |
@@ -650,6 +698,20 @@ um clique, e agora com histórico rastreável.
 | — | Assinatura hidrodinâmica: acumular (heave, roll) × (Hs, Tz, encontro) = RAO experimental do casco | Ideia |
 
 ## 10. Histórico de versões
+
+### 1.15.0 — 2026-09-20
+
+P14, itens 14.1, 14.2 e 14.3, a partir de relato do mar. Detalhe em §7.5.
+
+- **`voice-mic.ts` (novo, puro, 5 testes):** `micPolicy` e `micLabel`.
+- **Componente:** `closeMic()` e `parkAfterTalk()`; o efeito de armar passou
+  a obedecer a política (deps `[muted, wakeWord]`); o primeiro toque só arma
+  no modo nome; depois de aviso com a conversa fechada o microfone fecha.
+- **Store:** `alanaWakeWord` (padrão falso), persistido.
+- **Gaveta:** botão "Escuta pelo nome" com legenda do preço; rótulo do
+  microfone.
+- Manual: gesto de segurar documentado; "Seus dados" corrigido.
+- Cobertura: 278 → 283 testes.
 
 ### 1.14.0 — 2026-09-20
 

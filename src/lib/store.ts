@@ -2,8 +2,12 @@
  * Proa · TugLife Systems — Estado persistido do aparelho
  * ---------------------------------------------------------------------------
  * @autor    Jossian Brito
- * @versao   1.12.0
+ * @versao   1.15.0
  * @data     2026-09-20 12:00 UTC  (ano 2026)
+ *
+ * MODIFICAÇÕES NA 1.15.0 (P14, item 14.2)
+ *  - `alanaWakeWord` (padrão FALSO): microfone aberto com a conversa fechada,
+ *    à espera do nome. Desligado, o microfone só abre em conversa.
  *
  * MODIFICAÇÕES NA 1.12.0 (P12, item 12.3)
  *  - `passageLog`: o diário de travessia, uma linha por hora cheia, até 14
@@ -35,6 +39,8 @@ type SettingsState = {
   theme: ThemeId;
   alanaMuted: boolean;
   alanaPtt: boolean;
+  /** Escuta pelo nome com a conversa fechada. Padrão falso: o áudio subiria pro transcritor o tempo todo. */
+  alanaWakeWord: boolean;
   crewNames: string[];
   crewVoices: VoiceCard[];
   rpm: number;
@@ -48,6 +54,7 @@ type SettingsState = {
   setTheme: (t: ThemeId) => void;
   setAlanaMuted: (v: boolean) => void;
   setAlanaPtt: (v: boolean) => void;
+  setAlanaWakeWord: (v: boolean) => void;
   setCrewNames: (n: string[]) => void;
   setCrewVoices: (v: VoiceCard[]) => void;
   setRpm: (n: number) => void;
@@ -67,6 +74,7 @@ export const useSettings = create<SettingsState>()(
       theme: "night",
       alanaMuted: false,
       alanaPtt: false,
+      alanaWakeWord: false,
       crewNames: [],
       crewVoices: [],
       rpm: 920,
@@ -82,6 +90,7 @@ export const useSettings = create<SettingsState>()(
       },
       setAlanaMuted: (v) => set({ alanaMuted: v }),
       setAlanaPtt: (v) => set({ alanaPtt: v }),
+      setAlanaWakeWord: (v) => set({ alanaWakeWord: v }),
       setCrewNames: (n) => set({ crewNames: n.slice(0, 6) }),
       setCrewVoices: (v) => set({ crewVoices: v.slice(-6) }),
       setRpm: (n) => set({ rpm: n }),
@@ -129,6 +138,7 @@ export const useSettings = create<SettingsState>()(
         theme: s.theme,
         alanaMuted: s.alanaMuted,
         alanaPtt: s.alanaPtt,
+        alanaWakeWord: s.alanaWakeWord,
         crewNames: s.crewNames,
         crewVoices: s.crewVoices,
         rpm: s.rpm,

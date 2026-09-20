@@ -2,7 +2,7 @@
 
 **Para a tripulação do passadiço**
 **Autor:** Jossian Brito · TugLife Systems
-**Versão:** 1.14.0 · 2026-09-20 12:00 UTC (ano 2026)
+**Versão:** 1.15.0 · 2026-09-20 12:00 UTC (ano 2026)
 
 ---
 
@@ -154,12 +154,14 @@ Colega de passadiço, não rádio.
 | Para... | Faça... |
 |---|---|
 | Começar a conversa | Toque em **Conversar** |
-| Acordar pela voz | Diga **"Lara"** |
+| Abrir o microfone | É o mesmo toque: **o microfone só abre com a conversa aberta** (desde a 1.15.0). Fechou a conversa, fechou o microfone — o indicador do Android apaga |
+| Acordar pela voz com a conversa fechada | Só com **Escuta pelo nome** ligada (botão na gaveta). Leia o aviso abaixo antes de ligar |
 | Encerrar | Toque em **Conversar** de novo, ou diga "tchau, Lara" |
 | Deixar encerrar | Fique 90 s sem falar com ela. A conversa fecha sozinha, sem ela falar nada |
 | Emendar sem chamar pelo nome | Fale **nos 10 s depois da resposta dela**. Passou disso, diga **"Lara"** de novo — com a gaveta aberta ou não |
 | Dizer seu nome | Quando ela perguntar (uma vez por sessão), ou "meu nome é …". Ela repete *"Anotei X. Certo?"* — responda **"sim"** para gravar. Sem o sim, não grava |
 | Apagar um nome | Aba **RPM → Tripulação → Apagar** |
+| Desligar a Lara de vez | **Segure o ícone** dela por meio segundo. Microfone fechado, avisos calados. Toque para religar |
 
 **Enquanto a conversa está aberta**, o ícone da Lara no alto da tela fica com
 um anel aceso. Mas atenção, desde a 1.14.0: **anel aceso não quer dizer que
@@ -169,6 +171,13 @@ disso, mesmo com o anel aceso, chame **"Lara"**. A gaveta mostra em que
 estado está: *conversa · pode falar* ou *conversa · chame Lara*. Nos últimos
 15 segundos aparece um número no canto do ícone contando para trás. Quando
 fecha, fica escrito: *"Fechei a conversa…"*.
+
+> **Escuta pelo nome — leia antes de ligar.** O reconhecimento de "Lara" não
+> é feito no tablet: cada trecho de fala que o microfone capta **sobe para o
+> transcritor, na nuvem**, e só lá se descobre se o nome estava dentro. Com a
+> escuta pelo nome ligada e a conversa fechada, isso vale para **tudo que se
+> fala perto do tablet**. Por isso o padrão é desligado, e por isso o botão
+> fica amarelo quando está ligado. Nada é gravado; é transcrito e descartado.
 
 > **Por que mudou.** Na 1.10.0 a conversa fechava sozinha após 90 s de
 > silêncio — mas cada resposta dela renovava o prazo, e num passadiço
@@ -276,6 +285,8 @@ atrás, feche e reabra o app; se insistir, limpe o cache do navegador.
 | Período em branco | Mar fora da faixa de 3 a 16 s, ou captura com menos de 90 s. |
 | A Lara não ouve | No Samsung, toque uma vez na tela. Confira a permissão de microfone. |
 | A Lara parou de responder sem chamar pelo nome | A conversa expirou (90 s de silêncio) — veja a linha "Fechei a conversa" na gaveta. Diga **"Lara"** ou toque em **Conversar**. |
+| O indicador de microfone do Android fica aceso direto | Ou a conversa está aberta (anel aceso), ou **Escuta pelo nome** está ligada (botão amarelo na gaveta). Com os dois fechados, o indicador apaga. |
+| Digo "Lara" e nada acontece | Com a conversa fechada e a escuta pelo nome desligada, o microfone está fechado — toque em **Conversar**. |
 | A Lara não responde sem eu chamar pelo nome, mesmo com o anel aceso | Passaram os 10 s da última resposta. Diga **"Lara"** e a pergunta. É de propósito. |
 | A Lara cumprimenta um nome que ninguém tem | Nome entrou por ruído em versão antiga. **RPM → Tripulação → Apagar**. |
 | A Lara não deu o relatório da hora | Ou não estava em singradura (SOG abaixo de 0,6 nó — ela grava e cala), ou a captura estava parada, ou o app foi aberto depois da hora redonda. Confira o diário na aba RPM: se a hora está lá, ela gravou. |
@@ -291,7 +302,11 @@ Tudo fica **neste aparelho**, em armazenamento local. Sem conta, sem nuvem, sem
 banco de dados.
 
 Sai do aparelho apenas: a **coordenada** (para buscar a meteorologia) e o
-**áudio da sua fala** (para a transcrição, só enquanto a Lara está em conversa).
+**áudio da fala** (para a transcrição). Desde a 1.15.0, o áudio só sobe
+**enquanto a conversa está aberta** — ou, se você ligar **Escuta pelo nome**,
+sempre que houver fala perto do tablet. Versões anteriores subiam o áudio o
+tempo todo em que a Lara estava ligada, e este manual dizia o contrário;
+está corrigido.
 
 Limpar os dados do site apaga: derrota importada, perfis de motor e casco,
 nomes da tripulação, vozes cadastradas e o histórico de ondas.

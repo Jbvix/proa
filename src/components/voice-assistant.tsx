@@ -2,8 +2,18 @@
  * Proa · TugLife Systems — A Lara no passadiço (componente de voz)
  * ---------------------------------------------------------------------------
  * @autor    Jossian Brito
- * @versao   1.14.0
+ * @versao   1.15.0
  * @data     2026-09-20 12:00 UTC  (ano 2026)
+ *
+ * MODIFICAÇÕES NA 1.15.0 (P14 — 14.1, 14.2, 14.3)
+ *  - Conversar = microfone. A política é de `micPolicy` (puro): conversa
+ *    fechada e ajuste "Escuta pelo nome" desligado → `closeMic()`: stream
+ *    liberado, indicador do Android apaga, nada sobe. Ao fechar a conversa
+ *    (toque, despedida, 90 s) o microfone fecha junto. Com o ajuste ligado,
+ *    volta ao modo antigo (`parkWake`), e o texto do ajuste diz o preço.
+ *  - O primeiro toque na tela só ARMA o microfone no modo nome; no padrão,
+ *    apenas libera o áudio e adianta as falas prontas.
+ *  - Rótulo da gaveta mostra "mic fechado" / "escuta pelo nome · mic aberto".
  *
  * MODIFICAÇÕES NA 1.14.0 (P13 — 13.2 e 13.3)
  *  - Nome só com confirmação: `routeEnroll` (puro) decide; aqui só se fala
@@ -100,6 +110,7 @@ import { APP_VERSION } from "@/lib/version";
 import { createEchoMemory } from "@/lib/voice-echo";
 import { fetchCanned, fetchSay, prefetchCanned, warmVoice } from "@/lib/voice-tts";
 import { TALK_IDLE_LINE, talkIdle } from "@/lib/voice-idle";
+import { micLabel, micPolicy } from "@/lib/voice-mic";
 import { cn } from "@/lib/utils";
 
 type Mode = "off" | "wake" | "session";
@@ -122,6 +133,8 @@ export function AlanaRadio() {
   const setMuted = useSettings((s) => s.setAlanaMuted);
   const ptt = useSettings((s) => s.alanaPtt);
   const setPtt = useSettings((s) => s.setAlanaPtt);
+  const wakeWord = useSettings((s) => s.alanaWakeWord);
+  const setWakeWord = useSettings((s) => s.setAlanaWakeWord);
   const crewNames = useSettings((s) => s.crewNames);
   const setCrewNames = useSettings((s) => s.setCrewNames);
   const crewVoices = useSettings((s) => s.crewVoices);
@@ -169,6 +182,8 @@ export function AlanaRadio() {
   const voicesRef = useRef(crewVoices);
   const lastHeardName = useRef<string | null>(null);
   const talkOn = useRef(false);
+  /** Espelho do ajuste "Escuta pelo nome", lido de dentro de callbacks. */
+  const wakeWordRef = useRef(wakeWord);
   /** Relógio monotônico da última atividade do turno: abre, pergunta, ou a Lara termina de falar. */
   const talkLastAt = useRef(0);
   /** Fim da última RESPOSTA a alguém. Abre a janela de continuação de 10 s. */
@@ -199,6 +214,7 @@ export function AlanaRadio() {
   voicesRef.current = crewVoices;
   turnsRef.current = turns;
   modeRef.current = mode;
+  wakeWordRef.current = wakeWord;
 
   function blocked() {
     return (
@@ -224,6 +240,26 @@ export function AlanaRadio() {
     setMode("wake");
   }
 
+  /**
+   * Fecha o microfone de verdade: stream liberado, indicador do Android
+   * apaga, nada mais sobe. Os avisos continuam — falar não precisa de
+   * microfone.
+   */
+  function closeMic() {
+    wanted.current = false;
+    stopRec();
+    stopBridgeListen();
+    releaseEchoCanceller();
+    modeRef.current = "off";
+    setMode("off");
+  }
+
+  /** Conversa acabou de fechar: estaciona à espera do nome, ou fecha o microfone. */
+  function parkAfterTalk() {
+    if (micPolicy({ muted, talkOn: false, wakeWord: wakeWordRef.current }) === "wake") parkWake();
+    else closeMic();
+  }
+
   /** Renova o prazo da conversa. Chamado em toda atividade que prova que há alguém do outro lado. */
   function touchTalk() {
     talkLastAt.current = performance.now();
@@ -242,7 +278,7 @@ export function AlanaRadio() {
     window.clearTimeout(pendingTimer.current);
     setTalking(false);
     setIdleLeftS(null);
-    parkWake();
+    parkAfterTalk();
     setTurns((t) => [...t, { role: "assistant", content: TALK_IDLE_LINE }]);
     setLastLine(TALK_IDLE_LINE);
   }
@@ -434,11 +470,17 @@ export function AlanaRadio() {
         touchTalk();
         modeRef.current = "session";
         setMode("session");
-      } else {
+        resumeBridgeListen();
+        coolThenArm(extra);
+      } else if (micPolicy({ muted, talkOn: false, wakeWord: wakeWordRef.current }) === "wake") {
         parkWake();
+        resumeBridgeListen();
+        coolThenArm(extra);
+      } else {
+        // Conversa fechada e sem escuta pelo nome: a fala acabou, o
+        // microfone fecha. É assim que um aviso não deixa o microfone aberto.
+        closeMic();
       }
-      resumeBridgeListen();
-      coolThenArm(extra);
     }
   }
 
@@ -680,8 +722,13 @@ export function AlanaRadio() {
       setThinking(false);
       return;
     }
-    wanted.current = true;
-    arm();
+    // A POLÍTICA é de `micPolicy`, pura. Aqui só se abre ou fecha o stream.
+    const policy = micPolicy({ muted: false, talkOn: talkOn.current, wakeWord });
+    if (policy === "closed") closeMic();
+    else {
+      wanted.current = true;
+      arm();
+    }
     if (pendingTalk.current) {
       pendingTalk.current = false;
       void wake("", false);
@@ -695,10 +742,12 @@ export function AlanaRadio() {
       } else if (wanted.current && !muted) arm();
     };
     const onPtr = () => {
+      // O primeiro toque libera o áudio (Samsung) e adianta as falas prontas.
+      // Só ARMA o microfone no modo nome; no padrão, o microfone é do botão.
       void unlockVoice();
       void resumeListenCtx();
       prefetchCanned();
-      if (!wanted.current || modeRef.current === "off") {
+      if (wakeWordRef.current && (!wanted.current || modeRef.current === "off")) {
         wanted.current = true;
         arm();
       }
@@ -719,7 +768,7 @@ export function AlanaRadio() {
       window.clearTimeout(pendingTimer.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [muted]);
+  }, [muted, wakeWord]);
 
   useEffect(() => {
     setBridgePtt(ptt);
@@ -862,9 +911,12 @@ export function AlanaRadio() {
             : talking
               ? "espera"
               : "espera";
+  const micNow = micPolicy({ muted, talkOn: talking, wakeWord });
   const faceLabel = muted
     ? "desligada"
-    : talking && idleLeftS != null
+    : !talking && face !== "processando" && face !== "falando"
+      ? micLabel(micNow)
+      : talking && idleLeftS != null
       ? `conversa · ${idleLeftS} s`
       : talking && face === "espera"
         ? followUpUi
@@ -1007,9 +1059,10 @@ export function AlanaRadio() {
               {turns.length === 0 ? (
                 <p className="text-sm text-muted">
                   Toca em <span className="text-fg">Conversar</span> pra falar com a Lara.
-                  Depois de cada resposta dela, você tem 10 s pra emendar sem chamar
-                  pelo nome; passou, diz <span className="text-fg">Lara</span> de novo.
-                  Sozinha ela só fala o XTE, o waypoint e o relatório da hora cheia.
+                  O microfone só abre com a conversa aberta. Depois de cada resposta
+                  dela, você tem 10 s pra emendar sem chamar pelo nome; passou, diz{" "}
+                  <span className="text-fg">Lara</span> de novo. Sozinha ela só fala o
+                  XTE, o waypoint e o relatório da hora cheia.
                 </p>
               ) : (
                 turns.map((t, i) => (
@@ -1085,6 +1138,17 @@ export function AlanaRadio() {
               </button>
               <button
                 type="button"
+                onClick={() => setWakeWord(!wakeWord)}
+                title="Com a conversa fechada, manter o microfone aberto à espera do nome. O áudio do passadiço sobe pro transcritor pra achar o nome."
+                className={cn(
+                  "h-11 shrink-0 rounded-md px-3 text-xs font-medium uppercase tracking-[0.12em] transition-[background-color,color] duration-150",
+                  wakeWord ? "bg-warn text-bg" : "bg-surface-2 text-muted hover:text-fg",
+                )}
+              >
+                {wakeWord ? "Escuta pelo nome: ligada" : "Escuta pelo nome"}
+              </button>
+              <button
+                type="button"
                 onClick={() => setDebug((v) => !v)}
                 className={cn(
                   "h-11 shrink-0 rounded-md px-3 text-xs font-medium uppercase tracking-[0.12em] transition-[background-color,color] duration-150",
@@ -1094,6 +1158,13 @@ export function AlanaRadio() {
                 Diagnóstico
               </button>
             </div>
+            {wakeWord && !muted ? (
+              <p className="px-4 pb-3 text-xs leading-relaxed text-subtle">
+                Escuta pelo nome ligada: o microfone fica aberto com a conversa
+                fechada e <span className="text-fg">todo trecho de fala do passadiço
+                sobe pro transcritor</span> pra achar o nome. Desligue se não quiser.
+              </p>
+            ) : null}
             {ptt && !muted ? (
               <button
                 type="button"
