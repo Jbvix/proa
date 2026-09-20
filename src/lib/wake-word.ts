@@ -1,8 +1,8 @@
-/** Wake: Iara / Yara. One token. Not Alana — that fired on "olha na" / "a lana". */
-const NAME_RE = /\b([yi]ara+h?s?|hiara)\b/;
+/** Wake: Lara (STT may hear Iara/Yara). One token. Not Alana. */
+const NAME_RE = /\b(lara|iara|yara|hiara)\b/;
 
 const SLEEP_RE =
-  /^(tchau|xau|flw|desliga|pode parar|silencio|cala a boca|ate ja|ate logo|valeu|obrigad[ao]|depois a gente se fala)(?:\s+(?:iara|yara))?\.?$/;
+  /^(tchau|xau|flw|desliga|pode parar|silencio|cala a boca|ate ja|ate logo|valeu|obrigad[ao]|depois a gente se fala)(?:\s+(?:lara|iara|yara))?\.?$/;
 
 const OPENER_RE =
   /^(oi|ola|eai|eae|fala|beleza|tranquilo|olha so|fechou|valeu|to no radio)\b/;
@@ -100,7 +100,7 @@ export function isAlanaEcho(raw: string, lastLine?: string | null) {
   const call = hearWake(raw);
   if (call.woke && call.rest.length < 2) {
     const last = foldPt(lastLine ?? "");
-    if (/sou a iara|sou a yara|to aqui|pode mandar|qual o seu nome/.test(last)) return true;
+    if (/sou a lara|sou a iara|sou a yara|to aqui|pode mandar|qual o seu nome/.test(last)) return true;
     return false;
   }
   if (t.length < 4) return true;

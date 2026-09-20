@@ -11,7 +11,7 @@ Captura movimento e posição do rebocador, atualiza características de onda a 
 - **Sensores** — mar ao vivo no casco (heave → Hs, amplitude, período)
 - **Open-Meteo** — vento e corrente na posição; previsão marinha em cada waypoint do GPX
 - **RPM ideal** — banda de viagem a partir do mar do casco, vento e encontro com a onda
-- **Iara** — voz no passadiço. Chama **Iara**; ela responde sem apertar o microfone
+- **Lara** — voz no passadiço. Toca em Conversar; toca de novo pra encerrar
 
 ## Uso a bordo
 
@@ -19,7 +19,7 @@ Captura movimento e posição do rebocador, atualiza características de onda a 
 2. Importe o arquivo GPX da derrota na aba **Rota**
 3. Informe o RPM atual
 4. Acompanhe o **Painel**, **Ondas**, **Rota** e **RPM**
-5. Chama **Iara** pelo nome. Ela cumprimenta e espera o próximo chamado. “Tchau” pra ela voltar a esperar. Segura o ícone pra desligar. No tablet Samsung, o primeiro toque na tela libera o microfone. Se a Iara ainda se escutar, atualize o PWA.
+5. Toca em **Conversar** pra falar com a **Lara**. Toca de novo pra encerrar. No tablet Samsung, o primeiro toque na tela libera o microfone.
 
 Dados ficam só neste aparelho (sem conta, sem nuvem).
 
@@ -39,4 +39,4 @@ Variáveis:
 
 - `VITE_AUTH_ENABLED=false` — o app não usa login nem banco
 - `OPENMETEO_API_KEY` — assinatura comercial Open-Meteo (a mesma do Atalaia). Escopos: Functions + Runtime. Secret.
-- `XAI_API_KEY` — Iara (Grok chat + fala feminina). No preview já entra sozinha; no Netlify, a mesma chave no painel (Functions + Runtime). Secret. Nunca vai ao aparelho.
+- `XAI_API_KEY` — Lara (Grok chat + fala feminina). No preview já entra sozinha; no Netlify, a mesma chave no painel (Functions + Runtime). Secret. Nunca vai ao aparelho.

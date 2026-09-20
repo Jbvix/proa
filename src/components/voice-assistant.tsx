@@ -40,11 +40,11 @@ import { cn } from "@/lib/utils";
 type Mode = "off" | "wake" | "session";
 
 const TTS_CACHE = {
-  greet: "proa-iara-tts-greet-v1",
-  bye: "proa-iara-tts-bye-v1",
-  miss: "proa-iara-tts-miss-v1",
-  xte: "proa-iara-tts-xte-v1",
-  roll: "proa-iara-tts-roll-v1",
+  greet: "proa-lara-tts-greet-v1",
+  bye: "proa-lara-tts-bye-v1",
+  miss: "proa-lara-tts-miss-v1",
+  xte: "proa-lara-tts-xte-v1",
+  roll: "proa-lara-tts-roll-v1",
 } as const;
 
 const ASK_CHIPS: { q: string; label: string }[] = [
@@ -102,6 +102,7 @@ export function AlanaRadio() {
   const [pttHeld, setPttHeld] = useState(false);
   const [saying, setSaying] = useState(false);
   const [thinking, setThinking] = useState(false);
+  const [talking, setTalking] = useState(false);
 
   const asking = useRef(false);
   const locking = useRef(false);
@@ -127,6 +128,8 @@ export function AlanaRadio() {
   const introEchoUntil = useRef(0);
   const voicesRef = useRef(crewVoices);
   const lastHeardName = useRef<string | null>(null);
+  const talkOn = useRef(false);
+  const pendingTalk = useRef(false);
   const pendingTimer = useRef(0);
   const engineRef = useRef(engine);
   const meteoRef = useRef(meteo);
@@ -184,7 +187,10 @@ export function AlanaRadio() {
     const parse = hearWake(text);
     if (print?.length) lastPrint.current = print;
     if (blocked() || performance.now() < liveAt.current) {
-      const realAsk = parse.woke && parse.rest.length >= 6 && !heardEcho(parse.rest);
+      const q = parse.woke ? parse.rest : text;
+      const realAsk = parse.woke
+        ? parse.rest.length >= 6 && !heardEcho(parse.rest)
+        : talkOn.current && q.length >= 4 && !heardEcho(q) && !parse.sleep;
       if (realAsk) {
         pendingHear.current = { text, ptt: fromPtt, miss, print };
         const until = Math.max(deafUntil.current, liveAt.current);
@@ -196,24 +202,22 @@ export function AlanaRadio() {
       setThinking(false);
       return;
     }
-    if (fromPtt) {
-      if (!parse.woke) {
-        setThinking(false);
-        return;
-      }
+    if (fromPtt || talkOn.current) {
       if (parse.sleep) {
-        void sleep();
+        void endTalk();
         return;
       }
-      if (!parse.rest) {
-        void wake("", false);
+      const q = parse.woke ? parse.rest : text;
+      if (!q) {
+        if (!talkOn.current) void startTalk();
+        else setThinking(false);
         return;
       }
-      if (heardEcho(text) || heardEcho(parse.rest)) {
+      if (heardEcho(text) || heardEcho(q)) {
         setThinking(false);
         return;
       }
-      void ask(parse.rest);
+      void ask(q);
       return;
     }
     if (!parse.woke || !isFinal) {
@@ -289,7 +293,7 @@ export function AlanaRadio() {
       .catch(() => {
         wanted.current = false;
         setMode("off");
-        setError("Microfone bloqueado — toca no ícone da Iara pra liberar.");
+        setError("Microfone bloqueado — toca no ícone da Lara pra liberar.");
       });
   }
 
@@ -324,14 +328,19 @@ export function AlanaRadio() {
       }
       introEchoUntil.current = Math.max(
         introEchoUntil.current,
-        performance.now() + (/sou a iara|sou a yara/i.test(text) ? 3_600 : 2_400),
+        performance.now() + (/sou a lara|sou a iara|sou a yara/i.test(text) ? 3_600 : 2_400),
       );
-      if (/sou a iara|sou a yara/i.test(text)) extra = Math.max(extra, 1_400);
+      if (/sou a lara|sou a iara|sou a yara/i.test(text)) extra = Math.max(extra, 1_400);
       await new Promise((r) => window.setTimeout(r, tail));
     } finally {
       speaking.current = false;
       setSaying(false);
-      parkWake();
+      if (talkOn.current) {
+        modeRef.current = "session";
+        setMode("session");
+      } else {
+        parkWake();
+      }
       resumeBridgeListen();
       coolThenArm(extra);
     }
@@ -427,6 +436,8 @@ export function AlanaRadio() {
   }
 
   async function sleep() {
+    talkOn.current = false;
+    setTalking(false);
     parkWake();
     const line = byeLine(crewRef.current);
     rememberLine(line);
@@ -441,6 +452,39 @@ export function AlanaRadio() {
       setThinking(false);
     }
     window.setTimeout(() => setOpen(false), 1800);
+  }
+
+  async function startTalk() {
+    if (talkOn.current || locking.current) {
+      setOpen(true);
+      return;
+    }
+    void unlockVoice();
+    talkOn.current = true;
+    setTalking(true);
+    setOpen(true);
+    if (muted) {
+      pendingTalk.current = true;
+      setMuted(false);
+      return;
+    }
+    wanted.current = true;
+    arm();
+    await wake("", false);
+  }
+
+  async function endTalk() {
+    if (!talkOn.current) {
+      setOpen(false);
+      return;
+    }
+    await sleep();
+  }
+
+  function toggleTalk() {
+    if (held.current) return;
+    if (talkOn.current) void endTalk();
+    else void startTalk();
   }
 
   async function ask(text: string) {
@@ -534,7 +578,7 @@ export function AlanaRadio() {
       setTurns((t) => [...t, { role: "assistant", content: data.text! }]);
       await playReply(data.text, data.audio ?? null);
     } catch {
-      setError("Sem ligação com a Iara.");
+      setError("Sem ligação com a Lara.");
     } finally {
       setBusy(false);
       asking.current = false;
@@ -553,6 +597,9 @@ export function AlanaRadio() {
   useEffect(() => {
     if (muted) {
       wanted.current = false;
+      talkOn.current = false;
+      pendingTalk.current = false;
+      setTalking(false);
       stopRec();
       stopVoice();
       stopBridgeListen();
@@ -564,6 +611,10 @@ export function AlanaRadio() {
     }
     wanted.current = true;
     arm();
+    if (pendingTalk.current) {
+      pendingTalk.current = false;
+      void wake("", false);
+    }
     const onVis = () => {
       if (document.hidden) {
         stopRec();
@@ -699,6 +750,8 @@ export function AlanaRadio() {
   }, [muted]);
 
   const lost = snap?.state === "mic_lost" || snap?.state === "suspended";
+  const userTalking =
+    snap?.state === "user_speaking" || pttHeld || snap?.vad === "speech";
   const face: AlanaFace = muted
     ? "off"
     : saying
@@ -707,15 +760,19 @@ export function AlanaRadio() {
         ? "processando"
         : lost
           ? "off"
-          : "espera";
+          : talking && userTalking
+            ? "ouvindo"
+            : talking
+              ? "espera"
+              : "espera";
   const faceLabel = muted
     ? "desligada"
-    : lost
-      ? "toca pra retomar"
-      : ptt && face === "espera" && !pttHeld
-        ? "aperte pra falar"
+    : talking && face === "espera"
+      ? "conversa"
+      : lost
+        ? "toca pra retomar"
         : ALANA_FACE_LABEL[face];
-  const hearLevel = 0;
+  const hearLevel = face === "ouvindo" ? Math.max(0.12, snap?.level ?? 0.12) : 0;
 
   function beginHold() {
     held.current = false;
@@ -738,12 +795,8 @@ export function AlanaRadio() {
     <div className="relative shrink-0">
       <button
         type="button"
-        aria-label={muted ? "Ligar Iara" : `Iara ${faceLabel}`}
-        title={
-          muted
-            ? "Iara desligada — toca pra ligar"
-            : `Iara ${faceLabel}. Segura pra desligar.`
-        }
+        aria-label={talking ? "Encerrar conversa com a Lara" : "Conversar com a Lara"}
+        title={talking ? "Toca de novo pra encerrar" : "Toca pra conversar com a Lara"}
         onPointerDown={beginHold}
         onPointerUp={endHold}
         onPointerCancel={endHold}
@@ -760,28 +813,27 @@ export function AlanaRadio() {
             held.current = false;
             return;
           }
-          void unlockVoice();
-          if (muted) {
-            setMuted(false);
-            return;
-          }
-          setOpen(true);
+          toggleTalk();
         }}
         className={cn(
           "flex size-11 items-center justify-center rounded-md transition-[background-color,color] duration-150 active:scale-[0.96]",
-          muted || face === "off" || face === "espera"
-            ? "text-subtle hover:bg-surface-2 hover:text-fg"
-            : face === "falando"
-              ? "voice-pulse bg-accent text-accent-fg"
-              : face === "processando"
-                ? "text-warn hover:bg-surface-2"
-                : "text-ok hover:bg-surface-2",
+          talking && (face === "falando" || face === "ouvindo")
+            ? "voice-pulse bg-accent text-accent-fg"
+            : talking
+              ? "bg-accent/20 text-accent"
+              : muted || face === "off" || face === "espera"
+                ? "text-subtle hover:bg-surface-2 hover:text-fg"
+                : face === "falando"
+                  ? "voice-pulse bg-accent text-accent-fg"
+                  : face === "processando"
+                    ? "text-warn hover:bg-surface-2"
+                    : "text-ok hover:bg-surface-2",
         )}
       >
         <AlanaMark face={face} level={hearLevel} className="size-5" />
       </button>
 
-      {!open && mode === "session" && lastLine ? (
+      {!open && talking && lastLine ? (
         <button
           type="button"
           onClick={() => setOpen(true)}
@@ -799,7 +851,7 @@ export function AlanaRadio() {
                   : "text-subtle",
             )}
           />
-          <span className="mr-1 font-display italic text-accent">Iara</span>
+          <span className="mr-1 font-display italic text-accent">Lara</span>
           <span className="min-w-0 truncate">{lastLine}</span>
         </button>
       ) : null}
@@ -808,7 +860,7 @@ export function AlanaRadio() {
         <>
           <button
             type="button"
-            aria-label="Fechar Iara"
+            aria-label="Fechar Lara"
             className="fixed inset-0 z-30 bg-transparent"
             onClick={() => setOpen(false)}
           />
@@ -828,7 +880,7 @@ export function AlanaRadio() {
                         : "text-ok",
                 )}
               />
-              <p className="flex-1 font-display text-2xl italic text-fg">Iara</p>
+              <p className="flex-1 font-display text-2xl italic text-fg">Lara</p>
               <p className="text-[11px] uppercase tracking-[0.12em] text-subtle">{faceLabel}</p>
               <button
                 type="button"
@@ -857,9 +909,8 @@ export function AlanaRadio() {
               ) : null}
               {turns.length === 0 ? (
                 <p className="text-sm text-muted">
-                  Chama <span className="text-fg">Iara</span> pelo nome.
-                  Ela pede o seu, grava a voz e consulta a derrota.
-                  Só o XTE e a passagem de waypoint falam sozinhos.
+                  Toca em <span className="text-fg">Conversar</span> pra falar com a Lara.
+                  Toca de novo pra encerrar. Só o XTE e o waypoint falam sozinhos.
                 </p>
               ) : (
                 turns.map((t, i) => (
@@ -893,6 +944,18 @@ export function AlanaRadio() {
                   {snap.ptt ? " · PTT" : ""}
                 </p>
               ) : null}
+            </div>
+            <div className="px-3 pb-2">
+              <button
+                type="button"
+                onClick={() => toggleTalk()}
+                className={cn(
+                  "flex h-12 w-full items-center justify-center rounded-md text-sm font-medium tracking-[0.04em] transition-[background-color,color] duration-150 active:scale-[0.99]",
+                  talking ? "bg-danger text-white" : "bg-accent text-accent-fg",
+                )}
+              >
+                {talking ? "Encerrar conversa" : "Conversar com a Lara"}
+              </button>
             </div>
             <div className="flex gap-2 overflow-x-auto px-3 pb-3">
               {ASK_CHIPS.map((c) => (

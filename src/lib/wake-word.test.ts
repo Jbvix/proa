@@ -2,25 +2,25 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { hearWake, isAlanaEcho } from "./wake-word.ts";
 
-test("Iara alone wakes with empty rest", () => {
-  const h = hearWake("Iara");
+test("Lara alone wakes with empty rest", () => {
+  const h = hearWake("Lara");
   assert.equal(h.woke, true);
   assert.equal(h.rest, "");
   assert.equal(h.sleep, false);
 });
 
-test("Iara plus question keeps the rest", () => {
-  const h = hearWake("Iara, qual o Hs agora?");
+test("Lara plus question keeps the rest", () => {
+  const h = hearWake("Lara, qual o Hs agora?");
   assert.equal(h.woke, true);
   assert.match(h.rest, /qual o hs agora/);
 });
 
-test("Iara and Yara wake", () => {
-  assert.equal(hearWake("Iara").woke, true);
-  assert.equal(hearWake("oi Iara").woke, true);
-  assert.equal(hearWake("Iara?").woke, true);
-  assert.equal(hearWake("Yara me fala o eta").woke, true);
-  assert.equal(hearWake("hiara relatório").woke, true);
+test("Lara and Iara wake", () => {
+  assert.equal(hearWake("Lara").woke, true);
+  assert.equal(hearWake("oi Lara").woke, true);
+  assert.equal(hearWake("Lara?").woke, true);
+  assert.equal(hearWake("Iara me fala o eta").woke, true);
+  assert.equal(hearWake("Yara relatório").woke, true);
 });
 
 test("old Alana name and bridge chatter do not wake", () => {
@@ -44,18 +44,18 @@ test("plain question does not wake", () => {
 test("tchau sleeps", () => {
   const h = hearWake("tchau");
   assert.equal(h.sleep, true);
-  assert.equal(hearWake("Iara tchau").sleep, true);
+  assert.equal(hearWake("Lara tchau").sleep, true);
 });
 
 test("echo of greet and last line is ignored", () => {
   assert.equal(isAlanaEcho("E aí. Tô no rádio, pode mandar."), true);
   assert.equal(isAlanaEcho("Oi. Tô no rádio, manda aí."), true);
-  assert.equal(isAlanaEcho("Iara"), false);
+  assert.equal(isAlanaEcho("Lara"), false);
 });
 
 test("echo of her own intro is ignored", () => {
   assert.equal(
-    isAlanaEcho("Iara", "Boa tarde. Sou a Iara, do passadiço. Qual o seu nome?"),
+    isAlanaEcho("Lara", "Boa tarde. Sou a Lara, do passadiço. Qual o seu nome?"),
     true,
   );
 });
@@ -68,5 +68,5 @@ test("garbled speaker echo of a briefing is ignored", () => {
 
 test("a real follow-up is not treated as echo", () => {
   assert.equal(isAlanaEcho("qual o hs agora", "E aí. Tô no rádio, pode mandar."), false);
-  assert.equal(isAlanaEcho("Iara"), false);
+  assert.equal(isAlanaEcho("Lara"), false);
 });

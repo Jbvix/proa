@@ -90,6 +90,7 @@ test("report uses live numbers and does not say the wake name", () => {
   assert.match(t, /Passando WP meio/);
   assert.match(t, /7\.2 nós/);
   assert.match(t, /Pecém/);
+  assert.doesNotMatch(t, /Lara/i);
   assert.doesNotMatch(t, /Iara/i);
   assert.doesNotMatch(t, /Alana/i);
   assert.doesNotMatch(t, /Um momento/i);
