@@ -3,7 +3,7 @@
 **Projeto:** Proa · PWA de passadiço para rebocador
 **Organização:** TugLife Systems
 **Autor:** Jossian Brito
-**Versão do documento:** 1.5.0
+**Versão do documento:** 1.6.0
 **Data:** 2026-09-20 02:14 UTC (ano 2026)
 
 ---
@@ -203,11 +203,46 @@ só a resposta ao período mudou:
 | 2,0 m · 14 s | 216 rpm | 190 rpm | **−26** |
 | 3,0 m · 7 s | 381 rpm | 440 rpm | **+59** |
 
-> **Limitação que permanece.** As constantes (78, 5250, 55) seguem empíricas e
-> sem procedência publicada. A resistência adicionada em ondas, pela formulação
-> padrão STAWAVE-1 (ISO 15016 / ITTC), escala com **Hs²**, não linearmente com
-> Hs. Corrigiu-se a dimensão da declividade, não a calibração absoluta do
-> modelo — esta continua sendo o item P8 do §9, e exige dado de viagem real.
+### 6.1 Resistência adicionada em ondas (desde a 1.6.0)
+
+O termo de altura é a formulação **STAWAVE-1** (ISO 15016 / ITTC 7.5-02-07-02.2):
+
+```
+R_AWL = (1/16) · ρ · g · Hs² · B · √(B / L_BWL)
+```
+
+O que ela diz, e o que não diz:
+
+- **Diz** que a resistência cresce com o **quadrado** do Hs. Dobrar a onda
+  quadruplica a força. Era exatamente isso que a 1.2.0 errava.
+- **Diz** que a boca pesa mais que linearmente, via `B·√(B/L_BWL)`. Proa curta
+  e larga — a assinatura do ASD — aumenta o termo.
+- **Não diz** nada sobre período. Por isso o termo de declividade continua ao
+  lado: é ele que separa o swell que embala da vaga que martela.
+
+O casco entrou como **perfil editável** (boca e proa na LWL), ao lado do perfil
+de motor. Padrão: rebocador de porto de ~30 m, boca 11,5 m, proa 7 m.
+
+Efeito da troca, casco padrão, só o termo de altura:
+
+| Hs | R_AWL | v1.2.0 (∝Hs) | v1.6.0 (∝Hs²) |
+|---|---|---|---|
+| 0,5 m | 2,3 kN | 39 rpm | **13 rpm** |
+| 1,0 m | 9,3 kN | 78 rpm | **52 rpm** |
+| 1,5 m | 20,8 kN | 117 rpm | **117 rpm** (calibração) |
+| 2,5 m | 57,9 kN | 195 rpm | **325 rpm** |
+| 3,0 m | 83,3 kN | 234 rpm | **468 rpm** |
+
+> **As duas ressalvas, registradas de propósito.**
+> **Validade:** a STAWAVE-1 foi levantada para navios mercantes, muito maiores
+> que um rebocador de 30 m, e tende a superestimar em casco pequeno. A **forma**
+> da curva é física; a **escala** não.
+> **Calibração:** `AW_RPM_PER_KN = 5,6` e `STEEPNESS_RPM = 5250` seguem
+> empíricas, fixadas para preservar o ponto de referência Hs 1,5 m / T 8 s.
+> Calibrá-las contra viagem real continua pendente — ver §9.
+> **Saturação:** acima de Hs ≈ 3 m a faixa bate no piso de marcha lenta e o
+> modelo perde resolução. Para um rebocador de 30 m isso é sea state 5 e acima,
+> quando já não é viagem e sim sobrevivência.
 
 ## 7. A Lara
 
@@ -286,7 +321,8 @@ de casca. Nenhum alvo foi removido: os dois continuam necessários.
 | P4 | Código de estado do mar deslocado em 1 face à escala WMO; declividade com dimensão errada | ✅ **Feito em 1.2.0** |
 | P5 | `/api/voice` e `/api/meteo` públicos e sem limite de taxa sobre APIs pagas | ✅ **Feito em 1.2.0** |
 | P7 | Peso morto: `multiplayer/`, `app-data/`, `auth/`, endpoints duplicados, deps órfãs | ✅ **Feito em 1.3.0** |
-| P8 | Migrar `seaPenalty` para STAWAVE-1 (∝ Hs²), calibrado com dado de viagem real | **Pendente** |
+| P8 | Migrar `seaPenalty` para STAWAVE-1 (∝ Hs²) | ✅ **Feito em 1.6.0** (a forma; a escala segue empírica) |
+| P8b | **Calibrar `AW_RPM_PER_KN` e `STEEPNESS_RPM` contra viagem real.** Bloqueado por dado, não por tempo: precisa de uma singradura instrumentada com a 1.1.0 ou posterior. Os campos `hsObs` e `hsForecast` já convivem hora a hora no store. | **Bloqueado** |
 | P9 | `voice-assistant.tsx` tem 1.025 linhas e 30+ refs; quebrar em hooks | 🟡 **Parcial em 1.4.0** — três peças extraídas, o laço de turno continua no componente |
 | ~~BUG~~ | ~~O aviso de fim de turno não dispara~~ | ✅ **Resolvido em 1.5.0 por remoção** — ver §10 |
 | — | Limite de taxa global (hoje é por instância quente): exige Netlify Blobs, Redis ou equivalente | Ideia |
@@ -294,6 +330,24 @@ de casca. Nenhum alvo foi removido: os dois continuam necessários.
 | — | Assinatura hidrodinâmica: acumular (heave, roll) × (Hs, Tz, encontro) = RAO experimental do casco | Ideia |
 
 ## 10. Histórico de versões
+
+### 1.6.0 — 2026-09-20
+
+A penalidade de altura passa a ser física. O termo linear em Hs virou
+**STAWAVE-1** (ISO 15016 / ITTC), que escala com **Hs²** — ver §6.1 para a
+fórmula, a tabela comparativa e as ressalvas.
+
+O modelo também passa a **conhecer o casco**: boca e comprimento de proa na
+linha d'água entram como perfil editável na aba RPM, junto ao perfil de motor.
+Um rebocador mais boçudo sente mais resistência com o mesmo mar, e agora a
+faixa reflete isso. `RpmAdvice` devolve `addedResistanceKn`, e a tela mostra
+quantos quilonewtons o mar está comendo — número que um chefe de máquinas lê
+direto, ao contrário de uma penalidade abstrata em rpm.
+
+O que **não** mudou: o ponto de calibração Hs 1,5 m / T 8 s devolve a mesma
+penalidade de antes. A curva mudou nas pontas, não no meio.
+
+Cobertura: 159 para 168 testes.
 
 ### 1.5.0 — 2026-09-20
 

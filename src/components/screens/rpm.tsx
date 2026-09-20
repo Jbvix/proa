@@ -14,6 +14,8 @@ export function RpmScreen() {
   const setRpm = useSettings((s) => s.setRpm);
   const profile = useSettings((s) => s.profile);
   const setProfile = useSettings((s) => s.setProfile);
+  const hull = useSettings((s) => s.hull);
+  const setHull = useSettings((s) => s.setHull);
   const { engine, meteo } = useLiveBridge();
 
   const hs = engine?.wave.hsM ?? 0;
@@ -21,6 +23,7 @@ export function RpmScreen() {
   const heading = engine?.fix?.cogDeg ?? engine?.attitude?.heading ?? null;
   const advice = recommendRpm({
     profile,
+    hull,
     currentRpm: rpm,
     hsM: hs,
     periodS: period,
@@ -105,11 +108,37 @@ export function RpmScreen() {
       </Card>
 
       <Card className="rounded-2xl p-4">
+        <CardTitle>Casco</CardTitle>
+        <p className="mt-2 text-sm text-muted">
+          A resistência que a onda adiciona depende da boca e de quão curta é a
+          proa na linha d&apos;água. Meça no plano de linhas; padrão de
+          rebocador de porto de ~30 m.
+        </p>
+        <div className="mt-4 grid grid-cols-2 gap-3">
+          <Field
+            label="Boca (m)"
+            value={hull.beamM}
+            onChange={(n) => setHull({ beamM: n })}
+          />
+          <Field
+            label="Proa na LWL (m)"
+            value={hull.bowLengthM}
+            onChange={(n) => setHull({ bowLengthM: n })}
+          />
+        </div>
+      </Card>
+
+      <Card className="rounded-2xl p-4">
         <CardTitle>Por que esta faixa</CardTitle>
         <ul className="mt-3 space-y-2 text-sm text-muted">
           <li>
             Mar do casco: −{advice.seaPenalty} rpm (Hs {hs.toFixed(1)} m
             {period ? `, Tz ${period.toFixed(0)} s` : ""})
+          </li>
+          <li>
+            Resistência adicionada pela onda:{" "}
+            <span className="text-fg">{advice.addedResistanceKn.toFixed(1)} kN</span>{" "}
+            (STAWAVE-1, cresce com o quadrado do Hs)
           </li>
           <li>Vento: −{advice.windPenalty} rpm</li>
           <li>
@@ -118,9 +147,10 @@ export function RpmScreen() {
           </li>
         </ul>
         <p className="mt-3 text-sm text-subtle">
-          Mar de proa e período curto pedem menos RPM para reduzir slamming.
-          Mar de popa devolve um pouco de regime. Não substitui o julgamento
-          do mestre.
+          Dobrar a altura da onda quadruplica a resistência — por isso a faixa
+          cai rápido quando o mar cresce. Período curto pede menos RPM ainda,
+          para reduzir slamming; mar de popa devolve um pouco de regime. Não
+          substitui o julgamento do mestre.
         </p>
       </Card>
     </div>

@@ -2,10 +2,10 @@
  * Proa · TugLife Systems — Faixa de RPM de viagem
  * ---------------------------------------------------------------------------
  * @autor    Jossian Brito
- * @versao   1.2.0
+ * @versao   1.6.0
  * @data     2026-09-20 02:14 UTC  (ano 2026)
  *
- * MODIFICAÇÕES DESTA VERSÃO (1.2.0)
+ * MODIFICAÇÕES DA VERSÃO 1.2.0
  *  1. Corrigido o erro DIMENSIONAL da declividade de onda. A versão 1.0.0 usava
  *     `Hs/T`, que tem unidade de m/s e não é declividade nenhuma. Declividade é
  *     adimensional: `Hs/L`, e em águas profundas `L = g·T²/(2π)`. A diferença
@@ -15,6 +15,20 @@
  *     A constante foi recalibrada para preservar a penalidade no ponto de
  *     referência (ver `STEEPNESS_RPM`), de modo que só a RESPOSTA AO PERÍODO
  *     muda, não a agressividade geral do modelo.
+ *
+ * MODIFICAÇÕES DA VERSÃO 1.6.0
+ *  2. A penalidade de ALTURA passa a usar a resistência adicionada em ondas
+ *     pela formulação STAWAVE-1 (ISO 15016 / ITTC 7.5-02-07-02.2), que escala
+ *     com **Hs²**, e não linearmente com Hs como na 1.2.0. Dobrar a altura de
+ *     onda quadruplica a resistência: é o que a física manda e o que o casco
+ *     sente. O modelo antigo era brando demais em mar grosso e severo demais
+ *     em mar fraco.
+ *  3. O modelo passa a CONHECER O CASCO. Boca e comprimento de proa na linha
+ *     d'água entram como perfil editável, do mesmo jeito que o perfil de
+ *     motor. Um rebocador mais boçudo sente mais resistência adicionada com o
+ *     mesmo mar, e agora a faixa reflete isso.
+ *  4. `RpmAdvice` devolve `addedResistanceKn` — o mar deixa de ser só um
+ *     número abstrato de rpm e vira a força que está comendo o bollard pull.
  * ---------------------------------------------------------------------------
  */
 import { clamp } from "./utils.ts";
@@ -29,8 +43,91 @@ const G = 9.80665;
  */
 const DEEP_WATER_L = G / (2 * Math.PI);
 
+/** Massa específica da água do mar, em kg/m³. */
+const RHO_SEA = 1025;
+
 /** Período assumido quando o sensor não fecha um Tz confiável, em segundos. */
 const FALLBACK_PERIOD_S = 7.5;
+
+/**
+ * Particulares do casco que a resistência adicionada em ondas consome.
+ *
+ * `bowLengthM` é o L_BWL da STAWAVE-1: o comprimento da proa medido na linha
+ * d'água até a seção onde o casco atinge 95 % da boca máxima. Num rebocador
+ * ASD de proa cheia isso é curto — uns 6 a 8 m num casco de 30 m — e é
+ * justamente essa proa curta e larga que faz o rebocador martelar no mar de
+ * proa em vez de cortá-lo.
+ */
+export type HullProfile = {
+  /** Boca moldada, em metros. */
+  beamM: number;
+  /** Comprimento da proa na linha d'água até 95 % da boca, em metros. */
+  bowLengthM: number;
+};
+
+/** Rebocador de porto representativo: LOA ~30 m, boca 11,5 m, proa curta. */
+export const DEFAULT_HULL: HullProfile = { beamM: 11.5, bowLengthM: 7 };
+
+/**
+ * Resistência adicionada em ondas de proa, em newtons — STAWAVE-1.
+ *
+ *   R_AWL = (1/16) · ρ · g · Hs² · B · √(B / L_BWL)
+ *
+ * É a formulação simplificada da ISO 15016 / ITTC, usada quando não há ensaio
+ * de seakeeping do casco. Note o que ela diz e o que ela não diz:
+ *
+ *   DIZ que a resistência cresce com o QUADRADO da altura significativa.
+ *     Hs 1,5 m custa 21 kN a este casco; Hs 3,0 m custa 83 kN, quatro vezes
+ *     mais, não o dobro. Era exatamente isso que a 1.2.0 errava.
+ *   DIZ que a boca pesa, e mais que linearmente: B·√(B/L_BWL). Proa curta e
+ *     larga — a assinatura do ASD — aumenta o termo.
+ *   NÃO DIZ nada sobre período. Por isso o termo de declividade continua ao
+ *     lado: é ele que separa o swell que embala da vaga que martela.
+ *
+ * RESSALVA DE VALIDADE, que fica registrada de propósito: a STAWAVE-1 foi
+ * levantada para navios mercantes, bem maiores que um rebocador de 30 m, e
+ * tende a superestimar em casco pequeno. A FORMA da curva é física; a ESCALA
+ * em rpm (`AW_RPM_PER_KN`) é empírica e espera dado de viagem real.
+ *
+ * @param hsM  altura significativa, em metros
+ * @param hull particulares do casco
+ */
+export function addedResistanceN(hsM: number, hull: HullProfile): number {
+  const B = hull.beamM;
+  const L = hull.bowLengthM;
+  if (!(hsM > 0) || !(B > 0) || !(L > 0)) return 0;
+  return (1 / 16) * RHO_SEA * G * hsM * hsM * B * Math.sqrt(B / L);
+}
+
+/** O mesmo, em quilonewtons — a unidade em que se fala de tração a bordo. */
+export function addedResistanceKn(hsM: number, hull: HullProfile): number {
+  return addedResistanceN(hsM, hull) / 1000;
+}
+
+/**
+ * Quantos rpm de prudência por quilonewton de resistência adicionada.
+ *
+ * Esta é a ÚNICA constante empírica do termo de altura, e a que espera
+ * calibração de campo. Foi fixada preservando o ponto de referência da 1.2.0:
+ *   casco padrão, Hs 1,5 m → R_AWL = 20,8 kN
+ *   penalidade da 1.2.0    → 1,5 × 78 = 117 rpm
+ *   logo                   → 117 / 20,8 ≈ 5,6 rpm/kN
+ * Ou seja: na viagem costeira típica o modelo não mudou de temperamento, e o
+ * que mudou foi a CURVA — mais branda em mar fraco, mais severa em mar grosso.
+ *
+ * Comportamento conforme a altura, casco padrão, termo de altura só:
+ *   Hs 0,5 m →   2,3 kN →  13 rpm   (antes 39)
+ *   Hs 1,0 m →   9,3 kN →  52 rpm   (antes 78)
+ *   Hs 1,5 m →  20,8 kN → 117 rpm   (calibração)
+ *   Hs 2,5 m →  57,9 kN → 325 rpm   (antes 195)
+ *   Hs 3,0 m →  83,3 kN → 468 rpm   (antes 234)
+ *
+ * Acima de Hs ~3 m a faixa satura no piso de marcha lenta e o modelo perde
+ * resolução. Para um rebocador de 30 m isso é sea state 5 e acima: já não é
+ * viagem, é sobrevivência, e mandar reduzir ao mínimo é a resposta certa
+ * mesmo sem resolução fina.
+ */
+const AW_RPM_PER_KN = 5.6;
 
 /**
  * Teto físico da declividade de um ESTADO DE MAR (Hs/L).
@@ -55,9 +152,9 @@ const STEEPNESS_MAX = 0.05;
  *   Hs 1,5 · T  8 s → antes  79   agora  79   (ponto de calibração)
  *   Hs 1,5 · T 12 s → antes  53   agora  35   (swell longo pune menos, e deve)
  *
- * A calibração ABSOLUTA do modelo continua sendo trabalho futuro (ver GDD §9,
- * item P8: migrar a penalidade de mar para STAWAVE-1, que escala com Hs²).
- * Aqui se conserta a dimensão, não a constante empírica.
+ * Esta constante é irmã de `AW_RPM_PER_KN`: as duas são empíricas e as duas
+ * esperam calibração contra viagem real. A diferença é que a forma de ambas
+ * já é física — Hs² para a altura, 1/T² para a declividade.
  */
 const STEEPNESS_RPM = 5250;
 
@@ -97,6 +194,8 @@ export type RpmAdvice = {
   label: "abaixo" | "ideal" | "acima";
   reason: string;
   sea: "proa" | "popa" | "traves";
+  /** Resistência adicionada pela onda, em kN — o que o mar come do bollard. */
+  addedResistanceKn: number;
   seaPenalty: number;
   windPenalty: number;
   encounterPenalty: number;
@@ -109,6 +208,7 @@ function angleDiff(a: number, b: number) {
 
 export function recommendRpm(opts: {
   profile: EngineProfile;
+  hull?: HullProfile;
   currentRpm: number;
   hsM: number;
   periodS: number;
@@ -118,12 +218,15 @@ export function recommendRpm(opts: {
 }): RpmAdvice {
   const { profile, currentRpm, hsM, periodS, windKn, headingDeg, waveDirDeg } =
     opts;
+  const hull = opts.hull ?? DEFAULT_HULL;
 
-  // Dois termos, dois efeitos distintos: a altura cobra o trabalho de levantar
-  // o casco, a declividade cobra o castigo do impacto. Uma onda de 2 m em 14 s
-  // embala; a mesma altura em 6 s martela.
+  // Dois termos, dois efeitos distintos: a ALTURA cobra a resistência que a
+  // onda adiciona ao casco (STAWAVE-1, ∝ Hs²), a DECLIVIDADE cobra o castigo
+  // do impacto. Uma onda de 2 m em 14 s embala; a mesma altura em 6 s martela,
+  // e a STAWAVE-1 sozinha não distingue as duas porque ignora o período.
+  const awKn = addedResistanceKn(hsM, hull);
   const steep = waveSteepness(hsM, periodS);
-  const seaPenalty = hsM * 78 + steep * STEEPNESS_RPM;
+  const seaPenalty = awKn * AW_RPM_PER_KN + steep * STEEPNESS_RPM;
   const windPenalty = Math.max(0, windKn - 14) * 7;
 
   let encounterPenalty = 0;
@@ -183,6 +286,7 @@ export function recommendRpm(opts: {
     label,
     reason,
     sea,
+    addedResistanceKn: Math.round(awKn * 10) / 10,
     seaPenalty: Math.round(seaPenalty),
     windPenalty: Math.round(windPenalty),
     encounterPenalty: Math.round(encounterPenalty),

@@ -2,7 +2,7 @@
 
 **Para a tripulação do passadiço**
 **Autor:** Jossian Brito · TugLife Systems
-**Versão:** 1.5.0 · 2026-09-20 02:14 UTC (ano 2026)
+**Versão:** 1.6.0 · 2026-09-20 02:14 UTC (ano 2026)
 
 ---
 
@@ -123,9 +123,29 @@ Abaixo, o conselho de combustível — se o tempo está a favor e dá para alivi
 ou se cortar RPM só vai alongar a viagem sem economizar.
 
 **O período pesa tanto quanto a altura.** Dois metros em 14 segundos embalam o
-rebocador; dois metros em 6 segundos martelam. A partir da 1.2.0 a faixa
-distingue os dois: em vaga curta ela desce mais, em swell longo ela alivia. Se
-você notou a recomendação mudar em relação a versões anteriores, é isto.
+rebocador; dois metros em 6 segundos martelam. A faixa distingue os dois: em
+vaga curta ela desce mais, em swell longo ela alivia.
+
+**Dobrar a onda quadruplica a força.** Desde a 1.6.0 a tela mostra a
+**resistência adicionada pela onda**, em quilonewtons — o que o mar está
+comendo do seu bollard pull. Ela cresce com o quadrado do Hs, que é como a
+física manda e como o casco sente. Consequência prática: em mar fraco a faixa
+ficou mais generosa que nas versões antigas, e em mar grosso ela desce bem mais
+rápido. Acima de Hs 3 m a recomendação encosta na marcha lenta e para de
+distinguir — nessa altura já não é viagem.
+
+### Informe o seu casco
+
+No fim da aba RPM há o cartão **Casco**, com dois campos:
+
+| Campo | O que é | Onde achar |
+|---|---|---|
+| **Boca** | boca moldada, em metros | plano de linhas ou arqueação |
+| **Proa na LWL** | comprimento da proa na linha d'água até onde o casco atinge 95 % da boca | plano de linhas |
+
+O padrão é um rebocador de porto de ~30 m (boca 11,5 m, proa 7 m). Se o seu for
+outro, corrija: a resistência adicionada depende dos dois, e proa curta e
+cheia — a assinatura do ASD — martela mais que proa fina.
 
 ## 5. A Lara
 
@@ -212,7 +232,7 @@ Nenhuma das chaves chega ao navegador.
 
 ```bash
 npm run dev            # servidor em :8080
-npm test               # testes de domínio (159) — tem de ficar verde
+npm test               # testes de domínio (168) — tem de ficar verde
 npm run test:scaffold  # testes do andaime do template (precisa de .grok/)
 npm run test:all       # os dois
 npm run typecheck      # tsc --noEmit

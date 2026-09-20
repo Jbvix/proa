@@ -1,6 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { DEFAULT_PROFILE, fuelHint, recommendRpm, waveSteepness } from "./rpm.ts";
+import {
+  DEFAULT_HULL,
+  DEFAULT_PROFILE,
+  addedResistanceKn,
+  addedResistanceN,
+  fuelHint,
+  recommendRpm,
+  waveSteepness,
+} from "./rpm.ts";
 import { nearestPlaceAny } from "./places.ts";
 
 test("nearest coast from Mucuripe is Mucuripe or Fortaleza", () => {
@@ -190,5 +198,148 @@ test("a faixa de RPM continua dentro dos limites do motor", () => {
       assert.ok(a.max > a.min, `Hs ${hsM} T ${periodS}: faixa invertida`);
       assert.ok(a.center >= a.min && a.center <= a.max, "centro fora da própria faixa");
     }
+  }
+});
+
+/* ===========================================================================
+ * Resistência adicionada em ondas — STAWAVE-1
+ * ---------------------------------------------------------------------------
+ * @autor  Jossian Brito
+ * @versao 1.6.0 · 2026-09-20
+ *
+ * R_AWL = (1/16)·ρ·g·Hs²·B·√(B/L_BWL)  — ISO 15016 / ITTC 7.5-02-07-02.2
+ * ========================================================================= */
+
+test("a resistência bate com a fórmula da publicação", () => {
+  // Referência independente, recalculada aqui a partir do enunciado.
+  const ref = (hs: number, B: number, L: number) =>
+    (1 / 16) * 1025 * 9.80665 * hs * hs * B * Math.sqrt(B / L);
+  for (const [hs, B, L] of [
+    [1.5, 11.5, 7],
+    [2.0, 9.0, 5],
+    [0.8, 14.0, 9],
+  ] as const) {
+    const esperado = ref(hs, B, L);
+    const veio = addedResistanceN(hs, { beamM: B, bowLengthM: L });
+    assert.ok(Math.abs(veio - esperado) / esperado < 1e-9, `Hs ${hs} B ${B}: ${veio}`);
+  }
+  // Ordem de grandeza sadia: ~21 kN num rebocador de porto em Hs 1,5 m.
+  const kn = addedResistanceKn(1.5, DEFAULT_HULL);
+  assert.ok(kn > 19 && kn < 23, `${kn} kN fora da ordem esperada`);
+});
+
+test("dobrar a altura QUADRUPLICA a resistência — é o ponto de toda a mudança", () => {
+  // A 1.2.0 dobrava. Este teste é o que impede a volta do modelo linear.
+  const a = addedResistanceN(1.0, DEFAULT_HULL);
+  const b = addedResistanceN(2.0, DEFAULT_HULL);
+  assert.ok(Math.abs(b / a - 4) < 1e-9, `razão ${b / a} deveria ser 4, não 2`);
+});
+
+test("casco mais boçudo sente mais o mesmo mar", () => {
+  // B·√(B/L_BWL): a boca pesa mais que linearmente.
+  const estreito = addedResistanceN(1.5, { beamM: 9, bowLengthM: 7 });
+  const largo = addedResistanceN(1.5, { beamM: 13, bowLengthM: 7 });
+  assert.ok(largo > estreito * 1.5, `${largo} vs ${estreito}: a boca tem de pesar`);
+});
+
+test("proa curta paga mais que proa fina, com a mesma boca", () => {
+  // √(B/L_BWL) cresce quando a proa encurta — a assinatura do ASD.
+  const proaCurta = addedResistanceN(1.5, { beamM: 11.5, bowLengthM: 5 });
+  const proaLonga = addedResistanceN(1.5, { beamM: 11.5, bowLengthM: 10 });
+  assert.ok(proaCurta > proaLonga, "proa curta e cheia martela mais");
+});
+
+test("casco inválido devolve zero em vez de NaN", () => {
+  // Boca zero faria a raiz explodir e contaminaria a faixa inteira de RPM.
+  for (const h of [
+    { beamM: 0, bowLengthM: 7 },
+    { beamM: 11.5, bowLengthM: 0 },
+    { beamM: -1, bowLengthM: 7 },
+  ]) {
+    assert.equal(addedResistanceN(1.5, h), 0, JSON.stringify(h));
+  }
+  assert.equal(addedResistanceN(0, DEFAULT_HULL), 0);
+  assert.equal(addedResistanceN(-2, DEFAULT_HULL), 0);
+});
+
+test("no ponto de calibração a faixa não mudou face à 1.2.0", () => {
+  // Hs 1,5 m e T 8 s continuam devolvendo a mesma penalidade de mar de antes
+  // (117 de altura + 79 de declividade ≈ 196 rpm). O que mudou é a curva.
+  const a = recommendRpm({
+    profile: DEFAULT_PROFILE,
+    currentRpm: 900,
+    hsM: 1.5,
+    periodS: 8,
+    windKn: 0,
+    headingDeg: null,
+    waveDirDeg: null,
+  });
+  assert.ok(
+    Math.abs(a.seaPenalty - 196) < 6,
+    `penalidade ${a.seaPenalty} saiu do ponto de calibração`,
+  );
+});
+
+test("mar fraco alivia e mar grosso aperta, comparado ao modelo linear", () => {
+  const faixa = (hsM: number) =>
+    recommendRpm({
+      profile: DEFAULT_PROFILE,
+      currentRpm: 900,
+      hsM,
+      periodS: 8,
+      windKn: 0,
+      headingDeg: null,
+      waveDirDeg: null,
+    });
+  // Em Hs 0,5 m o termo linear antigo cobrava 39 rpm de altura; agora ~13.
+  assert.ok(faixa(0.5).seaPenalty < 39 + 30, `Hs 0,5: ${faixa(0.5).seaPenalty}`);
+  // Em Hs 3 m cobrava 234; agora a altura sozinha passa de 400.
+  assert.ok(faixa(3).seaPenalty > 400, `Hs 3,0: ${faixa(3).seaPenalty}`);
+  // E a curva é monotônica.
+  let anterior = -1;
+  for (const hs of [0, 0.5, 1, 1.5, 2, 2.5, 3]) {
+    const p = faixa(hs).seaPenalty;
+    assert.ok(p >= anterior, `Hs ${hs} devolveu ${p}, menor que o anterior`);
+    anterior = p;
+  }
+});
+
+test("a resistência adicionada chega ao passadiço junto com a faixa", () => {
+  const a = recommendRpm({
+    profile: DEFAULT_PROFILE,
+    hull: DEFAULT_HULL,
+    currentRpm: 900,
+    hsM: 1.5,
+    periodS: 8,
+    windKn: 0,
+    headingDeg: null,
+    waveDirDeg: null,
+  });
+  assert.ok(a.addedResistanceKn > 19 && a.addedResistanceKn < 23, `${a.addedResistanceKn} kN`);
+  assert.equal(recommendRpm({
+    profile: DEFAULT_PROFILE,
+    currentRpm: 900,
+    hsM: 0,
+    periodS: 0,
+    windKn: 0,
+    headingDeg: null,
+    waveDirDeg: null,
+  }).addedResistanceKn, 0, "mar parado não adiciona resistência");
+});
+
+test("mesmo em mar extremo a faixa respeita o envelope do motor", () => {
+  for (const hsM of [4, 6, 8]) {
+    const a = recommendRpm({
+      profile: DEFAULT_PROFILE,
+      currentRpm: 900,
+      hsM,
+      periodS: 6,
+      windKn: 40,
+      headingDeg: 0,
+      waveDirDeg: 180,
+    });
+    assert.ok(a.min >= DEFAULT_PROFILE.idle, `Hs ${hsM}: min ${a.min}`);
+    assert.ok(a.max <= DEFAULT_PROFILE.max, `Hs ${hsM}: max ${a.max}`);
+    assert.ok(a.center >= a.min && a.center <= a.max);
   }
 });

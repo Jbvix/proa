@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { hourKey } from "./utils";
 import type { ParsedRoute } from "./gpx";
-import { DEFAULT_PROFILE, type EngineProfile } from "./rpm";
+import { DEFAULT_HULL, DEFAULT_PROFILE, type EngineProfile, type HullProfile } from "./rpm";
 import type { HourlyWave } from "./waves";
 import { sensorEngine } from "./sensor-engine";
 import { applyTheme, type ThemeId } from "./theme";
@@ -20,6 +20,7 @@ type SettingsState = {
   crewVoices: VoiceCard[];
   rpm: number;
   profile: EngineProfile;
+  hull: HullProfile;
   route: ParsedRoute | null;
   hourly: HourlyWave[];
   setOnboarded: (v: boolean) => void;
@@ -30,6 +31,7 @@ type SettingsState = {
   setCrewVoices: (v: VoiceCard[]) => void;
   setRpm: (n: number) => void;
   setProfile: (p: Partial<EngineProfile>) => void;
+  setHull: (h: Partial<HullProfile>) => void;
   setRoute: (r: ParsedRoute | null) => void;
   upsertHour: (row: HourlyWave) => void;
   seedForecastHours: (rows: HourlyWave[]) => void;
@@ -46,6 +48,7 @@ export const useSettings = create<SettingsState>()(
       crewVoices: [],
       rpm: 920,
       profile: DEFAULT_PROFILE,
+      hull: DEFAULT_HULL,
       route: null,
       hourly: [],
       setOnboarded: (v) => set({ onboarded: v }),
@@ -59,6 +62,7 @@ export const useSettings = create<SettingsState>()(
       setCrewVoices: (v) => set({ crewVoices: v.slice(-6) }),
       setRpm: (n) => set({ rpm: n }),
       setProfile: (p) => set({ profile: { ...get().profile, ...p } }),
+      setHull: (h) => set({ hull: { ...get().hull, ...h } }),
       setRoute: (r) => set({ route: r }),
       upsertHour: (row) => {
         const next = get().hourly.filter((h) => h.t !== row.t);
@@ -97,6 +101,7 @@ export const useSettings = create<SettingsState>()(
         crewVoices: s.crewVoices,
         rpm: s.rpm,
         profile: s.profile,
+        hull: s.hull,
         route: s.route,
       }),
       onRehydrateStorage: () => (state) => {
@@ -107,6 +112,17 @@ export const useSettings = create<SettingsState>()(
           state.route.waypoints = [];
         }
         if (!Array.isArray(state?.crewNames) && state) state.crewNames = [];
+        // Casco veio de versão anterior a 1.6.0, ou com número sujo: volta ao
+        // padrão. Boca zero ou negativa faria a raiz da STAWAVE-1 explodir.
+        if (state) {
+          const h = state.hull as Partial<HullProfile> | undefined;
+          const boca = Number(h?.beamM);
+          const proa = Number(h?.bowLengthM);
+          state.hull = {
+            beamM: boca > 0 ? boca : DEFAULT_HULL.beamM,
+            bowLengthM: proa > 0 ? proa : DEFAULT_HULL.bowLengthM,
+          };
+        }
         if (state) {
           const voices = Array.isArray((state as { crewVoices?: VoiceCard[] }).crewVoices)
             ? (state as { crewVoices: VoiceCard[] }).crewVoices
