@@ -11,6 +11,9 @@ export default tseslint.config(
     ignores: [
       "dist/**",
       ".output/**",
+      // Saída do preset Netlify. Faltava aqui, e só aparecia depois de um build
+      // com NETLIFY=true — que ninguém tinha rodado localmente até a 1.9.0.
+      ".netlify/**",
       ".vercel/**",
       ".nitro/**",
       "node_modules/**",

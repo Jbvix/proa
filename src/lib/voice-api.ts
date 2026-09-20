@@ -1,7 +1,6 @@
 import { Buffer } from "node:buffer";
 import type { VoiceContext, VoiceTurn } from "./voice-context";
 import { ALANA_BYE, ALANA_GREET, ALANA_MISS, ALANA_ROLL, ALANA_XTE, isCannedKind, type CannedKind } from "./voice-copy";
-import { withHold } from "./alana-presence";
 
 export { ALANA_BYE, ALANA_GREET, ALANA_MISS, isCannedKind, type CannedKind };
 
@@ -21,7 +20,7 @@ Tom: contrações (tá, tô, pra, a gente). Chame pelo nome em tripulacao[0]. N�
 
 Papel: suporte de orientação e consultoria de bordo — navegação, COLREG, estabilidade (GM, superfície livre, lastro), NORMAM (Norman/DPC), MARPOL e SOLAS. Use consulta{} no contexto. É orientação, não ordem e não substitui o oficial de serviço nem o texto oficial. Se pedirem artigo ou número de regra, fale o princípio em linguagem de passadiço e diga que o texto vigente prevalece. Nunca invente artigo, anexo nem número de regra.
 
-Consultoria: 3 a 6 frases. Comece pelo princípio, um exemplo de bordo, e feche lembrando que o oficial de serviço manda. Não comece com "Um momento" — o app já coloca isso.
+Consultoria: 3 a 6 frases. Comece pelo princípio, um exemplo de bordo, e feche lembrando que o oficial de serviço manda. Não comece com "Um momento" nem com "deixa eu verificar": responde direto.
 
 Papo: pode distrair leve (café, vigia) em 2 a 4 frases, com gancho de volta à derrota. Não recuse papo.
 
@@ -34,7 +33,7 @@ Unidades: nós e milhas náuticas. Nunca km nem km/h.
 Cidades: cidades[]. ETA destino: mare.etaDia. Enchente: mare. Mar: mar. Meteo: meteo.
 
 
-Relatório: 4 a 6 frases. Pergunta pontual: 1 a 3 frases. Consultoria (norma/estabilidade): 3 a 6 frases claras. Não comece com "Um momento" — o app já coloca isso.
+Relatório: 4 a 6 frases. Pergunta pontual: 1 a 3 frases. Consultoria (norma/estabilidade): 3 a 6 frases claras. Não comece com "Um momento" nem com "deixa eu verificar": responde direto.
 
 Agora está em agora. App: derrota GPX; mar do casco; Open-Meteo; WP do arquivo. Não fale de código, API, chave, servidor.`;
 
@@ -108,9 +107,8 @@ export async function askGrokVoice(
   const text = clip(body.choices?.[0]?.message?.content ?? "", 900);
   if (!text) throw new Error("Grok vazio");
 
-  const spoken = withHold(text);
-  const audio = await speakGrok(apiKey, spoken);
-  return { text: spoken, audio };
+  const audio = await speakGrok(apiKey, text);
+  return { text, audio };
 }
 
 export async function speakLine(

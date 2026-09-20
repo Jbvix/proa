@@ -2,7 +2,7 @@
 
 **Para a tripulação do passadiço**
 **Autor:** Jossian Brito · TugLife Systems
-**Versão:** 1.8.0 · 2026-09-20 02:14 UTC (ano 2026)
+**Versão:** 1.9.0 · 2026-09-20 02:14 UTC (ano 2026)
 
 ---
 
@@ -191,6 +191,16 @@ Fora dessa faixa:
 Se o Hs parecer baixo demais em swell longo, confira: (a) o aparelho está
 firme? (b) o período aparece na tela ou está em branco?
 
+## 6.1 Qual versão está no seu aparelho
+
+O número aparece **no alto da tela**, ao lado de "Sensores do aparelho" /
+"Simulação de bordo": `v1.9.0`.
+
+Diga sempre esse número ao reportar qualquer coisa estranha. O Proa é um app
+instalado, e o aparelho pode segurar uma versão antiga em cache — dois tablets
+do mesmo rebocador podem estar rodando versões diferentes. Se o seu estiver
+atrás, feche e reabra o app; se insistir, limpe o cache do navegador.
+
 ## 7. Problemas comuns
 
 | Sintoma | O que fazer |
@@ -238,7 +248,7 @@ Nenhuma das chaves chega ao navegador.
 
 ```bash
 npm run dev            # servidor em :8080
-npm test               # testes de domínio (201) — tem de ficar verde
+npm test               # testes de domínio (202) — tem de ficar verde
 npm run test:scaffold  # testes do andaime do template (precisa de .grok/)
 npm run test:all       # os dois
 npm run typecheck      # tsc --noEmit

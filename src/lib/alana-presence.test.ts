@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { askedForName, byeLine, dayPart, greetLine, helloWord, withHold } from "./alana-presence.ts";
+import { askedForName, byeLine, dayPart, greetLine, helloWord } from "./alana-presence.ts";
 
 test("day part splits morning afternoon night", () => {
   const morning = new Date(2026, 8, 19, 8, 0, 0).getTime();
@@ -33,9 +33,6 @@ test("later greet uses the known name", () => {
   assert.match(u, /Pedro/);
 });
 
-test("hold prefixes a fact", () => {
-  assert.equal(withHold("ETA hoje 21:40."), "Um momento, deixa eu verificar. ETA hoje 21:40.");
-});
 
 test("bye uses the name when known", () => {
   assert.match(byeLine(["Jossian"]), /Jossian/);

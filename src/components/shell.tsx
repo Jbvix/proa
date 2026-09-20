@@ -4,6 +4,7 @@ import { ProaMark } from "@/components/mark";
 import { DeckTools } from "@/components/deck-tools";
 import { cn } from "@/lib/utils";
 import { useBridge, type TabId } from "@/lib/store";
+import { APP_VERSION } from "@/lib/version";
 
 const TABS: { id: TabId; label: string; icon: typeof Compass }[] = [
   { id: "painel", label: "Painel", icon: Compass },
@@ -32,8 +33,12 @@ export function Shell({
         <ProaMark className="size-6 shrink-0 text-accent" />
         <div className="min-w-0 flex-1">
           <p className="font-display text-xl italic leading-none text-fg">Proa</p>
-          <p className="mt-0.5 truncate text-[11px] uppercase tracking-[0.14em] text-subtle">
-            {modeLabel}
+          {/* A versão fica aqui, sempre à vista: é a primeira coisa que se
+              pergunta quando alguém do passadiço reporta um número estranho, e
+              num PWA o tablet pode estar segurando um build antigo em cache. */}
+          <p className="mt-0.5 flex items-baseline gap-1.5 text-[11px] uppercase tracking-[0.14em] text-subtle">
+            <span className="truncate">{modeLabel}</span>
+            <span className="shrink-0 tracking-normal text-subtle/70">v{APP_VERSION}</span>
           </p>
         </div>
         <DeckTools />

@@ -3,7 +3,7 @@
 **Projeto:** Proa · PWA de passadiço para rebocador
 **Organização:** TugLife Systems
 **Autor:** Jossian Brito
-**Versão do documento:** 1.8.0
+**Versão do documento:** 1.9.0
 **Data:** 2026-09-20 02:14 UTC (ano 2026)
 
 ---
@@ -81,6 +81,7 @@ PWA. Funções serverless em Netlify. Sem banco de dados.
 | `voice-alerts.ts` | Decide QUANDO a Lara fala sem ser chamada (puro, testado) |
 | `voice-turn.ts` | Decide o que fazer com cada transcrição do microfone (puro, testado) |
 | `settings-migrate.ts` | Apaga do aparelho o que versões antigas gravaram e o app não usa mais |
+| `version.ts` | Versão publicada, amarrada ao `package.json` por teste |
 | `voice-echo.ts` | Memória das duas últimas falas, contra realimentação acústica |
 | `voice-tts.ts` | Cache e busca do áudio da fala |
 
@@ -350,6 +351,28 @@ de casca. Nenhum alvo foi removido: os dois continuam necessários.
 | — | Assinatura hidrodinâmica: acumular (heave, roll) × (Hs, Tz, encontro) = RAO experimental do casco | Ideia |
 
 ## 10. Histórico de versões
+
+### 1.9.0 — 2026-09-20
+
+**Versão visível na tela.** O número aparece no alto, ao lado do modo de
+captura. Quando alguém do passadiço reporta um número estranho, a primeira
+pergunta é sempre "qual versão?" — e num PWA o tablet pode estar segurando um
+build antigo em cache por dias, com tablets diferentes rodando código
+diferente. `version.ts` guarda o valor e um teste falha se ele divergir do
+`package.json`, que agora tem campo `version`.
+
+**Removido o "Um momento, deixa eu verificar."** Era prefixado a toda resposta
+de consultoria pela `withHold()`. Saíram a constante, a função, os dois
+chamadores, a regra de eco correspondente em `wake-word.ts` e o teste. O prompt
+do sistema deixou de dizer "o app já coloca isso" — agora instrui a Lara a
+responder direto, sem bordão de espera.
+
+**Corrigido o ESLint**: `.netlify/**` não estava na lista de ignorados, ao lado
+de `dist`, `.vercel` e `.nitro`. Só apareceu porque esta foi a primeira vez que
+o build com `NETLIFY=true` rodou localmente — 1.246 erros de lint em código
+gerado, que sumiram com uma linha.
+
+Cobertura: 201 para 202 testes.
 
 ### 1.8.0 — 2026-09-20
 

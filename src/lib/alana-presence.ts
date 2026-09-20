@@ -1,7 +1,5 @@
 export type DayPart = "manha" | "tarde" | "noite";
 
-export const ALANA_HOLD = "Um momento, deixa eu verificar.";
-
 export function dayPart(ms = Date.now()): DayPart {
   const h = new Date(ms).getHours();
   if (h < 12) return "manha";
@@ -28,13 +26,6 @@ export function greetLine(names: string[], ms = Date.now(), heard?: string | nul
 export function byeLine(names: string[]) {
   const who = names[0];
   return who ? `Beleza, ${who}. Me chama se precisar.` : "Beleza. Me chama se precisar.";
-}
-
-export function withHold(answer: string) {
-  const t = answer.trim();
-  if (!t) return ALANA_HOLD;
-  if (/^um momento/i.test(t)) return t;
-  return `${ALANA_HOLD} ${t}`;
 }
 
 export function askedForName(lastAssistant?: string | null) {

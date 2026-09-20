@@ -36,7 +36,7 @@ TanStack Start (React 19), Vite, Tailwind v4, PWA.
 
 ```bash
 npm run dev            # servidor em :8080
-npm test               # testes de domínio (201) — tem de ficar verde
+npm test               # testes de domínio (202) — tem de ficar verde
 npm run test:scaffold  # testes do andaime do template (exige .grok/)
 npm run test:all       # os dois
 npm run typecheck      # tsc --noEmit

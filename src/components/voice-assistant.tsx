@@ -29,7 +29,7 @@ import { buildVoiceContext, type VoiceTurn } from "@/lib/voice-context";
 import { routeHeard } from "@/lib/voice-turn";
 import { extractCrewNames, extractNameAnswer, mergeCrew } from "@/lib/crew";
 import { quickReply } from "@/lib/voice-quick";
-import { greetLine, byeLine, withHold, askedForName } from "@/lib/alana-presence";
+import { greetLine, byeLine, askedForName } from "@/lib/alana-presence";
 import { matchVoice, upsertVoice } from "@/lib/voice-print";
 import { passageOf } from "@/lib/passage";
 import { type WatchKind } from "@/lib/voice-watch";
@@ -465,7 +465,7 @@ export function AlanaRadio() {
         ? `Prazer, ${who}. Tô aqui. Pode mandar.`
         : quickReply(q, ctx);
       if (local) {
-        const spoken = introOnly ? local : withHold(local);
+        const spoken = local;
         rememberLine(spoken);
         setTurns((t) => [...t, { role: "assistant", content: spoken }]);
         const audio = await fetchSay(spoken);
