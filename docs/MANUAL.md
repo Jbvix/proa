@@ -2,7 +2,7 @@
 
 **Para a tripulação do passadiço**
 **Autor:** Jossian Brito · TugLife Systems
-**Versão:** 1.9.0 · 2026-09-20 02:14 UTC (ano 2026)
+**Versão:** 1.10.0 · 2026-09-20 12:00 UTC (ano 2026)
 
 ---
 
@@ -49,7 +49,7 @@ toque a Lara não ouve.
 2. **Importe o GPX** da derrota na aba **Rota** (aceita track, rota ou waypoints).
 3. **Informe o RPM atual** na aba **RPM**.
 4. **Acompanhe** Painel, Ondas, Rota e RPM.
-5. **Toque em Conversar** para falar com a Lara. Toque de novo para encerrar.
+5. **Toque em Conversar** para falar com a Lara. Toque de novo para encerrar — ou ela encerra sozinha depois de 90 s sem ninguém falar com ela.
 
 ## 4. As quatro abas
 
@@ -156,6 +156,19 @@ Colega de passadiço, não rádio.
 | Começar a conversa | Toque em **Conversar** |
 | Acordar pela voz | Diga **"Lara"** |
 | Encerrar | Toque em **Conversar** de novo, ou diga "tchau, Lara" |
+| Deixar encerrar | Fique 90 s sem falar com ela. A conversa fecha sozinha, sem ela falar nada |
+
+**Enquanto a conversa está aberta**, o ícone da Lara no alto da tela fica com
+um anel aceso. É o "canal aberto": tudo que se diz no passadiço vai para ela,
+sem precisar chamar pelo nome. Nos últimos 15 segundos aparece um número no
+canto do ícone contando para trás — basta falar qualquer coisa para renovar o
+prazo. Quando fecha, fica escrito na gaveta: *"Fechei a conversa…"*. A partir
+daí só **"Lara"** a acorda de novo.
+
+> **Por que ela fecha sozinha.** Antes da 1.10.0 a conversa ficava aberta até
+> alguém lembrar de encerrar — e ninguém lembrava. Ordens ao timoneiro, horas
+> depois, viravam pergunta para a Lara. Agora o esquecimento custa no máximo
+> 90 segundos.
 
 **Pergunte à vontade sobre:** posição, quanto falta, ETA, mar, vento, maré,
 waypoints, COLREG, estabilidade (GM, superfície livre, lastro), NORMAM,
@@ -209,6 +222,8 @@ atrás, feche e reabra o app; se insistir, limpe o cache do navegador.
 | Hs em zero com mar visível | Aparelho solto ou permissão de movimento negada. Prenda firme e recarregue. |
 | Período em branco | Mar fora da faixa de 3 a 16 s, ou captura com menos de 90 s. |
 | A Lara não ouve | No Samsung, toque uma vez na tela. Confira a permissão de microfone. |
+| A Lara parou de responder sem chamar pelo nome | A conversa expirou (90 s de silêncio) — veja a linha "Fechei a conversa" na gaveta. Diga **"Lara"** ou toque em **Conversar**. |
+| A Lara responde a conversa que não era com ela | Confira se o anel do ícone está aceso: a conversa está aberta. Toque em **Conversar** para encerrar, ou espere os 90 s. |
 | "Open-Meteo indisponível" | Sem rede. Vento e corrente passam a ser locais e aproximados; o mar do casco continua real. |
 | "Muitos pedidos deste aparelho" | Proteção contra uso descontrolado dos serviços pagos. Aguarde o tempo indicado; o uso normal de bordo nunca chega perto do limite. |
 | Tela clara demais à noite | Alterne o tema para `night`. |

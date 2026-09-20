@@ -3,8 +3,8 @@
 **Projeto:** Proa · PWA de passadiço para rebocador
 **Organização:** TugLife Systems
 **Autor:** Jossian Brito
-**Versão do documento:** 1.9.0
-**Data:** 2026-09-20 02:14 UTC (ano 2026)
+**Versão do documento:** 1.10.0
+**Data:** 2026-09-20 12:00 UTC (ano 2026)
 
 ---
 
@@ -80,6 +80,7 @@ PWA. Funções serverless em Netlify. Sem banco de dados.
 | `api/*-handler.ts` | Lógica de `/api/meteo` e `/api/voice`, partilhada pelas duas pontas |
 | `voice-alerts.ts` | Decide QUANDO a Lara fala sem ser chamada (puro, testado) |
 | `voice-turn.ts` | Decide o que fazer com cada transcrição do microfone (puro, testado) |
+| `voice-idle.ts` | Prazo da conversa aberta: 90 s sem atividade e ela fecha sozinha (puro, testado) |
 | `settings-migrate.ts` | Apaga do aparelho o que versões antigas gravaram e o app não usa mais |
 | `version.ts` | Versão publicada, amarrada ao `package.json` por teste |
 | `voice-echo.ts` | Memória das duas últimas falas, contra realimentação acústica |
@@ -253,7 +254,8 @@ Assistente de voz presencial, não rádio nem atendente. Português do Brasil,
 contrações naturais, sem emoji, sem lista numerada.
 
 - **Acordar:** palavra-chave `Lara` (o STT também aceita *Iara*, *Yara*, *Hiara*).
-- **Modo conversa:** toca em Conversar, toca de novo para encerrar.
+- **Modo conversa:** toca em Conversar, toca de novo para encerrar — **ou 90 s
+  de silêncio encerram sozinhos** (desde a 1.10.0, ver §7.1).
 - **Escopo:** derrota, COLREG, estabilidade (GM, superfície livre, lastro),
   NORMAM, MARPOL, SOLAS.
 - **Regra dura:** fatos só do contexto ao vivo. Não inventa posição, Hs, SOG,
@@ -261,6 +263,57 @@ contrações naturais, sem emoji, sem lista numerada.
 - **Alertas espontâneos:** XTE acima do limite e passagem de waypoint, e mais
   nada. A decisão vive em `voice-alerts.ts`, pura e testada, com travas de
   cadência de 45 s (XTE) e 18 s (waypoint).
+
+### 7.1 Turno com validade (desde a 1.10.0)
+
+**O defeito.** Até a 1.9.0 a conversa aberta não expirava. `talkOn` era posto
+em `true` num único lugar (o toque em Conversar) e só voltava a `false` num
+segundo toque, na despedida ou ao desligar a Lara. Com a conversa aberta,
+`routeHeard` dispensa a palavra de chamada: qualquer frase com 4 caracteres ou
+mais vira pergunta. O resultado, relatado do passadiço: a Lara "entrava em
+conversa onde não foi chamada" — uma ordem ao timoneiro, três horas depois de
+uma conversa esquecida aberta, ia parar no Grok.
+
+Não é defeito de reconhecimento de voz. **É estado que não expira** — o canal
+de VHF que ninguém fechou e continua captando a cabine.
+
+**A regra.** A conversa vale por `TALK_IDLE_MS = 90 s` contados da última
+atividade. Contam como atividade: abrir a conversa, mandar uma pergunta (voz,
+botão de apertar-pra-falar ou chip), e a Lara **terminar** de falar — a
+contagem parte do fim da resposta, não do começo da pergunta, senão uma
+resposta longa consumiria o prazo. Nos últimos `TALK_WARN_MS = 15 s` a tela
+mostra a contagem.
+
+**Por que 90 s.** Curto o bastante para não sobreviver a uma manobra inteira
+sem ninguém notar; longo o bastante para pergunta, resposta, um olhar ao radar
+e a pergunta seguinte. É o tempo de uma troca de rádio com pausa, não de um
+silêncio de vigia.
+
+**Por que o fechamento é silencioso.** A Lara não fala ao expirar. Uma frase
+não pedida num momento aleatório é exatamente a queixa que se corrige — e
+falar custaria uma viagem de TTS à rede e mais uma janela de eco. Fica só a
+linha na gaveta: *"Fechei a conversa: 90 segundos sem ninguém falar comigo.
+Me chama pelo nome quando precisar."* Uma pergunta que estivesse guardada
+(`defer`) cai junto: respondê-la depois de expirar seria responder como se a
+conversa ainda estivesse aberta.
+
+**Quem decide o quê.** `voice-idle.ts` é puro: entra o relógio, sai a fase
+(`aberta` → `encerrando` → `expirou`), com as fronteiras cobertas por teste.
+O componente marca a atividade (`touchTalk`), lê a fase a cada 500 ms e só
+fecha quando o instante é seguro — Lara calada, sem pergunta em curso, sem
+pergunta guardada. Esses fatos vivem em refs de React, e no módulo puro não
+há React.
+
+**O indicador.** O botão da Lara ganha um anel enquanto a conversa está
+aberta (o "canal aberto" do VHF, visível de longe) e um selo com a contagem
+nos últimos 15 s; a gaveta mostra `conversa · N s` no cabeçalho e
+`Encerrar conversa · fecha em N s` no botão. Estado invisível é estado
+esquecido; era isso que deixava a conversa aberta por horas.
+
+**O que fica para etapas seguintes** (P10, itens 10.3 e 10.4, propostos e não
+aprovados): usar a impressão vocal já existente como filtro de quem pode
+perguntar em conversa aberta, e subir a régua de 4 caracteres com um filtro de
+fraseologia de ponte.
 
 ## 8. Privacidade e segurança
 
@@ -389,12 +442,43 @@ um clique, e agora com histórico rastreável.
 | P8 | Migrar `seaPenalty` para STAWAVE-1 (∝ Hs²) | ✅ **Feito em 1.6.0** (a forma; a escala segue empírica) |
 | P8b | **Calibrar `AW_RPM_PER_KN` e `STEEPNESS_RPM` contra viagem real.** Bloqueado por dado, não por tempo: precisa de uma singradura instrumentada com a 1.1.0 ou posterior. Os campos `hsObs` e `hsForecast` já convivem hora a hora no store. | **Bloqueado** |
 | P9 | `voice-assistant.tsx` tem 1.025 linhas e 30+ refs; quebrar em hooks | 🟡 **Em 1.4.0 e 1.7.0** — quatro peças extraídas e testadas. Restam no componente a orquestração de áudio (`arm`, `coolThenArm`, `playReply`) e as chamadas de rede de `ask`, que são efeito puro e não decisão. |
+| P10 | A Lara entra em conversa onde não foi chamada: `talkOn` nunca expirava | 🟡 **10.1 e 10.2 em 1.10.0** (prazo de 90 s e indicador). Restam 10.3 (filtro por impressão vocal) e 10.4 (régua de 4 → 10 caracteres e fraseologia de ponte), propostos. |
+| P11 | Latência da Lara: sete etapas em série, duas viagens à function, WAV+base64 11× maior que Opus, TTS mesmo em resposta local | Proposto (11.1–11.6) |
+| P12 | Relatório horário na hora cheia, com diário de travessia (alimenta o P8b) | Proposto |
 | ~~BUG~~ | ~~O aviso de fim de turno não dispara~~ | ✅ **Resolvido em 1.5.0 por remoção** — ver §10 |
 | — | Limite de taxa global (hoje é por instância quente): exige Netlify Blobs, Redis ou equivalente | Ideia |
 | — | Calibração assistida: regressão de `hsObs` contra `hsForecast` ao longo da viagem | Ideia |
 | — | Assinatura hidrodinâmica: acumular (heave, roll) × (Hs, Tz, encontro) = RAO experimental do casco | Ideia |
 
 ## 10. Histórico de versões
+
+### 1.10.0 — 2026-09-20
+
+P10, itens 10.1 e 10.2: a conversa aberta passou a ter validade.
+
+**Causa raiz encontrada na verificação da 1.9.0:** `talkOn.current` era posto
+em `true` numa linha e só voltava a `false` em duas — o segundo toque e o
+desligamento. Não havia temporizador nenhum. Com a conversa aberta,
+`routeHeard` aceita qualquer frase de 4 caracteres como pergunta, e foi assim
+que ordens ao timoneiro chegaram ao Grok horas depois de uma conversa
+esquecida. Detalhe em §7.1.
+
+- **`voice-idle.ts` (novo, puro, 6 testes):** `talkIdle(lastActivity, now)`
+  devolve a fase — `aberta`, `encerrando` (últimos 15 s) ou `expirou` (90 s).
+- **Componente:** `touchTalk()` renova o prazo ao abrir, ao perguntar e ao fim
+  de cada fala da Lara; um vigia de 500 ms lê a fase e chama `expireTalk()`
+  quando o instante é seguro. O fechamento é silencioso, sem TTS: só a linha
+  na gaveta e a Lara de volta ao modo "só o nome acorda". Pergunta guardada
+  em `defer` é descartada junto.
+- **Indicador:** anel no botão da Lara com a conversa aberta; selo com a
+  contagem nos últimos 15 s; cabeçalho e botão da gaveta mostram o mesmo
+  número.
+- Cabeçalho de módulo adicionado a `voice-assistant.tsx`, que não tinha.
+- Cobertura: 202 → 208 testes.
+
+**Não mudou, de propósito:** os cooldowns de eco, a régua de 4 caracteres e
+o roteamento em `voice-turn.ts`. São os itens 10.3 e 10.4, que dependem de
+validação embarcada e ficaram para aprovação separada.
 
 ### 1.9.0 — 2026-09-20
 

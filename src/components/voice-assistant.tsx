@@ -1,3 +1,21 @@
+/**
+ * Proa · TugLife Systems — A Lara no passadiço (componente de voz)
+ * ---------------------------------------------------------------------------
+ * @autor    Jossian Brito
+ * @versao   1.10.0
+ * @data     2026-09-20 12:00 UTC  (ano 2026)
+ *
+ * MODIFICAÇÕES NA 1.10.0 (P10 — 10.1 e 10.2)
+ *  - A conversa aberta agora EXPIRA: 90 s sem pergunta e sem fala da Lara
+ *    fecham o turno e a Lara volta a só acordar pelo nome. A decisão de fase
+ *    vive em `voice-idle.ts` (puro, testado); aqui só se marca a atividade
+ *    (`touchTalk`) e se executa o fechamento (`expireTalk`), que é silencioso
+ *    de propósito — falar sem ser chamada é o defeito que se corrige.
+ *  - O botão da Lara ganhou um anel enquanto a conversa está aberta e mostra
+ *    a contagem regressiva nos últimos 15 s. Estado invisível é estado
+ *    esquecido; era isso que deixava a conversa aberta por horas.
+ * ---------------------------------------------------------------------------
+ */
 import { useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
 import { AlanaMark, ALANA_FACE_LABEL, type AlanaFace } from "@/components/alana-mark";
@@ -37,6 +55,7 @@ import { waypointMarks, waypointReport } from "@/lib/waypoint-pass";
 import { ALERTS_IDLE, tickAlerts, type AlertState } from "@/lib/voice-alerts";
 import { createEchoMemory } from "@/lib/voice-echo";
 import { fetchCanned, fetchSay, prefetchCanned } from "@/lib/voice-tts";
+import { TALK_IDLE_LINE, talkIdle } from "@/lib/voice-idle";
 import { cn } from "@/lib/utils";
 
 type Mode = "off" | "wake" | "session";
@@ -78,6 +97,8 @@ export function AlanaRadio() {
   const [saying, setSaying] = useState(false);
   const [thinking, setThinking] = useState(false);
   const [talking, setTalking] = useState(false);
+  /** Segundos até a conversa expirar, só nos últimos 15 s; `null` fora deles. */
+  const [idleLeftS, setIdleLeftS] = useState<number | null>(null);
 
   const asking = useRef(false);
   const locking = useRef(false);
@@ -101,6 +122,8 @@ export function AlanaRadio() {
   const voicesRef = useRef(crewVoices);
   const lastHeardName = useRef<string | null>(null);
   const talkOn = useRef(false);
+  /** Relógio monotônico da última atividade do turno: abre, pergunta, ou a Lara termina de falar. */
+  const talkLastAt = useRef(0);
   const pendingTalk = useRef(false);
   const pendingTimer = useRef(0);
   const engineRef = useRef(engine);
@@ -144,6 +167,29 @@ export function AlanaRadio() {
   function parkWake() {
     modeRef.current = "wake";
     setMode("wake");
+  }
+
+  /** Renova o prazo da conversa. Chamado em toda atividade que prova que há alguém do outro lado. */
+  function touchTalk() {
+    talkLastAt.current = performance.now();
+  }
+
+  /**
+   * Fecha a conversa por silêncio. Sem fala, sem rede: só a linha na gaveta e
+   * a Lara de volta ao modo em que só o nome dela a acorda. Uma pergunta que
+   * estivesse guardada (`defer`) cai junto — respondê-la depois de expirar
+   * seria responder como se a conversa ainda estivesse aberta.
+   */
+  function expireTalk() {
+    if (!talkOn.current) return;
+    talkOn.current = false;
+    pendingHear.current = null;
+    window.clearTimeout(pendingTimer.current);
+    setTalking(false);
+    setIdleLeftS(null);
+    parkWake();
+    setTurns((t) => [...t, { role: "assistant", content: TALK_IDLE_LINE }]);
+    setLastLine(TALK_IDLE_LINE);
   }
 
   function stopRec() {
@@ -304,6 +350,9 @@ export function AlanaRadio() {
       speaking.current = false;
       setSaying(false);
       if (talkOn.current) {
+        // A resposta acabou de sair: o prazo conta a partir do fim dela, não
+        // do começo da pergunta, senão uma resposta longa comeria o prazo.
+        touchTalk();
         modeRef.current = "session";
         setMode("session");
       } else {
@@ -395,6 +444,7 @@ export function AlanaRadio() {
     }
     void unlockVoice();
     talkOn.current = true;
+    touchTalk();
     setTalking(true);
     setOpen(true);
     if (muted) {
@@ -425,6 +475,7 @@ export function AlanaRadio() {
     const q = text.trim();
     if (!q || asking.current) return;
     asking.current = true;
+    if (talkOn.current) touchTalk();
     setBusy(true);
     setThinking(true);
     setError(null);
@@ -578,6 +629,27 @@ export function AlanaRadio() {
   }, [muted]);
 
   useEffect(() => {
+    if (!talking) {
+      setIdleLeftS(null);
+      return;
+    }
+    // Vigia do prazo. A FASE é de `talkIdle`, pura e testada; aqui só se lê o
+    // relógio e se decide se este instante é seguro para fechar: com a Lara
+    // falando, pensando ou com pergunta guardada, o fechamento espera — o
+    // fim da fala renova o prazo em `playReply` e a pergunta guardada vira
+    // `ask`, que também renova.
+    const id = window.setInterval(() => {
+      const idle = talkIdle(talkLastAt.current, performance.now());
+      setIdleLeftS(idle.phase === "encerrando" ? idle.remainingS : null);
+      if (idle.phase !== "expirou") return;
+      if (speaking.current || asking.current || locking.current || pendingHear.current) return;
+      expireTalk();
+    }, 500);
+    return () => window.clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [talking]);
+
+  useEffect(() => {
     if (muted) {
       alertsRef.current = ALERTS_IDLE;
       return;
@@ -656,9 +728,11 @@ export function AlanaRadio() {
               : "espera";
   const faceLabel = muted
     ? "desligada"
-    : talking && face === "espera"
-      ? "conversa"
-      : lost
+    : talking && idleLeftS != null
+      ? `conversa · ${idleLeftS} s`
+      : talking && face === "espera"
+        ? "conversa"
+        : lost
         ? "toca pra retomar"
         : ALANA_FACE_LABEL[face];
   const hearLevel = face === "ouvindo" ? Math.max(0.12, snap?.level ?? 0.12) : 0;
@@ -706,6 +780,9 @@ export function AlanaRadio() {
         }}
         className={cn(
           "flex size-11 items-center justify-center rounded-md transition-[background-color,color] duration-150 active:scale-[0.96]",
+          // Anel enquanto a conversa está aberta: é o "canal aberto" do VHF,
+          // visível de longe. Sem ele a conversa ficava aberta por horas.
+          talking && "ring-2 ring-accent ring-offset-2 ring-offset-bg",
           talking && (face === "falando" || face === "ouvindo")
             ? "voice-pulse bg-accent text-accent-fg"
             : talking
@@ -721,6 +798,14 @@ export function AlanaRadio() {
       >
         <AlanaMark face={face} level={hearLevel} className="size-5" />
       </button>
+      {talking && idleLeftS != null ? (
+        <span
+          aria-live="polite"
+          className="pointer-events-none absolute -right-1 -top-1 z-10 min-w-5 rounded-full bg-warn px-1 text-center font-mono text-[11px] font-medium leading-5 text-bg tabular-nums"
+        >
+          {idleLeftS}
+        </span>
+      ) : null}
 
       {!open && talking && lastLine ? (
         <button
@@ -784,7 +869,8 @@ export function AlanaRadio() {
               {turns.length === 0 ? (
                 <p className="text-sm text-muted">
                   Toca em <span className="text-fg">Conversar</span> pra falar com a Lara.
-                  Toca de novo pra encerrar. Só o XTE e o waypoint falam sozinhos.
+                  Toca de novo pra encerrar — ou ela fecha sozinha depois de 90 s de
+                  silêncio. Só o XTE e o waypoint falam sozinhos.
                 </p>
               ) : (
                 turns.map((t, i) => (
@@ -828,7 +914,11 @@ export function AlanaRadio() {
                   talking ? "bg-danger text-white" : "bg-accent text-accent-fg",
                 )}
               >
-                {talking ? "Encerrar conversa" : "Conversar com a Lara"}
+                {talking
+                  ? idleLeftS != null
+                    ? `Encerrar conversa · fecha em ${idleLeftS} s`
+                    : "Encerrar conversa"
+                  : "Conversar com a Lara"}
               </button>
             </div>
             <div className="flex gap-2 overflow-x-auto px-3 pb-3">
