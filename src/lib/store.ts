@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { hourKey } from "./utils";
+import { SETTINGS_VERSION, migrateSettings } from "./settings-migrate";
 import type { ParsedRoute } from "./gpx";
 import { DEFAULT_HULL, DEFAULT_PROFILE, type EngineProfile, type HullProfile } from "./rpm";
 import type { HourlyWave } from "./waves";
@@ -92,6 +93,11 @@ export const useSettings = create<SettingsState>()(
     }),
     {
       name: "proa-settings",
+      // Subir a versão faz o zustand rodar `migrate` E regravar o blob na hora.
+      // Sem isso, o que uma versão antiga gravou fica no aparelho até alguém
+      // mexer numa configuração — o que num tablet de passadiço pode ser nunca.
+      version: SETTINGS_VERSION,
+      migrate: (guardado, versao) => migrateSettings(guardado, versao) as SettingsState,
       partialize: (s) => ({
         onboarded: s.onboarded,
         theme: s.theme,

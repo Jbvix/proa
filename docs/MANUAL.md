@@ -2,7 +2,7 @@
 
 **Para a tripulação do passadiço**
 **Autor:** Jossian Brito · TugLife Systems
-**Versão:** 1.7.0 · 2026-09-20 02:14 UTC (ano 2026)
+**Versão:** 1.8.0 · 2026-09-20 02:14 UTC (ano 2026)
 
 ---
 
@@ -211,8 +211,14 @@ banco de dados.
 Sai do aparelho apenas: a **coordenada** (para buscar a meteorologia) e o
 **áudio da sua fala** (para a transcrição, só enquanto a Lara está em conversa).
 
-Limpar os dados do site apaga: derrota importada, perfil de motor, nomes da
-tripulação, vozes cadastradas e o histórico de ondas.
+Limpar os dados do site apaga: derrota importada, perfis de motor e casco,
+nomes da tripulação, vozes cadastradas e o histórico de ondas.
+
+> **Limpeza feita na 1.8.0.** Quem usou o controle de turno antes de ele ser
+> removido tinha ficado com **nome de tripulante e hora de fim de turno**
+> guardados no aparelho, sem nenhuma tela que mostrasse ou apagasse. Na
+> primeira vez que o app abrir na 1.8.0 esse resto é apagado sozinho. Não é
+> preciso fazer nada, e nada mais que você tenha configurado se perde.
 
 ## 9. Para quem faz deploy
 
@@ -232,7 +238,7 @@ Nenhuma das chaves chega ao navegador.
 
 ```bash
 npm run dev            # servidor em :8080
-npm test               # testes de domínio (194) — tem de ficar verde
+npm test               # testes de domínio (201) — tem de ficar verde
 npm run test:scaffold  # testes do andaime do template (precisa de .grok/)
 npm run test:all       # os dois
 npm run typecheck      # tsc --noEmit

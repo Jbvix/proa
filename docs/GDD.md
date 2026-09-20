@@ -3,7 +3,7 @@
 **Projeto:** Proa · PWA de passadiço para rebocador
 **Organização:** TugLife Systems
 **Autor:** Jossian Brito
-**Versão do documento:** 1.7.0
+**Versão do documento:** 1.8.0
 **Data:** 2026-09-20 02:14 UTC (ano 2026)
 
 ---
@@ -80,6 +80,7 @@ PWA. Funções serverless em Netlify. Sem banco de dados.
 | `api/*-handler.ts` | Lógica de `/api/meteo` e `/api/voice`, partilhada pelas duas pontas |
 | `voice-alerts.ts` | Decide QUANDO a Lara fala sem ser chamada (puro, testado) |
 | `voice-turn.ts` | Decide o que fazer com cada transcrição do microfone (puro, testado) |
+| `settings-migrate.ts` | Apaga do aparelho o que versões antigas gravaram e o app não usa mais |
 | `voice-echo.ts` | Memória das duas últimas falas, contra realimentação acústica |
 | `voice-tts.ts` | Cache e busca do áudio da fala |
 
@@ -270,6 +271,24 @@ campo `plano: "comercial" | "gratuito"`.
 Sai do aparelho: coordenada (para a meteorologia) e áudio da fala (para o STT
 do Grok, quando a Lara está em conversa).
 
+### 8.0 Dado que some do código não some do aparelho
+
+Tirar um campo do `partialize` **não apaga o que ele já gravou**. O
+`localStorage` de cada tablet guarda o que a versão anterior escreveu, e o
+`merge` padrão do zustand é raso (`{...atual, ...guardado}`), então a chave
+órfã ainda volta para dentro do store a cada abertura, viva na memória e
+invisível para o TypeScript.
+
+Por isso o store carrega `version` e `migrate` (`settings-migrate.ts`). Com a
+versão diferente da guardada, o zustand roda a migração **e regrava o blob na
+hora** (`if (migrated) return setItem()`). Sem isso, a limpeza só aconteceria
+quando alguém mexesse numa configuração — o que num tablet de passadiço pode
+não acontecer nunca.
+
+**Contrato para quem remover um campo persistido:** põe o nome em
+`DEAD_SETTINGS_KEYS` **e** sobe `SETTINGS_VERSION`. As duas coisas, senão o
+dado fica no aparelho de alguém.
+
 ### 8.1 Guarda dos endpoints públicos
 
 `/api/meteo` e `/api/voice` são abertos de propósito — o Proa não tem login, e
@@ -331,6 +350,24 @@ de casca. Nenhum alvo foi removido: os dois continuam necessários.
 | — | Assinatura hidrodinâmica: acumular (heave, roll) × (Hs, Tz, encontro) = RAO experimental do casco | Ideia |
 
 ## 10. Histórico de versões
+
+### 1.8.0 — 2026-09-20
+
+Apagado do aparelho o que o controle de turno tinha deixado para trás.
+
+Quando o recurso saiu na 1.5.0, registrou-se aqui que a chave órfã no
+`localStorage` era inofensiva. **Estava certo sobre não quebrar e errado sobre
+o dado.** O que ficou em cada tablet que usou o recurso foi `crewWatches` —
+**nome de tripulante e hora de fim de turno** — sem nenhuma tela que mostrasse
+ou apagasse, porque o painel de turnos saiu junto. E o `merge` raso do zustand
+devolvia a chave para dentro do store a cada abertura do app.
+
+Auditada a história inteira do `partialize`: `crewWatches` é a **única** chave
+que já foi gravada e não é mais usada. Agora sai na primeira abertura depois da
+atualização, do disco e da memória, e o que ainda tem dono (`crewNames`,
+`crewVoices`, rota, perfis) fica intacto. Ver §8.0.
+
+Cobertura: 194 para 201 testes.
 
 ### 1.7.0 — 2026-09-20
 
