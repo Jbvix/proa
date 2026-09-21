@@ -30,7 +30,10 @@ test("portos e pontos conhecidos", () => {
     ["Pecém", -3.55, -38.8, "G"],
     ["Belém", -1.45, -48.5, "H"],
     ["Recife", -8.05, -34.88, "F"],
-    ["Salvador, na barra", -13.0, -38.4, "F"],
+    // A linha E/F da carta toca a costa em Salvador: a baía fica em F, o mar
+    // logo ao sul da barra já é E.
+    ["Salvador, Baía de Todos os Santos", -12.85, -38.6, "F"],
+    ["sul da barra de Salvador", -13.1, -38.3, "E"],
     ["Ilhéus (ao largo)", -14.8, -38.5, "E"],
     ["Vitória (ao largo)", -20.3, -39.5, "D"],
     ["Rio de Janeiro (ao largo)", -23.2, -43.2, "C"],

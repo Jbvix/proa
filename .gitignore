@@ -19,3 +19,6 @@ screenshots/
 coverage/
 playwright-report/
 test-results/
+
+# Python
+scripts/__pycache__/
