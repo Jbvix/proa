@@ -30,6 +30,11 @@ Dados de viagem ficam só neste aparelho (sem conta, sem nuvem). O áudio da fal
 - [Documento de Design (GDD)](docs/GDD.md) — arquitetura, o motor de onda e as decisões de projeto
 - [Manual do Usuário](docs/MANUAL.md) — uso a bordo, precisão esperada e solução de problemas
 
+## Dados embutidos
+
+- `src/data/atlas-dhn.json` — climatologia derivada do **Atlas de Cartas Piloto** (DHN / Marinha do Brasil, 2ª ed.). **Finalidade educativa apenas**; não é publicação náutica. Gerado por `scripts/atlas-extract.py` a partir do PDF, que **não** está no repositório.
+- `src/lib/wmm-2025.ts` — coeficientes do World Magnetic Model 2025 (NOAA/BGS, domínio público).
+
 ## Stack
 
 TanStack Start (React 19), Vite, Tailwind v4, PWA.
@@ -38,7 +43,7 @@ TanStack Start (React 19), Vite, Tailwind v4, PWA.
 
 ```bash
 npm run dev            # servidor em :8080
-npm test               # testes de domínio (300) — tem de ficar verde
+npm test               # testes de domínio (312) — tem de ficar verde
 npm run test:scaffold  # testes do andaime do template (exige .grok/)
 npm run test:all       # os dois
 npm run typecheck      # tsc --noEmit

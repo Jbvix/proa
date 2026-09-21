@@ -2,7 +2,7 @@
  * Proa · TugLife Systems — Versão do app
  * ---------------------------------------------------------------------------
  * @autor    Jossian Brito
- * @versao   1.16.0  (módulo novo na 1.9.0)
+ * @versao   1.17.0  (módulo novo na 1.9.0)
  * @data     2026-09-21 12:00 UTC  (ano 2026)
  *
  * POR QUE A VERSÃO APARECE NA TELA
@@ -23,4 +23,4 @@
  */
 
 /** Versão publicada, igual à do `package.json`. */
-export const APP_VERSION = "1.16.0";
+export const APP_VERSION = "1.17.0";

@@ -2,7 +2,7 @@
 
 **Para a tripulação do passadiço**
 **Autor:** Jossian Brito · TugLife Systems
-**Versão:** 1.16.0 · 2026-09-21 12:00 UTC (ano 2026)
+**Versão:** 1.17.0 · 2026-09-21 12:00 UTC (ano 2026)
 
 ---
 
@@ -316,6 +316,12 @@ Sai do aparelho apenas: a **coordenada** (para buscar a meteorologia) e o
 sempre que houver fala perto do tablet. Versões anteriores subiam o áudio o
 tempo todo em que a Lara estava ligada, e este manual dizia o contrário;
 está corrigido.
+
+O app traz embutida, desde a 1.17.0, uma **climatologia** derivada do Atlas de
+Cartas Piloto da DHN (ventos, correntes, nevoeiro e vento forte típicos por
+mês, e as áreas de previsão da Marinha). É dado de **finalidade educativa**,
+médias de 1985–2013 em células de 300 milhas — nunca previsão. Nesta versão
+ele ainda não aparece na tela; entra na Lara e na aba Rota na versão seguinte.
 
 Limpar os dados do site apaga: derrota importada, perfis de motor e casco,
 nomes da tripulação, vozes cadastradas e o histórico de ondas.

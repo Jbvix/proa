@@ -3,7 +3,7 @@
 **Projeto:** Proa · PWA de passadiço para rebocador
 **Organização:** TugLife Systems
 **Autor:** Jossian Brito
-**Versão do documento:** 1.16.0
+**Versão do documento:** 1.17.0
 **Data:** 2026-09-21 12:00 UTC (ano 2026)
 
 ---
@@ -91,6 +91,9 @@ PWA. Funções serverless em Netlify. Sem banco de dados.
 | `voice-mic.ts` | Política do microfone: fechado / à espera do nome / conversa (puro, testado) |
 | `wmm.ts` + `wmm-2025.ts` | Declinação magnética pelo World Magnetic Model 2025 (puro, testado contra a NOAA e o atlas da DHN) |
 | `beaufort.ts` | Escala Beaufort da carta da DHN e a altura de onda que o vento sugere (puro, testado) |
+| `atlas.ts` + `data/atlas-dhn.json` | Climatologia do Atlas de Cartas Piloto por posição e mês: rosa, corrente, nevoeiro, vento forte (puro, testado) |
+| `atlas-areas.ts` | Áreas de previsão da Marinha (A–H, N, S) por posição (puro, testado) |
+| `scripts/atlas-extract.py` | Extrator do atlas: PDF vetorial → JSON, com validação por soma de rosa |
 | `settings-migrate.ts` | Apaga do aparelho o que versões antigas gravaram e o app não usa mais |
 | `version.ts` | Versão publicada, amarrada ao `package.json` por teste |
 | `voice-echo.ts` | Memória das duas últimas falas, contra realimentação acústica |
@@ -313,6 +316,70 @@ tinha invertido o sinal da variação anual).
 
 **Validade.** 2025.0 a 2030.0. Fora disso calcula com `stale: true`; em 2030
 o arquivo de coeficientes tem de ser trocado pelo WMM2030.
+
+### 6.3 Climatologia de bordo — o atlas digitalizado (desde a 1.17.0)
+
+**O que entrou.** O Atlas de Cartas Piloto da DHN (§9, P15) virou dado:
+`src/data/atlas-dhn.json`, 12 meses, ~50 rosas dos ventos, 55–108 setas de
+corrente, 58 nós de nevoeiro e 46 de vento forte por mês, mais os polígonos
+das áreas de previsão da Marinha. Gerado por `scripts/atlas-extract.py` a
+partir do PDF **vetorial** — sem OCR: cada número é texto com posição e cor,
+cada seta é um caminho com pontos. O PDF não vai ao repositório; só o JSON,
+com a nota de licença no cabeçalho: **finalidade educativa apenas**, decisão
+do projeto. A área é a carta inteira, de Trinidad ao Rio da Prata.
+
+**Como se lê uma rosa sem OCR** — regras aprendidas na carta de janeiro e
+conferidas contra o exemplo impresso na própria legenda ("Leste 54 %, força
+3; NE 8 %; calmaria 1 %", que é a rosa ao largo do Ceará):
+- a carta é Mercator; a grade de 5° georreferencia com resíduo < 0,04°;
+- rosa = círculo azul de raio 9,6 pt; hastes radiais nos 8 octantes;
+- octante **com rótulo**: o número é a frequência e a haste é truncada;
+- octante **sem rótulo**: frequência pelo comprimento da haste na "Escala
+  percentual de ventos", que é **linear por partes** — 4,6 pt/% até 20 %,
+  1,5 pt/% de 20 a 50 % (os tiques mostram 0–5–10–15–20 e 20–35–50);
+- força Beaufort = número de penas de ~7 pt na ponta externa;
+- calmaria = número no centro, quando impresso (`null` quando não).
+
+**A validação embutida.** A soma dos octantes mais a calmaria tem de dar
+~100 % em cada rosa. É a conferência que testa a escala, o rótulo e a
+geometria de uma vez: mediana 97–98 % em todos os meses, **2 rosas em 595
+fora de 85–115 %**. Ela pegou, durante a escrita, a seta de 40 % de uma rosa
+vizinha apontando para esta — colinear com o raio, passava por haste (somas
+de 130–165 %); a correção foi exigir que a haste comece perto do círculo.
+O campo `soma` fica no dado para quem quiser filtrar.
+
+**O que o PDF escondia e o extrator teve de aprender.** Os azuis das rosas
+mudam de página (dois tons em janeiro, um terceiro em agosto); de setembro em
+diante o círculo é polilinha de dezenas de segmentos, e o pontilhado é
+dezenas de desenhos de 2 pt — reconhecido por agrupamento num anel de raio
+9,6. No verso, nevoeiro e vento forte vão **no mesmo painel, aos pares por
+nó** (o de cima nevoeiro, 32 pt abaixo vento forte); a visibilidade é traçada
+em **isolinhas** — guardam-se só os rótulos, e o dado diz isso.
+
+**Consulta (`atlas.ts`).** `atlasSummary(lat, lon, mês)` devolve texto de
+passadiço com a palavra **climatologia**, o mês e a distância até a rosa e
+até a seta: *"Climatologia de janeiro (rosa a 72 milhas): vento de leste
+54 %, força 3, depois sudeste 29 %, força 3. Corrente para oeste a 2,0 nós
+(seta a 75 milhas)."* Alcances: rosa 220 mn, corrente 240 mn (as setas ficam
+ao largo), nós do verso 220 mn; além disso, `null` — nunca "a mais próxima,
+ainda que a 600 milhas". Zero de nevoeiro não vira frase.
+
+**Áreas de previsão (`atlas-areas.ts`).** As 16 arestas cinza foram
+extraídas; os dez polígonos foram **montados à mão** a partir delas, com o
+lado de terra fechado por vértices em terra, para que um rebocador atracado
+caia na área do seu trecho. Conferência: as dez letras impressas na carta
+caem nas áreas de mesmo nome; Fortaleza e Pecém em **G**, Recife em F, Belém
+em H, Rio Grande em A. Uma varredura de 1° pelo mar confirma que as áreas
+não se sobrepõem.
+
+**O que ainda não se usa.** Nada disto aparece na tela ou na Lara nesta
+versão — a Etapa B é o dado e a consulta. A Etapa C liga à Lara e à aba Rota
+e troca o fallback sintético pela climatologia; a D põe a corrente na conta
+de ETA por perna.
+
+**Limites honestos.** Célula de 5° (300 mn) para um rebocador de 30 mn de
+singradura; observações de 1985–2013; isotermas e pressão (linhas) não
+foram extraídas. O diário do P12 é a verdade local; o atlas é o *prior*.
 
 ## 7. A Lara
 
@@ -748,7 +815,7 @@ um clique, e agora com histórico rastreável.
 | P10 | A Lara entra em conversa onde não foi chamada: `talkOn` nunca expirava | 🟡 **10.1 e 10.2 em 1.10.0**; o furo (resposta renovava o prazo) fechado pela **janela de continuação em 1.14.0** (§7.4). Resta 10.3 = 13.5. |
 | P13 | Nome fantasma "Tadala" no aparelho e escuta de papo de ponte | 🟡 **13.1, 13.2, 13.3 em 1.14.0**. Restam 13.4 (keyterm do STT, só com evidência) e 13.5 (impressão vocal como filtro). |
 | P14 | Microfone aberto direto; áudio do passadiço subindo pra achar o nome | 🟡 **14.1, 14.2, 14.3 em 1.15.0** (§7.5). Resta 14.4 (palavra de chamada no aparelho), projeto. |
-| P15 | Climatologia de bordo a partir do Atlas de Cartas Piloto (DHN). **Licença decidida: dado derivado do atlas só para finalidade educativa.** Área: a costa toda (Trinidad ao Rio da Prata). | 🟡 **Etapa A (15.5 WMM + 15.6 Beaufort) em 1.16.0** (§5.6, §6.2). Etapa B (15.1 digitalização + 15.7 áreas de previsão), C (15.2 clima na Lara/Rota + 15.3 fallback honesto) e D (15.4 corrente por perna) propostas. |
+| P15 | Climatologia de bordo a partir do Atlas de Cartas Piloto (DHN). **Licença decidida: dado derivado do atlas só para finalidade educativa.** Área: a costa toda (Trinidad ao Rio da Prata). | 🟡 **Etapa A em 1.16.0** (§5.6, §6.2); **Etapa B em 1.17.0** (§6.3: 15.1 digitalização + 15.7 áreas). Etapas C (15.2 clima na Lara/Rota + 15.3 fallback honesto) e D (15.4 corrente por perna) propostas. |
 | P11 | Latência da Lara: sete etapas em série, duas viagens à function, WAV+base64 11× maior que Opus, TTS mesmo em resposta local | 🟡 **11.1, 11.2, 11.6 em 1.11.0; 11.4 em 1.13.0** (voz local, aquecimento, resposta curta, Opus). Restam 11.3 (uma viagem) e 11.5 (TTS da primeira frase), propostos. |
 | P12 | Relatório horário na hora cheia, com diário de travessia (alimenta o P8b) | ✅ **Feito em 1.12.0** (§7.3) |
 | ~~BUG~~ | ~~O aviso de fim de turno não dispara~~ | ✅ **Resolvido em 1.5.0 por remoção** — ver §10 |
@@ -757,6 +824,25 @@ um clique, e agora com histórico rastreável.
 | — | Assinatura hidrodinâmica: acumular (heave, roll) × (Hs, Tz, encontro) = RAO experimental do casco | Ideia |
 
 ## 10. Histórico de versões
+
+### 1.17.0 — 2026-09-21
+
+P15, Etapa B: o atlas digitalizado e as áreas de previsão. Detalhe em §6.3.
+Nada muda na tela nesta versão.
+
+- **`scripts/atlas-extract.py` (novo):** PDF vetorial → `src/data/atlas-dhn.json`
+  (≈ 210 kB). Georreferência por grade, rosas por geometria (escala linear
+  por partes, penas, calmaria), correntes por caminho + ponta, verso aos
+  pares, validação por soma de rosa.
+- **`src/data/atlas-dhn.json` (novo):** 12 meses; 595 rosas; correntes; nevoeiro
+  e vento forte por nó; visibilidade só nos rótulos; licença educativa no
+  cabeçalho.
+- **`atlas.ts` (novo, puro, 7 testes):** `nearestRose`, `nearestCurrent`,
+  `nearestNode`, `rankedOctants`, `atlasSummary`. Testado contra as leituras
+  a olho da carta (Ceará em janeiro e julho).
+- **`atlas-areas.ts` (novo, puro, 5 testes):** dez polígonos, `forecastAreaAt`,
+  `pointInPolygon`.
+- Cobertura: 300 → 312 testes.
 
 ### 1.16.0 — 2026-09-21
 
