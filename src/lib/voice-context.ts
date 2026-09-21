@@ -1,3 +1,19 @@
+/**
+ * Proa · TugLife Systems — Contexto ao vivo da Lara
+ * ---------------------------------------------------------------------------
+ * @autor    Jossian Brito
+ * @versao   1.16.0
+ * @data     2026-09-21 12:00 UTC  (ano 2026)
+ *
+ * MODIFICAÇÕES NA 1.16.0 (P15, Etapa A)
+ *  - `posicao.variacaoMag` / `variacaoDeg`: declinação magnética na posição
+ *    pelo WMM2025 (`wmm.ts`), como se lê no passadiço ("20°14' W").
+ *  - `mar.beaufort` e `mar.hsVento`: a força do vento e a altura de onda que
+ *    a carta da DHN associa a ela (`beaufort.ts`) — o terceiro número do mar,
+ *    ao lado do medido no casco e do previsto.
+ *  - Cabeçalho de módulo adicionado; o arquivo não tinha.
+ * ---------------------------------------------------------------------------
+ */
 import { passageOf, speedHint } from "./passage";
 import { planFloodArrival, phaseLabel } from "./tide";
 import { fuelHint, recommendRpm } from "./rpm";
@@ -8,6 +24,8 @@ import { seaStateFromHs } from "./waves";
 import { cardinal, formatDurationMin, formatEtaClock, formatEtaDay, formatLatLon, formatNowStamp } from "./utils";
 import { nearestProgress, xteSideLabel } from "./geo";
 import { consultBlock } from "./bridge-knowledge";
+import { decimalYear, declinationDeg, formatDeclination } from "./wmm";
+import { beaufortFromKn, expectedHsFromWindKn } from "./beaufort";
 import type { EngineSnapshot } from "./sensor-engine";
 import type { MeteoBundle } from "./meteo";
 import type { ParsedRoute } from "./gpx";
@@ -41,6 +59,10 @@ export type VoiceContext = {
     sogValidacao: string | null;
     xteNm: number | null;
     xteLado: string | null;
+    /** Declinação magnética na posição, como se lê: "20°14' W". WMM2025. */
+    variacaoMag: string | null;
+    /** A mesma, em graus, + leste / − oeste. */
+    variacaoDeg: number | null;
   };
   waypoints: { nome: string; nm: number; faltaNm: number | null; eta: string | null; hsPrev: number | null }[];
   cidades: { nome: string; faltaNm: number; eta: string | null; passou: boolean }[];
@@ -57,6 +79,10 @@ export type VoiceContext = {
     tzPrev: number | null;
     swellPrev: number | null;
     balancoDeg: number | null;
+    /** Força Beaufort do vento previsto. */
+    beaufort: number | null;
+    /** Altura de onda que a carta da DHN associa a essa força, em m. "Esperado pro vento", não previsto. */
+    hsVento: number | null;
   };
   meteo: {
     tempo: string;
@@ -231,6 +257,17 @@ export function buildVoiceContext(opts: {
     passou: c.passou,
   }));
 
+  // Declinação pelo WMM2025 na posição e na data. Sem fix não há posição;
+  // o modelo lança fora de faixa (polo) e aqui isso vira "não sei".
+  let variacao: number | null = null;
+  if (fix) {
+    try {
+      variacao = declinationDeg(fix.lat, fix.lon, decimalYear(nowMs));
+    } catch {
+      variacao = null;
+    }
+  }
+
   return {
     telaAberta: tab,
     aviso: "Nós e milhas. Fatos só daqui. Consulta de bordo, não texto oficial.",
@@ -259,6 +296,8 @@ export function buildVoiceContext(opts: {
       sogValidacao: passage ? speedHint(passage) : null,
       xteNm: passage ? Number(passage.xteNm.toFixed(2)) : null,
       xteLado: passage ? xteSideLabel(passage.xteSide) : null,
+      variacaoMag: variacao != null ? formatDeclination(variacao) : null,
+      variacaoDeg: variacao != null ? Number(variacao.toFixed(2)) : null,
     },
     waypoints: slimWpts,
     cidades,
@@ -273,6 +312,8 @@ export function buildVoiceContext(opts: {
       tzPrev: meteo?.now.wavePeriod ?? nextWp?.wavePeriod ?? null,
       swellPrev: meteo?.now.swellHs ?? nextWp?.swellHs ?? null,
       balancoDeg: engine ? Number(engine.rollP2P.toFixed(1)) : null,
+      beaufort: beaufortFromKn(meteo?.now.windKn ?? null),
+      hsVento: expectedHsFromWindKn(meteo?.now.windKn ?? null),
     },
     meteo: {
       tempo: weatherLabel(meteo?.now.weatherCode ?? null),

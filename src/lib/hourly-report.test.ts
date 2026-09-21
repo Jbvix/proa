@@ -17,7 +17,8 @@ test("relatório completo: nome, hora, navegação, mar medido × previsto, vent
   const txt = hourlyReport(makeLogEntry(ctx(), T, "1.12.0"), "Jossian");
   assert.match(txt, /^Jossian\. Relatório das \d\d:\d\d\./);
   assert.match(txt, /7\.2 nós, rumo 310\./);
-  assert.match(txt, /Hs 0\.8 no casco, previsto 1\.1, Fraco\./);
+  // 12,3 nós na carta Beaufort da DHN: entre F3 (0,6 m) e F4 (1,5 m) → 1,3 m.
+  assert.match(txt, /Hs 0\.8 no casco, previsto 1\.1, esperado pro vento 1\.3, Fraco\./);
   assert.match(txt, /Vento 12 nós de 80\./);
   assert.match(txt, /RPM 920, na faixa\./);
   assert.match(txt, /Faltam 30 milhas, ETA hoje 18:10\./);
@@ -34,7 +35,7 @@ test("RPM fora da faixa: diz a faixa, que é o aviso", () => {
 
 test("sem medida do casco, só a previsão; sem nenhuma, sem frase de mar", () => {
   const soPrev = makeLogEntry(ctx({ captura: false }), T, "1.12.0");
-  assert.match(hourlyReport(soPrev), /Hs previsto 1\.1\./);
+  assert.match(hourlyReport(soPrev), /Hs previsto 1\.1, esperado pro vento 1\.3\./);
   const nada: LogEntry = { ...soPrev, hsPrevM: null };
   assert.doesNotMatch(hourlyReport(nada), /Hs/);
 });
@@ -59,6 +60,6 @@ test("sem nome, começa direto no relatório", () => {
 
 test("é fala de passadiço: cabe em quatro frases curtas por assunto, sem enfeite", () => {
   const txt = hourlyReport(makeLogEntry(ctx(), T, "1.12.0"), "Jossian");
-  assert.ok(txt.length < 260, `longo demais: ${txt.length}`);
+  assert.ok(txt.length < 290, `longo demais: ${txt.length}`);
   assert.doesNotMatch(txt, /Um momento|deixa eu verificar|Lara/);
 });

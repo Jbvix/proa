@@ -2,8 +2,14 @@
  * Proa · TugLife Systems — Relatório da hora cheia
  * ---------------------------------------------------------------------------
  * @autor    Jossian Brito
- * @versao   1.12.0  (módulo novo nesta versão)
- * @data     2026-09-20 12:00 UTC  (ano 2026)
+ * @versao   1.16.0  (módulo novo na 1.12.0)
+ * @data     2026-09-21 12:00 UTC  (ano 2026)
+ *
+ * MODIFICAÇÕES NA 1.16.0 (P15, item 15.6)
+ *  - Terceiro número do mar: "esperado pro vento X", a altura que a carta
+ *    Beaufort da DHN associa ao vento da hora. Sai só quando há vento no
+ *    diário. Quando os três discordam, alguém está mentindo — e é assim que
+ *    se valida o motor de heave no mar.
  *
  * POR QUE ISTO EXISTE (P12, item 12.2)
  * Na hora cheia — o ritmo do passadiço — a Lara diz como vai a viagem, sem
@@ -17,6 +23,7 @@
  * ---------------------------------------------------------------------------
  */
 import type { LogEntry } from "./passage-log.ts";
+import { expectedHsFromWindKn } from "./beaufort.ts";
 
 /** Uma casa até 10, inteiro acima — mesma régua de `waypointReport`. */
 function n1(v: number | null): string | null {
@@ -52,13 +59,16 @@ export function hourlyReport(entry: LogEntry, name?: string | null): string {
 
   const hsObs = n1(entry.hsObsM);
   const hsPrev = n1(entry.hsPrevM);
+  const hsVento = n1(expectedHsFromWindKn(entry.ventoKn));
+  const esperado = hsVento ? `, esperado pro vento ${hsVento}` : "";
+  const estado = entry.estadoMar ? `, ${entry.estadoMar}` : "";
   const mar =
     hsObs && hsPrev
-      ? `Hs ${hsObs} no casco, previsto ${hsPrev}${entry.estadoMar ? `, ${entry.estadoMar}` : ""}.`
+      ? `Hs ${hsObs} no casco, previsto ${hsPrev}${esperado}${estado}.`
       : hsObs
-        ? `Hs ${hsObs} no casco${entry.estadoMar ? `, ${entry.estadoMar}` : ""}.`
+        ? `Hs ${hsObs} no casco${esperado}${estado}.`
         : hsPrev
-          ? `Hs previsto ${hsPrev}.`
+          ? `Hs previsto ${hsPrev}${esperado}.`
           : "";
 
   const vento = n1(entry.ventoKn);

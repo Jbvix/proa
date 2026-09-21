@@ -3,8 +3,8 @@
 **Projeto:** Proa · PWA de passadiço para rebocador
 **Organização:** TugLife Systems
 **Autor:** Jossian Brito
-**Versão do documento:** 1.15.0
-**Data:** 2026-09-20 12:00 UTC (ano 2026)
+**Versão do documento:** 1.16.0
+**Data:** 2026-09-21 12:00 UTC (ano 2026)
 
 ---
 
@@ -89,6 +89,8 @@ PWA. Funções serverless em Netlify. Sem banco de dados.
 | `voice-opus.ts` | Ponte com o `AudioEncoder` do navegador; `null` = manda WAV |
 | `voice-enroll.ts` | Cadastro de nome com confirmação: candidato → "Certo?" → sim (puro, testado) |
 | `voice-mic.ts` | Política do microfone: fechado / à espera do nome / conversa (puro, testado) |
+| `wmm.ts` + `wmm-2025.ts` | Declinação magnética pelo World Magnetic Model 2025 (puro, testado contra a NOAA e o atlas da DHN) |
+| `beaufort.ts` | Escala Beaufort da carta da DHN e a altura de onda que o vento sugere (puro, testado) |
 | `settings-migrate.ts` | Apaga do aparelho o que versões antigas gravaram e o app não usa mais |
 | `version.ts` | Versão publicada, amarrada ao `package.json` por teste |
 | `voice-echo.ts` | Memória das duas últimas falas, contra realimentação acústica |
@@ -184,6 +186,28 @@ Os limiares de alarme vivem em `seaTone()` e são fixados em **altura**, não em
 número de grau: âmbar a partir de 1,25 m, vermelho a partir de 2,5 m. Assim uma
 futura mexida na escala não desloca o alarme junto.
 
+### 5.6 O terceiro número do mar: Beaufort ↔ Hs (desde a 1.16.0)
+
+O app tinha dois números para a altura do mar — o **medido** no casco (dupla
+integração do heave, §5.1) e o **previsto** pela Open-Meteo — e comparava os
+dois. O terceiro custa nada, porque o vento já está no contexto: a altura que
+a **Escala Beaufort** associa ao vento. `beaufort.ts` reproduz a tabela da
+carta da DHN (Atlas de Cartas Piloto, 2ª ed.): F3 (7–10 nós) → 0,6 m,
+F4 (11–16) → 1,5 m, F5 (17–21) → 2,4 m… interpolada entre os centros de
+faixa para não dar degrau entre 10 e 11 nós.
+
+Sai rotulado **"esperado pro vento"**, nunca "previsto": é o aspecto do mar
+de quem olha pela janela, sem pista (fetch) nem duração, e mar de fundo passa
+por cima de qualquer Beaufort. Onde entra: no relatório da hora cheia
+(*"Hs 0,8 no casco, previsto 1,1, esperado pro vento 1,3"*) e no contexto da
+Lara (`mar.beaufort`, `mar.hsVento`). **Quando os três discordam, alguém está
+mentindo** — o sensor, a previsão ou o swell — e saber qual é o começo da
+validação embarcada do motor de heave, pendente desde a 1.1.0.
+
+A tabela é convenção pública (WMO); a altura por força é a que a DHN imprime,
+reproduzida como valor nominal — uso educativo, conforme a decisão sobre o
+material do atlas (§9, P15).
+
 ## 6. O modelo de RPM
 
 ```
@@ -255,6 +279,40 @@ Efeito da troca, casco padrão, só o termo de altura:
 > **Saturação:** acima de Hs ≈ 3 m a faixa bate no piso de marcha lenta e o
 > modelo perde resolução. Para um rebocador de 30 m isso é sea state 5 e acima,
 > quando já não é viagem e sim sobrevivência.
+
+### 6.2 Declinação magnética pelo WMM (desde a 1.16.0)
+
+**Por quê.** O timoneiro governa por agulha magnética; o app mostra COG
+verdadeiro do GPS. No Ceará a diferença passa de 20° oeste; no Chuí, 14°.
+Ninguém comenta até o dia em que o rumo "não bate". O Painel mostra a
+variação na posição (*20°14' W · agulha 330°*) e a Lara responde "qual a
+variação aqui?" com o rumo convertido: **magnético = verdadeiro − D**, e com
+D oeste (negativa) a agulha marca *mais* que o GPS.
+
+**Por que o WMM e não as isogônicas do atlas.** O Atlas de Cartas Piloto traz
+isogônicas de 2020. Com variação anual de +6' a +10' no Nordeste, em 2026 já
+é quase 1° de diferença. O World Magnetic Model (NOAA/BGS) é o modelo
+oficial — o mesmo do GPS de bordo e das cartas eletrônicas —, atualizado a
+cada cinco anos e com variação secular embutida. `wmm-2025.ts` traz os 90
+coeficientes do arquivo oficial `WMM2025.COF` (domínio público), gerados por
+script, sem edição à mão; `wmm.ts` é um porte passo a passo do código legado
+em C da NOAA (Legendre de Schmidt, somatório até grau 12, rotação
+geocêntrico → geodésico).
+
+**Duas amarras nos testes, de naturezas diferentes.** (1) Os **12 valores de
+teste oficiais** da NOAA para o WMM2025 batem a 0,15 nT e 0,015° — se o porte
+tivesse um erro, valeria graus em algum canto do mapa. (2) O **atlas da DHN**
+como cruzamento: o modelo extrapolado para 2020 cai a menos de 1° das
+isogônicas lidas na carta em seis portos (Fortaleza −20,9°, Recife −21,8°,
+Salvador −23,3°, Rio −22,9°, Rio Grande −15,6°, Chuí −13,8°), com sinal
+oeste, e a variação anual tem o sinal das linhas tracejadas — **positiva no
+Nordeste** (a declinação oeste diminui), negativa no Sul. É o teste que pega
+troca de sinal ou de eixo, o erro que passa por qualquer conta e só aparece
+no mar. Durante a escrita ele pegou uma leitura minha errada do atlas (eu
+tinha invertido o sinal da variação anual).
+
+**Validade.** 2025.0 a 2030.0. Fora disso calcula com `stale: true`; em 2030
+o arquivo de coeficientes tem de ser trocado pelo WMM2030.
 
 ## 7. A Lara
 
@@ -690,6 +748,7 @@ um clique, e agora com histórico rastreável.
 | P10 | A Lara entra em conversa onde não foi chamada: `talkOn` nunca expirava | 🟡 **10.1 e 10.2 em 1.10.0**; o furo (resposta renovava o prazo) fechado pela **janela de continuação em 1.14.0** (§7.4). Resta 10.3 = 13.5. |
 | P13 | Nome fantasma "Tadala" no aparelho e escuta de papo de ponte | 🟡 **13.1, 13.2, 13.3 em 1.14.0**. Restam 13.4 (keyterm do STT, só com evidência) e 13.5 (impressão vocal como filtro). |
 | P14 | Microfone aberto direto; áudio do passadiço subindo pra achar o nome | 🟡 **14.1, 14.2, 14.3 em 1.15.0** (§7.5). Resta 14.4 (palavra de chamada no aparelho), projeto. |
+| P15 | Climatologia de bordo a partir do Atlas de Cartas Piloto (DHN). **Licença decidida: dado derivado do atlas só para finalidade educativa.** Área: a costa toda (Trinidad ao Rio da Prata). | 🟡 **Etapa A (15.5 WMM + 15.6 Beaufort) em 1.16.0** (§5.6, §6.2). Etapa B (15.1 digitalização + 15.7 áreas de previsão), C (15.2 clima na Lara/Rota + 15.3 fallback honesto) e D (15.4 corrente por perna) propostas. |
 | P11 | Latência da Lara: sete etapas em série, duas viagens à function, WAV+base64 11× maior que Opus, TTS mesmo em resposta local | 🟡 **11.1, 11.2, 11.6 em 1.11.0; 11.4 em 1.13.0** (voz local, aquecimento, resposta curta, Opus). Restam 11.3 (uma viagem) e 11.5 (TTS da primeira frase), propostos. |
 | P12 | Relatório horário na hora cheia, com diário de travessia (alimenta o P8b) | ✅ **Feito em 1.12.0** (§7.3) |
 | ~~BUG~~ | ~~O aviso de fim de turno não dispara~~ | ✅ **Resolvido em 1.5.0 por remoção** — ver §10 |
@@ -698,6 +757,24 @@ um clique, e agora com histórico rastreável.
 | — | Assinatura hidrodinâmica: acumular (heave, roll) × (Hs, Tz, encontro) = RAO experimental do casco | Ideia |
 
 ## 10. Histórico de versões
+
+### 1.16.0 — 2026-09-21
+
+P15, Etapa A: declinação magnética pelo WMM2025 e Beaufort ↔ Hs. Detalhe em
+§6.2 e §5.6.
+
+- **`wmm-2025.ts` (novo):** 90 coeficientes do `WMM2025.COF` oficial, gerados
+  por script. **`wmm.ts` (novo, puro, 8 testes):** `magneticField`,
+  `declinationDeg`, `decimalYear`, `formatDeclination`. Bate com os 12
+  valores de teste da NOAA e com as isogônicas do atlas em seis portos.
+- **`beaufort.ts` (novo, puro, 8 testes):** tabela da carta da DHN,
+  `beaufortFromKn`, `expectedHsFromWindKn` interpolada.
+- **Contexto:** `posicao.variacaoMag/variacaoDeg`, `mar.beaufort/hsVento`.
+  **Resposta rápida:** "qual a variação aqui?" → variação e rumo na agulha.
+  **Painel:** cartão "Variação" com agulha e fonte. **Relatório da hora:**
+  "esperado pro vento X".
+- Cabeçalho de módulo adicionado a `voice-context.ts`.
+- Cobertura: 283 → 300 testes.
 
 ### 1.15.0 — 2026-09-20
 

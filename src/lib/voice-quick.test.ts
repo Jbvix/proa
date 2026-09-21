@@ -31,6 +31,8 @@ function ctx(over: Partial<VoiceContext> = {}): VoiceContext {
       sogValidacao: "gps",
       xteNm: 0.04,
       xteLado: "linha",
+      variacaoMag: "20°24' W",
+      variacaoDeg: -20.4,
     },
     waypoints: [],
     cidades: [{ nome: "Pecém", faltaNm: 18.4, eta: "hoje 11:20", passou: false }],
@@ -45,6 +47,8 @@ function ctx(over: Partial<VoiceContext> = {}): VoiceContext {
       tzPrev: 6,
       swellPrev: 0.6,
       balancoDeg: 4,
+      beaufort: 4,
+      hsVento: 1.28,
     },
     meteo: {
       tempo: "parcialmente nublado",
@@ -116,4 +120,15 @@ test("consulting hits without grok and skips small talk", () => {
   assert.match(quickReply("o que a COLREG pede", ctx()) ?? "", /vigia/);
   assert.equal(quickReply("e o futebol ontem", ctx()), null);
   assert.equal(quickReply("me dá o relatório", ctx()), null);
+});
+
+test("variação magnética sai da posição, com o rumo na agulha", () => {
+  // 310° verdadeiro com 20,4° W: agulha marca 330°.
+  const r = quickReply("qual a variação aqui", ctx()) ?? "";
+  assert.match(r, /Variação 20°24' W/);
+  assert.match(r, /310 dá 330 na agulha/);
+  assert.match(quickReply("desvio da agulha", ctx()) ?? "", /Variação/);
+  const semPos = ctx();
+  semPos.posicao = { ...semPos.posicao, variacaoMag: null, variacaoDeg: null };
+  assert.match(quickReply("declinação", semPos) ?? "", /Sem posição/);
 });

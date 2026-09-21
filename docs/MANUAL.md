@@ -2,7 +2,7 @@
 
 **Para a tripulação do passadiço**
 **Autor:** Jossian Brito · TugLife Systems
-**Versão:** 1.15.0 · 2026-09-20 12:00 UTC (ano 2026)
+**Versão:** 1.16.0 · 2026-09-21 12:00 UTC (ano 2026)
 
 ---
 
@@ -65,6 +65,12 @@ O campo ao lado da velocidade diz **de onde veio o número**:
 | `GPS 9.2 · derrota 4.0` | Discordam. Julgue: pode ser GPS ruim ou corrente. |
 | `derrota 4.1 nós` | Só a distância percorrida. O GPS não deu velocidade. |
 | `sem confirmação` | Ainda não há base para afirmar velocidade. |
+
+**Variação (desde a 1.16.0).** O cartão *Variação* mostra a declinação
+magnética na sua posição — por exemplo *20°14' W* — e, ao lado, o **rumo na
+agulha** correspondente ao COG do GPS. Vem do World Magnetic Model 2025, o
+mesmo modelo do GPS de bordo. Lembre: com variação oeste, a agulha marca
+*mais* que o app (310° verdadeiro → 330° magnético com 20° W).
 
 ### Ondas
 
@@ -161,6 +167,7 @@ Colega de passadiço, não rádio.
 | Emendar sem chamar pelo nome | Fale **nos 10 s depois da resposta dela**. Passou disso, diga **"Lara"** de novo — com a gaveta aberta ou não |
 | Dizer seu nome | Quando ela perguntar (uma vez por sessão), ou "meu nome é …". Ela repete *"Anotei X. Certo?"* — responda **"sim"** para gravar. Sem o sim, não grava |
 | Apagar um nome | Aba **RPM → Tripulação → Apagar** |
+| Variação magnética | Pergunte **"qual a variação aqui?"** — ela dá a variação e o rumo na agulha |
 | Desligar a Lara de vez | **Segure o ícone** dela por meio segundo. Microfone fechado, avisos calados. Toque para religar |
 
 **Enquanto a conversa está aberta**, o ícone da Lara no alto da tela fica com
@@ -204,8 +211,10 @@ MARPOL, SOLAS.
 limite, passagem de waypoint e, desde a 1.12.0, **o relatório da hora cheia**.
 
 **Relatório da hora cheia.** Toda hora redonda (14:00, 15:00…), com o
-rebocador em singradura, a Lara diz: velocidade e rumo, Hs medido no casco e
-Hs previsto, vento, RPM (e a faixa, se estiver fora dela), milhas restantes e
+rebocador em singradura, a Lara diz: velocidade e rumo, Hs medido no casco,
+Hs previsto e o Hs *esperado pro vento* (pela escala Beaufort da carta da
+DHN — quando os três discordam, desconfie do sensor, da previsão ou do mar de
+fundo), vento, RPM (e a faixa, se estiver fora dela), milhas restantes e
 ETA, próximo waypoint, maré. No cais ou fundeado ela não fala — mas grava.
 Ao abrir o app no meio da hora, o primeiro relatório é só na próxima hora
 redonda. Um aviso de XTE ou de waypoint no mesmo instante tem prioridade; o

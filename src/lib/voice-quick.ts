@@ -64,6 +64,18 @@ export function quickReply(raw: string, ctx: VoiceContext): string | null {
     return `${hi}Hs ${hs} m, ${ctx.mar.estado}. ${ctx.mar.ondasMin.toFixed(0)} por minuto.${extra}`;
   }
 
+  if (/variacao|declinacao|agulha|rumo magnetico|magnetic/.test(t)) {
+    // Variação magnética (WMM2025). Rumo magnético = verdadeiro − D: com D
+    // oeste (negativa), a agulha mostra MAIS que o GPS. 310° V com 20° W dá
+    // 330° M — a conta que ninguém faz até o rumo "não bater".
+    const v = ctx.posicao.variacaoMag;
+    if (!v || ctx.posicao.variacaoDeg == null) return `${hi}Sem posição, sem variação.`;
+    const rumo = ctx.posicao.rumoDeg;
+    if (rumo == null) return `${hi}Variação ${v} aqui.`;
+    const mag = Math.round((((rumo - ctx.posicao.variacaoDeg) % 360) + 360) % 360);
+    return `${hi}Variação ${v}. Rumo verdadeiro ${String(rumo).padStart(3, "0")} dá ${String(mag).padStart(3, "0")} na agulha.`;
+  }
+
   if (/vento|rajada/.test(t)) {
     const v = kn(ctx.meteo.ventoKn);
     if (!v) return `${hi}Vento ainda não chegou.`;

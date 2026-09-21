@@ -2,6 +2,7 @@ import { HeaveScope } from "@/components/heave-scope";
 import { NauticalMap } from "@/components/nautical-map";
 import { RpmBand } from "@/components/rpm-band";
 import { Stat } from "@/components/stat";
+import { decimalYear, declinationDeg, formatDeclination } from "@/lib/wmm";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardTitle } from "@/components/ui/card";
 import { useLiveBridge } from "@/components/bridge-provider";
@@ -22,6 +23,15 @@ export function PainelScreen() {
   const route = useSettings((s) => s.route);
   const { engine, meteo } = useLiveBridge();
 
+  // Declinação magnética na posição (WMM2025). Rumo na agulha = COG − D.
+  let variacao: number | null = null;
+  if (engine?.fix) {
+    try {
+      variacao = declinationDeg(engine.fix.lat, engine.fix.lon, decimalYear(Date.now()));
+    } catch {
+      variacao = null;
+    }
+  }
   const hs = engine?.wave.hsM ?? 0;
   const period = engine?.wave.periodS ?? 0;
   const amp = engine?.wave.amplitudeM ?? hs / 2;
@@ -183,6 +193,17 @@ export function PainelScreen() {
               meteo?.now.currentDir != null
                 ? `${pad3(meteo.now.currentDir)}° ${cardinal(meteo.now.currentDir)}`
                 : "Open-Meteo Marine"
+            }
+          />
+        </Card>
+        <Card className="rounded-2xl p-4">
+          <Stat
+            label="Variação"
+            value={variacao != null ? formatDeclination(variacao) : "—"}
+            hint={
+              variacao != null && engine?.fix?.cogDeg != null
+                ? `agulha ${pad3(Math.round((((engine.fix.cogDeg - variacao) % 360) + 360) % 360))}° · WMM2025`
+                : "WMM2025 · precisa de posição"
             }
           />
         </Card>
