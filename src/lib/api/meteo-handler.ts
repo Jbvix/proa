@@ -2,7 +2,7 @@
  * Proa · TugLife Systems — Handler de /api/meteo
  * ---------------------------------------------------------------------------
  * @autor    Jossian Brito
- * @versao   1.3.0  (módulo novo nesta versão)
+ * @versao   1.18.0  (módulo novo na 1.3.0)
  * @data     2026-09-20 02:14 UTC  (ano 2026)
  *
  * POR QUE ESTE MÓDULO EXISTE
@@ -22,7 +22,6 @@ import { env } from "../env.server.ts";
 import {
   fetchMeteoUpstream,
   parseWaypointQuery,
-  syntheticMeteo,
 } from "../meteo.ts";
 
 /** Fundeadouro do Mucuripe — posição de partida quando o pedido vem sem coordenada. */
@@ -61,8 +60,10 @@ export async function handleMeteo(req: Request): Promise<Response> {
       headers: { "Cache-Control": "public, max-age=120" },
     });
   } catch {
-    // Open-Meteo fora do ar não pode apagar o painel do passadiço: devolve um
-    // boletim sintético, que o cliente já marca como aproximado.
-    return Response.json(syntheticMeteo(lat, lon, Date.now(), waypoints));
+    // Open-Meteo fora do ar: 502 e ponto. Até a 1.17.0 devolvia-se um boletim
+    // sintético com `plano: "gratuito"` — números inventados que o cliente
+    // não distinguia de dado real. Agora o CLIENTE cai na climatologia do
+    // atlas (`meteo-clima.ts`), rotulada como tal.
+    return Response.json({ ok: false, error: "Open-Meteo indisponível." }, { status: 502 });
   }
 }

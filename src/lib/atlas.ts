@@ -141,8 +141,13 @@ const OCT_PT: Record<Octant, string> = {
   N: "norte", NE: "nordeste", E: "leste", SE: "sudeste", S: "sul", SW: "sudoeste", W: "oeste", NW: "noroeste",
 };
 
+/** Nome em português de um octante DE ONDE. */
+export function octantName(o: Octant): string {
+  return OCT_PT[o];
+}
+
 /** Ponto cardeal PARA ONDE, a partir de um rumo em graus. */
-function toward(dir: number): string {
+export function toward(dir: number): string {
   const i = Math.round((((dir % 360) + 360) % 360) / 45) % 8;
   return OCT_PT[OCTANTS[i]];
 }

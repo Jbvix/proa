@@ -2,8 +2,12 @@
  * Proa · TugLife Systems — Lara no servidor: chat, fala e transcrição (xAI)
  * ---------------------------------------------------------------------------
  * @autor    Jossian Brito
- * @versao   1.11.0
+ * @versao   1.18.0
  * @data     2026-09-20 12:00 UTC  (ano 2026)
+ *
+ * MODIFICAÇÕES NA 1.18.0 (P15, Etapa C)
+ *  - Prompt: `clima{}` é climatologia, não previsão; a Lara tem de dizer a
+ *    palavra e nunca misturar com `meteo{}`.
  *
  * MODIFICAÇÕES NA 1.11.0 (P11, item 11.6)
  *  - `max_tokens` 220 → 130. Menos tokens é menos tempo de chat E menos tempo
@@ -52,6 +56,8 @@ Waypoints: waypoints[] veio do GPX importado. Use nome, nm na derrota, faltaNm, 
 Unidades: nós e milhas náuticas. Nunca km nem km/h.
 
 Cidades: cidades[]. ETA destino: mare.etaDia. Enchente: mare. Mar: mar. Meteo: meteo.
+
+Clima: clima{} é CLIMATOLOGIA do Atlas de Cartas Piloto da DHN (médias de 1985 a 2013, célula de 300 milhas), NÃO é previsão. Use só quando perguntarem o que costuma acontecer, e diga a palavra "climatologia". Nunca misture clima{} com meteo{} numa mesma frase sem dizer qual é qual. Área de previsão da Marinha (a letra do boletim): clima.area.
 
 
 Tamanho: fala de passadiço, curta e direta, como se disse de pé ao lado de quem pergunta. Relatório: 3 a 4 frases. Pergunta pontual: 1 a 2 frases. Consultoria (norma/estabilidade): 2 a 4 frases claras. Nunca passe de 4 frases. Não comece com "Um momento" nem com "deixa eu verificar": responde direto.

@@ -10,6 +10,7 @@ Captura movimento e posição do rebocador, atualiza características de onda a 
 - **RPM atual** — informe o regime do motor
 - **Sensores** — mar ao vivo no casco (heave → Hs, amplitude, período)
 - **Open-Meteo** — vento e corrente na posição; previsão marinha em cada waypoint do GPX
+- **Climatologia** — sem rede, o boletim vem do Atlas de Cartas Piloto (DHN), rotulado como climatologia; a Lara responde "como costuma ser o mar aqui?" e "em que área de previsão a gente tá?"
 - **RPM ideal** — banda de viagem a partir do mar do casco, vento e encontro com a onda
 - **Variação magnética** — WMM2025 na posição, com o rumo na agulha; Hs esperado pro vento pela escala Beaufort da DHN
 - **Lara** — voz no passadiço. Toca em Conversar: abre a conversa **e o microfone**; 90 s de silêncio fecham os dois. Nos 10 s depois da resposta dela pode emendar sem o nome
@@ -43,7 +44,7 @@ TanStack Start (React 19), Vite, Tailwind v4, PWA.
 
 ```bash
 npm run dev            # servidor em :8080
-npm test               # testes de domínio (312) — tem de ficar verde
+npm test               # testes de domínio (318) — tem de ficar verde
 npm run test:scaffold  # testes do andaime do template (exige .grok/)
 npm run test:all       # os dois
 npm run typecheck      # tsc --noEmit

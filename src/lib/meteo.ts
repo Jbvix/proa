@@ -1,6 +1,24 @@
+/**
+ * Proa · TugLife Systems — Open-Meteo: tipos, chamada e maré sintética
+ * ---------------------------------------------------------------------------
+ * @autor    Jossian Brito
+ * @versao   1.18.0
+ * @data     2026-09-21 12:00 UTC  (ano 2026)
+ *
+ * MODIFICAÇÕES NA 1.18.0 (P15, item 15.3)
+ *  - `syntheticMeteo` REMOVIDO. Sem rede, o app devolvia vento de 14 nós de
+ *    085°, Hs 1,25 m e corrente de 0,4 nó — inventados, iguais em qualquer
+ *    posição e mês, e carimbados `plano: "gratuito"` como se fossem reais.
+ *    O fallback agora é `meteo-clima.ts`: climatologia do Atlas de Cartas
+ *    Piloto, com `plano: "climatologia"` e rótulo próprio na tela.
+ *  - `MeteoPlano` ganhou "climatologia". `syntheticTide` passou a ser
+ *    exportada: a maré sintética continua sendo o que há sem rede.
+ *  - Cabeçalho de módulo adicionado; o arquivo não tinha.
+ * ---------------------------------------------------------------------------
+ */
 import type { TideHour } from "./tide";
 
-export type MeteoPlano = "comercial" | "gratuito";
+export type MeteoPlano = "comercial" | "gratuito" | "climatologia";
 
 export type MeteoNow = {
   fetchedAt: number;
@@ -219,7 +237,8 @@ function tideHoursFrom(marine: OmBlock): TideHour[] {
   return out;
 }
 
-function syntheticTide(nowMs: number): TideHour[] {
+/** Maré senoidal de 12,42 h. É o que há sem rede; não é tábua. */
+export function syntheticTide(nowMs: number): TideHour[] {
   const out: TideHour[] = [];
   const start = Math.floor(nowMs / 3_600_000) * 3_600_000 - 3 * 3_600_000;
   const period = 12.42 * 3_600_000;
@@ -254,76 +273,6 @@ async function fetchMarineJson(
   if (!res.ok) res = await pullJson(fallback);
   if (!res.ok) return {};
   return (await res.json()) as OmBlock;
-}
-
-export function syntheticMeteo(
-  lat: number,
-  lon: number,
-  nowMs = Date.now(),
-  waypoints: StationInput[] = [],
-): MeteoBundle {
-  const hours: MeteoHour[] = [];
-  const start = Math.floor(nowMs / 3_600_000) * 3_600_000 - 6 * 3_600_000;
-  for (let i = 0; i < 24; i++) {
-    const t = start + i * 3_600_000;
-    const phase = Math.sin(i / 5);
-    const hs = 1.25 + phase * 0.28;
-    hours.push({
-      t,
-      windKn: 14 + phase * 3,
-      windDir: 85 + phase * 8,
-      gustKn: 19 + phase * 4,
-      waveHs: hs,
-      waveDir: 90,
-      wavePeriod: 7.6 + phase * 0.6,
-      swellHs: 0.9 + phase * 0.15,
-      currentKn: 0.4,
-      currentDir: 310,
-    });
-  }
-  const nowH = hours[6]!;
-  return {
-    now: {
-      fetchedAt: nowMs,
-      lat,
-      lon,
-      tempC: 27.4,
-      weatherCode: 2,
-      windKn: nowH.windKn ?? 14,
-      windDir: nowH.windDir ?? 85,
-      gustKn: nowH.gustKn ?? 19,
-      pressureHpa: 1012,
-      visibilityM: 20000,
-      waveHs: nowH.waveHs,
-      waveDir: nowH.waveDir,
-      wavePeriod: nowH.wavePeriod,
-      wavePeak: 9.1,
-      swellHs: nowH.swellHs,
-      swellPeriod: 10.2,
-      windWaveHs: 0.5,
-      sstC: 27.8,
-      currentKn: 0.4,
-      currentDir: 310,
-    },
-    hourly: hours,
-    alongRoute: waypoints.map((wp, i) => {
-      const phase = Math.sin(i / 2.2);
-      return {
-        lat: wp.lat,
-        lon: wp.lon,
-        distNm: wp.distNm ?? 0,
-        label: wp.label ?? (i === 0 ? "Origem" : i === waypoints.length - 1 ? "Destino" : `WP ${i + 1}`),
-        waveHs: 1.2 + phase * 0.25,
-        waveDir: 85 + i * 4,
-        wavePeriod: 7.4 + phase * 0.5,
-        swellHs: 0.85 + phase * 0.12,
-        currentKn: 0.35 + i * 0.04,
-        currentDir: 300 + i * 6,
-      };
-    }),
-    tideHours: syntheticTide(nowMs),
-    plano: "gratuito",
-  };
 }
 
 export async function fetchMeteo(

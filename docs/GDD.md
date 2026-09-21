@@ -3,7 +3,7 @@
 **Projeto:** Proa · PWA de passadiço para rebocador
 **Organização:** TugLife Systems
 **Autor:** Jossian Brito
-**Versão do documento:** 1.17.0
+**Versão do documento:** 1.18.0
 **Data:** 2026-09-21 12:00 UTC (ano 2026)
 
 ---
@@ -94,6 +94,7 @@ PWA. Funções serverless em Netlify. Sem banco de dados.
 | `atlas.ts` + `data/atlas-dhn.json` | Climatologia do Atlas de Cartas Piloto por posição e mês: rosa, corrente, nevoeiro, vento forte (puro, testado) |
 | `atlas-areas.ts` | Áreas de previsão da Marinha (A–H, N, S) por posição (puro, testado) |
 | `scripts/atlas-extract.py` | Extrator do atlas: PDF vetorial → JSON, com validação por soma de rosa |
+| `meteo-clima.ts` | Boletim de climatologia: o fallback sem rede, rotulado `plano: "climatologia"` (puro, testado) |
 | `settings-migrate.ts` | Apaga do aparelho o que versões antigas gravaram e o app não usa mais |
 | `version.ts` | Versão publicada, amarrada ao `package.json` por teste |
 | `voice-echo.ts` | Memória das duas últimas falas, contra realimentação acústica |
@@ -380,6 +381,41 @@ de ETA por perna.
 **Limites honestos.** Célula de 5° (300 mn) para um rebocador de 30 mn de
 singradura; observações de 1985–2013; isotermas e pressão (linhas) não
 foram extraídas. O diário do P12 é a verdade local; o atlas é o *prior*.
+
+### 6.4 Etapa C: o clima na Lara, na Rota e no lugar do boletim inventado (desde a 1.18.0)
+
+**15.3 — O fallback que mentia.** Sem rede, o app devolvia um "boletim
+sintético": vento de 14 nós de 085°, Hs 1,25 m, corrente de 0,4 nó para
+310° — **inventados, iguais em Fortaleza e no Chuí, em janeiro e em julho**,
+e carimbados `plano: "gratuito"`, indistinguíveis de dado real na tela. Pior:
+o servidor (`/api/meteo`) fazia o mesmo quando a Open-Meteo caía, e o cliente
+não tinha como saber. Um passadiço tomava decisão sobre um mar que nunca
+existiu. Agora o servidor responde **502** e o cliente cai em
+`climatologyMeteo()`: vento predominante do mês na célula (octante → direção,
+Beaufort → nós pelo meio da faixa), Hs pela carta Beaufort, corrente típica,
+24 horas **planas** (climatologia não tem ciclo diurno), temperatura,
+pressão, período e código de tempo **nulos** (o atlas não os dá por ponto —
+nulo é "não sei"; zero seria mentira), `plano: "climatologia"` e um selo
+amarelo no Painel: *Climatologia · atlas DHN*. Fora da cobertura do atlas,
+**fica sem boletim** — melhor vazio que inventado. `syntheticMeteo` foi
+removida.
+
+**15.2 — Na Lara.** `clima{}` entra no contexto: texto pronto, vento
+predominante, corrente, nevoeiro, vento forte e a **área de previsão da
+Marinha**. Duas respostas rápidas, sem Grok: *"como costuma ser o mar aqui em
+janeiro?"* → *"Climatologia de janeiro (rosa a 72 milhas): vento de leste
+54 %, força 3, depois sudeste 29 %, força 3. Corrente para oeste a 2,0 nós
+(seta a 75 milhas). Área G da Marinha."*; *"em que área de previsão a gente
+tá?"* → *"Área G da previsão da Marinha: São Luís a Natal."* O prompt do
+sistema recebeu a regra: `clima{}` é climatologia, só quando perguntarem o
+que costuma acontecer, sempre com a palavra, **nunca misturado com `meteo{}`**
+sem dizer qual é qual. "Como tá o mar" continua sendo o Hs medido.
+
+**15.2 — Na Rota.** Cada waypoint ganha a linha *clima de janeiro: leste
+54 % F3 · corr. 2,0 nós → oeste* sob o nome, ao lado da previsão da
+Open-Meteo que já estava no mapa. É a pergunta que o passadiço faz de cabeça
+— "esta semana está fora do normal?" — com a nota de rodapé dizendo o que é
+climatologia e o que é previsão.
 
 ## 7. A Lara
 
@@ -815,7 +851,7 @@ um clique, e agora com histórico rastreável.
 | P10 | A Lara entra em conversa onde não foi chamada: `talkOn` nunca expirava | 🟡 **10.1 e 10.2 em 1.10.0**; o furo (resposta renovava o prazo) fechado pela **janela de continuação em 1.14.0** (§7.4). Resta 10.3 = 13.5. |
 | P13 | Nome fantasma "Tadala" no aparelho e escuta de papo de ponte | 🟡 **13.1, 13.2, 13.3 em 1.14.0**. Restam 13.4 (keyterm do STT, só com evidência) e 13.5 (impressão vocal como filtro). |
 | P14 | Microfone aberto direto; áudio do passadiço subindo pra achar o nome | 🟡 **14.1, 14.2, 14.3 em 1.15.0** (§7.5). Resta 14.4 (palavra de chamada no aparelho), projeto. |
-| P15 | Climatologia de bordo a partir do Atlas de Cartas Piloto (DHN). **Licença decidida: dado derivado do atlas só para finalidade educativa.** Área: a costa toda (Trinidad ao Rio da Prata). | 🟡 **Etapa A em 1.16.0** (§5.6, §6.2); **Etapa B em 1.17.0** (§6.3: 15.1 digitalização + 15.7 áreas). Etapas C (15.2 clima na Lara/Rota + 15.3 fallback honesto) e D (15.4 corrente por perna) propostas. |
+| P15 | Climatologia de bordo a partir do Atlas de Cartas Piloto (DHN). **Licença decidida: dado derivado do atlas só para finalidade educativa.** Área: a costa toda (Trinidad ao Rio da Prata). | 🟡 **Etapa A em 1.16.0** (§5.6, §6.2); **B em 1.17.0** (§6.3); **C em 1.18.0** (§6.4: clima na Lara e na Rota, fallback honesto). Resta a Etapa D (15.4 corrente por perna), que espera o diário do P12 conferir o set/drift real. |
 | P11 | Latência da Lara: sete etapas em série, duas viagens à function, WAV+base64 11× maior que Opus, TTS mesmo em resposta local | 🟡 **11.1, 11.2, 11.6 em 1.11.0; 11.4 em 1.13.0** (voz local, aquecimento, resposta curta, Opus). Restam 11.3 (uma viagem) e 11.5 (TTS da primeira frase), propostos. |
 | P12 | Relatório horário na hora cheia, com diário de travessia (alimenta o P8b) | ✅ **Feito em 1.12.0** (§7.3) |
 | ~~BUG~~ | ~~O aviso de fim de turno não dispara~~ | ✅ **Resolvido em 1.5.0 por remoção** — ver §10 |
@@ -824,6 +860,22 @@ um clique, e agora com histórico rastreável.
 | — | Assinatura hidrodinâmica: acumular (heave, roll) × (Hs, Tz, encontro) = RAO experimental do casco | Ideia |
 
 ## 10. Histórico de versões
+
+### 1.18.0 — 2026-09-21
+
+P15, Etapa C: clima na Lara e na Rota; o fallback sintético trocado pela
+climatologia. Detalhe em §6.4.
+
+- **`meteo-clima.ts` (novo, puro, 5 testes):** `climatologyCell`,
+  `climatologyMeteo`, `knFromBeaufort`. `MeteoPlano` ganha "climatologia".
+- **`syntheticMeteo` removida** de `meteo.ts`; `/api/meteo` devolve 502 quando
+  a Open-Meteo cai, em vez de um boletim inventado com `plano: "gratuito"`.
+- **Contexto:** `clima{}`. **Respostas rápidas:** climatologia e área de
+  previsão. **Prompt:** regra da climatologia.
+- **Rota:** linha de clima por waypoint e nota de rodapé. **Painel:** selo
+  amarelo *Climatologia · atlas DHN*.
+- Cabeçalhos de módulo adicionados a `meteo.ts` e `screens/rota.tsx`.
+- Cobertura: 312 → 318 testes.
 
 ### 1.17.0 — 2026-09-21
 

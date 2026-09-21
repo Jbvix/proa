@@ -85,8 +85,12 @@ export function PainelScreen() {
         </Badge>
         <Badge tone="mute">{weatherLabel(meteo?.now.weatherCode ?? null)}</Badge>
         {meteo ? (
-          <Badge tone={meteo.plano === "comercial" ? "ok" : "mute"}>
-            {meteo.plano === "comercial" ? "Open-Meteo" : "Open-Meteo livre"}
+          <Badge tone={meteo.plano === "comercial" ? "ok" : meteo.plano === "climatologia" ? "warn" : "mute"}>
+            {meteo.plano === "comercial"
+              ? "Open-Meteo"
+              : meteo.plano === "climatologia"
+                ? "Climatologia · atlas DHN"
+                : "Open-Meteo livre"}
           </Badge>
         ) : null}
         {plan.atEta ? (

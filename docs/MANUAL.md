@@ -2,7 +2,7 @@
 
 **Para a tripulação do passadiço**
 **Autor:** Jossian Brito · TugLife Systems
-**Versão:** 1.17.0 · 2026-09-21 12:00 UTC (ano 2026)
+**Versão:** 1.18.0 · 2026-09-21 12:00 UTC (ano 2026)
 
 ---
 
@@ -113,6 +113,14 @@ vermelho a partir de 2,5 m.
 
 ### Rota
 
+**Clima por waypoint (desde a 1.18.0).** Sob cada waypoint aparece *clima de
+julho: sudeste 58 % F4 · corr. 1,5 nós → oeste* — o vento predominante, a
+força Beaufort e a corrente típica do mês naquele trecho, pelo Atlas de
+Cartas Piloto da DHN. É **climatologia** (médias de 1985–2013 em células de
+300 milhas), não previsão: serve para perceber se a semana está fora do
+normal. A previsão é a da Open-Meteo, no mapa.
+
+
 O GPX importado no mapa, com os waypoints do arquivo, previsão marinha em cada
 um, e o **afastamento da derrota (XTE)** com o bordo:
 
@@ -168,6 +176,8 @@ Colega de passadiço, não rádio.
 | Dizer seu nome | Quando ela perguntar (uma vez por sessão), ou "meu nome é …". Ela repete *"Anotei X. Certo?"* — responda **"sim"** para gravar. Sem o sim, não grava |
 | Apagar um nome | Aba **RPM → Tripulação → Apagar** |
 | Variação magnética | Pergunte **"qual a variação aqui?"** — ela dá a variação e o rumo na agulha |
+| O que costuma acontecer | Pergunte **"como costuma ser o mar aqui em julho?"** — ela responde com a **climatologia** do atlas da DHN (vento predominante, corrente), sempre dizendo que é climatologia |
+| Área do boletim | Pergunte **"em que área de previsão a gente tá?"** — a letra da Marinha (A–H, N, S), a mesma do Meteoromarinha |
 | Desligar a Lara de vez | **Segure o ícone** dela por meio segundo. Microfone fechado, avisos calados. Toque para religar |
 
 **Enquanto a conversa está aberta**, o ícone da Lara no alto da tela fica com
@@ -301,7 +311,7 @@ atrás, feche e reabra o app; se insistir, limpe o cache do navegador.
 | A Lara não deu o relatório da hora | Ou não estava em singradura (SOG abaixo de 0,6 nó — ela grava e cala), ou a captura estava parada, ou o app foi aberto depois da hora redonda. Confira o diário na aba RPM: se a hora está lá, ela gravou. |
 | Resposta de número sai numa voz diferente da Lara | É a voz do Android, escolhida de propósito para responder na hora. Veja a nota "Duas vozes" na seção 5. |
 | A Lara responde a conversa que não era com ela | Confira se o anel do ícone está aceso: a conversa está aberta. Toque em **Conversar** para encerrar, ou espere os 90 s. |
-| "Open-Meteo indisponível" | Sem rede. Vento e corrente passam a ser locais e aproximados; o mar do casco continua real. |
+| "Open-Meteo indisponível — climatologia do atlas DHN" | Sem rede. Vento, mar e corrente passam a ser a **climatologia do mês** (atlas DHN), e o Painel mostra o selo amarelo *Climatologia · atlas DHN*. Até a 1.17.0 o app inventava números nesse caso; agora diz de onde vêm. Fora da cobertura do atlas fica sem boletim. O mar do casco continua real. |
 | "Muitos pedidos deste aparelho" | Proteção contra uso descontrolado dos serviços pagos. Aguarde o tempo indicado; o uso normal de bordo nunca chega perto do limite. |
 | Tela clara demais à noite | Alterne o tema para `night`. |
 

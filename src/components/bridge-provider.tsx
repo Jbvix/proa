@@ -7,7 +7,8 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { fetchMeteo, syntheticMeteo, type MeteoBundle } from "@/lib/meteo";
+import { fetchMeteo, type MeteoBundle } from "@/lib/meteo";
+import { climatologyMeteo, climatologyMonthName } from "@/lib/meteo-clima";
 import { sampleRouteStations } from "@/lib/geo";
 import { withCity } from "@/lib/places";
 import { sensorEngine, type EngineSnapshot } from "@/lib/sensor-engine";
@@ -129,10 +130,16 @@ export function BridgeProvider({ children }: { children: ReactNode }) {
       })
       .catch(() => {
         if (cancelled) return;
-        const bundle = syntheticMeteo(lat, lon, Date.now(), stations);
+        // Sem rede: climatologia do atlas DHN, rotulada como tal. Fora da
+        // cobertura, fica sem boletim — melhor vazio que inventado.
+        const bundle = climatologyMeteo(lat, lon, Date.now(), stations);
         setMeteo(bundle);
-        sensorEngine.setSea(bundle.now.waveHs ?? 1.1, bundle.now.wavePeriod ?? 7.5);
-        setMeteoError("Open-Meteo indisponível — vento e corrente locais.");
+        if (bundle) {
+          sensorEngine.setSea(bundle.now.waveHs ?? 1.1, bundle.now.wavePeriod ?? 7.5);
+          setMeteoError(`Open-Meteo indisponível — climatologia do atlas DHN (${climatologyMonthName()}).`);
+        } else {
+          setMeteoError("Open-Meteo indisponível e posição fora do atlas — sem vento nem corrente.");
+        }
       })
       .finally(() => {
         if (!cancelled) setMeteoLoading(false);

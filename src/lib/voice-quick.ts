@@ -64,6 +64,19 @@ export function quickReply(raw: string, ctx: VoiceContext): string | null {
     return `${hi}Hs ${hs} m, ${ctx.mar.estado}. ${ctx.mar.ondasMin.toFixed(0)} por minuto.${extra}`;
   }
 
+  if (/area de previsao|qual (e )?a area|em que area|que area|meteoromarinha/.test(t)) {
+    // Área de previsão da Marinha, a letra do boletim do rádio.
+    if (!ctx.clima.area) return `${hi}Sem posição, sem área.`;
+    return `${hi}Área ${ctx.clima.area} da previsão da Marinha: ${ctx.clima.areaTrecho}.`;
+  }
+
+  if (/climatolog|\bclima\b|costuma|normalmente|de costume|nessa epoca|nesta epoca|no atlas|carta piloto/.test(t)) {
+    // Climatologia do atlas: sempre com a palavra, sempre com a distância.
+    if (!ctx.clima.texto) return `${hi}Sem posição, sem climatologia.`;
+    const area = ctx.clima.area ? ` Área ${ctx.clima.area} da Marinha.` : "";
+    return `${hi}${ctx.clima.texto}${area}`;
+  }
+
   if (/variacao|declinacao|agulha|rumo magnetico|magnetic/.test(t)) {
     // Variação magnética (WMM2025). Rumo magnético = verdadeiro − D: com D
     // oeste (negativa), a agulha mostra MAIS que o GPS. 310° V com 20° W dá

@@ -2,8 +2,14 @@
  * Proa · TugLife Systems — Contexto ao vivo da Lara
  * ---------------------------------------------------------------------------
  * @autor    Jossian Brito
- * @versao   1.16.0
+ * @versao   1.18.0
  * @data     2026-09-21 12:00 UTC  (ano 2026)
+ *
+ * MODIFICAÇÕES NA 1.18.0 (P15, Etapa C)
+ *  - `clima{}`: climatologia do Atlas de Cartas Piloto para a posição (fix,
+ *    ou o primeiro ponto da derrota) e o mês — texto pronto, vento
+ *    predominante, corrente, nevoeiro, vento forte — e a área de previsão
+ *    da Marinha. Rotulado como climatologia em todo lugar.
  *
  * MODIFICAÇÕES NA 1.16.0 (P15, Etapa A)
  *  - `posicao.variacaoMag` / `variacaoDeg`: declinação magnética na posição
@@ -26,6 +32,8 @@ import { nearestProgress, xteSideLabel } from "./geo";
 import { consultBlock } from "./bridge-knowledge";
 import { decimalYear, declinationDeg, formatDeclination } from "./wmm";
 import { beaufortFromKn, expectedHsFromWindKn } from "./beaufort";
+import { atlasSummary, octantName } from "./atlas";
+import { forecastAreaAt } from "./atlas-areas";
 import type { EngineSnapshot } from "./sensor-engine";
 import type { MeteoBundle } from "./meteo";
 import type { ParsedRoute } from "./gpx";
@@ -121,6 +129,26 @@ export type VoiceContext = {
     conselho: string;
   };
   consulta: ReturnType<typeof consultBlock>;
+  /**
+   * CLIMATOLOGIA (Atlas de Cartas Piloto, DHN, médias 1985–2013), não
+   * previsão. Posição do fix ou, sem fix, o primeiro ponto da derrota.
+   */
+  clima: {
+    fonte: string;
+    mes: string;
+    /** Área de previsão da Marinha (A–H, N, S) e o trecho, ou nulos. */
+    area: string | null;
+    areaTrecho: string | null;
+    /** Frase de passadiço pronta, ou nulo sem posição. */
+    texto: string | null;
+    ventoDe: string | null;
+    ventoPct: number | null;
+    beaufort: number | null;
+    correnteDir: number | null;
+    correnteKn: number | null;
+    nevoeiroPct: number | null;
+    ventoFortePct: number | null;
+  };
   captura: boolean;
   modo: string;
 };
@@ -257,6 +285,27 @@ export function buildVoiceContext(opts: {
     passou: c.passou,
   }));
 
+  // Climatologia do atlas e área de previsão: pela posição do fix ou, sem
+  // fix, pelo começo da derrota (planejamento em terra também pergunta).
+  const climaPos = fix ? { lat: fix.lat, lon: fix.lon } : route?.points[0] ? { lat: route.points[0].lat, lon: route.points[0].lon } : null;
+  const mesNum = new Date(nowMs).getMonth() + 1;
+  const climaSum = climaPos ? atlasSummary(climaPos.lat, climaPos.lon, mesNum) : null;
+  const area = climaPos ? forecastAreaAt(climaPos.lat, climaPos.lon) : null;
+  const clima: VoiceContext["clima"] = {
+    fonte: "Atlas de Cartas Piloto (DHN) — climatologia 1985–2013, não previsão",
+    mes: climaSum?.mes ?? "",
+    area: area?.nome ?? null,
+    areaTrecho: area?.trecho ?? null,
+    texto: climaSum?.texto ?? null,
+    ventoDe: climaSum?.rosa?.[0] ? octantName(climaSum.rosa[0].oct) : null,
+    ventoPct: climaSum?.rosa?.[0]?.pct ?? null,
+    beaufort: climaSum?.rosa?.[0]?.bf ?? null,
+    correnteDir: climaSum?.corrente?.dir ?? null,
+    correnteKn: climaSum?.corrente?.kn ?? null,
+    nevoeiroPct: climaSum?.nevoeiroPct ?? null,
+    ventoFortePct: climaSum?.ventoFortePct ?? null,
+  };
+
   // Declinação pelo WMM2025 na posição e na data. Sem fix não há posição;
   // o modelo lança fora de faixa (polo) e aqui isso vira "não sei".
   let variacao: number | null = null;
@@ -358,6 +407,7 @@ export function buildVoiceContext(opts: {
       conselho: fuel.conselho,
     },
     consulta: consultBlock(),
+    clima,
     captura: !!engine?.capturing,
     modo: engine?.mode ?? "idle",
   };

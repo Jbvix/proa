@@ -95,6 +95,20 @@ function ctx(over: Partial<VoiceContext> = {}): VoiceContext {
       marpol: "",
       solas: "",
     },
+    clima: {
+      fonte: "Atlas de Cartas Piloto (DHN) — climatologia 1985–2013, não previsão",
+      mes: "janeiro",
+      area: "G",
+      areaTrecho: "São Luís a Natal (Ceará, Piauí, Maranhão oriental)",
+      texto: "Climatologia de janeiro (rosa a 72 milhas): vento de leste 54 %, força 3, depois sudeste 29 %, força 3. Corrente para oeste a 2.0 nós (seta a 75 milhas).",
+      ventoDe: "leste",
+      ventoPct: 54,
+      beaufort: 3,
+      correnteDir: 292,
+      correnteKn: 2,
+      nevoeiroPct: 0,
+      ventoFortePct: 0,
+    },
     captura: true,
     modo: "ao vivo",
     ...over,
@@ -131,4 +145,17 @@ test("variação magnética sai da posição, com o rumo na agulha", () => {
   const semPos = ctx();
   semPos.posicao = { ...semPos.posicao, variacaoMag: null, variacaoDeg: null };
   assert.match(quickReply("declinação", semPos) ?? "", /Sem posição/);
+});
+
+test("climatologia e área de previsão saem do contexto, sempre com a palavra", () => {
+  const c = quickReply("como costuma ser o mar aqui em janeiro", ctx()) ?? "";
+  assert.match(c, /^Jossian\. Climatologia de janeiro/);
+  assert.match(c, /Área G da Marinha\./);
+  const a = quickReply("em que área de previsão a gente tá", ctx()) ?? "";
+  assert.match(a, /Área G da previsão da Marinha: São Luís a Natal/);
+  const semPos = ctx();
+  semPos.clima = { ...semPos.clima, texto: null, area: null, areaTrecho: null };
+  assert.match(quickReply("qual o clima daqui", semPos) ?? "", /Sem posição/);
+  // "como tá o mar" continua sendo o Hs medido, não climatologia.
+  assert.match(quickReply("como tá o mar", ctx()) ?? "", /Hs 0\.8/);
 });
